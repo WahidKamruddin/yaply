@@ -16,9 +16,9 @@ export default function MessageBubble({ message, isOwn, onReply, onDelete }: Pro
   if (message.deletedAt) {
     return (
       <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-1`}>
-        <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-800/50 border border-slate-700/50">
-          <AlertCircle size={12} className="text-slate-500" />
-          <span className="text-xs text-slate-500 italic">Message deleted</span>
+        <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#f3f7ff] border border-[#dce7f8]">
+          <AlertCircle size={12} className="text-[#9ab0cc]" />
+          <span className="text-xs text-[#9ab0cc] italic">Message deleted</span>
         </div>
       </div>
     )
@@ -31,7 +31,7 @@ export default function MessageBubble({ message, isOwn, onReply, onDelete }: Pro
   if (isSystem) {
     return (
       <div className="flex justify-center my-2">
-        <span className="text-xs text-slate-500 bg-slate-800/60 px-3 py-1 rounded-full">{message.content}</span>
+        <span className="text-xs text-[#6b84ab] bg-[#edf1fa] px-3 py-1 rounded-full">{message.content}</span>
       </div>
     )
   }
@@ -44,18 +44,18 @@ export default function MessageBubble({ message, isOwn, onReply, onDelete }: Pro
     >
       <div className={`flex flex-col max-w-[70%] ${isOwn ? 'items-end' : 'items-start'}`}>
         {!isOwn && message.senderProfile && (
-          <span className="text-xs text-amber-400 font-medium mb-1 px-1">
+          <span className="text-xs text-[#5b8def] font-medium mb-1 px-1">
             {message.senderProfile.display_name ?? message.senderProfile.username}
           </span>
         )}
 
         <div className="relative flex items-end gap-2">
-          {/* Action buttons - appear on hover for own messages */}
+          {/* Action buttons - appear on hover */}
           {hovered && (
             <div className={`flex items-center gap-1 ${isOwn ? 'order-first' : 'order-last'}`}>
               <button
                 onClick={() => onReply(message.id)}
-                className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-slate-200 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-full bg-[#edf1fa] hover:bg-[#dce7f8] text-[#6b84ab] hover:text-[#1a2744] transition-colors"
                 title="Reply"
               >
                 <Reply size={13} />
@@ -63,7 +63,7 @@ export default function MessageBubble({ message, isOwn, onReply, onDelete }: Pro
               {isOwn && (
                 <button
                   onClick={() => onDelete(message.id)}
-                  className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-700 hover:bg-red-900 text-slate-400 hover:text-red-400 transition-colors"
+                  className="w-7 h-7 flex items-center justify-center rounded-full bg-[#edf1fa] hover:bg-red-50 text-[#6b84ab] hover:text-red-400 transition-colors"
                   title="Delete"
                 >
                   <Trash2 size={13} />
@@ -75,8 +75,8 @@ export default function MessageBubble({ message, isOwn, onReply, onDelete }: Pro
           <div
             className={`relative px-3 py-2 rounded-2xl ${
               isOwn
-                ? 'bg-amber-500 text-slate-900 rounded-br-sm'
-                : 'bg-[#243447] text-slate-100 rounded-bl-sm'
+                ? 'bg-[#5b8def] text-white rounded-br-sm'
+                : 'bg-white text-[#1a2744] rounded-bl-sm shadow-sm shadow-[#dce7f8]'
             }`}
           >
             {isMedia && message.attachmentRef ? (
@@ -90,7 +90,7 @@ export default function MessageBubble({ message, isOwn, onReply, onDelete }: Pro
               <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{message.content}</p>
             )}
 
-            <div className={`flex items-center justify-end gap-1 mt-0.5 ${isOwn ? 'text-amber-800' : 'text-slate-500'}`}>
+            <div className={`flex items-center justify-end gap-1 mt-0.5 ${isOwn ? 'text-white/60' : 'text-[#9ab0cc]'}`}>
               <span className="text-[10px]">{timeAgo}</span>
               {isOwn && <CheckCheck size={12} />}
             </div>

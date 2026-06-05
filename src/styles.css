@@ -1,21 +1,24 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #0f172a;
-  --color-card: #1e293b;
-  --color-card-hover: #243447;
-  --color-border: #334155;
-  --color-primary: #f59e0b;
-  --color-primary-dark: #d97706;
-  --color-primary-darker: #b45309;
-  --color-primary-foreground: #0f172a;
-  --color-text: #f1f5f9;
-  --color-text-muted: #94a3b8;
-  --color-text-subtle: #64748b;
+  --color-background: #edf1fa;
+  --color-surface: #ffffff;
+  --color-surface-2: #f3f7ff;
+  --color-card: #ffffff;
+  --color-card-hover: #f5f8ff;
+  --color-border: #dce7f8;
+  --color-primary: #5b8def;
+  --color-primary-dark: #4a7de4;
+  --color-primary-darker: #3a6ed9;
+  --color-primary-light: #edf3ff;
+  --color-primary-foreground: #ffffff;
+  --color-text: #1a2744;
+  --color-text-muted: #6b84ab;
+  --color-text-subtle: #9ab0cc;
   --color-danger: #ef4444;
   --color-success: #22c55e;
   --color-online: #22c55e;
-  --color-offline: #475569;
+  --color-offline: #b0c0d8;
   --radius: 0.5rem;
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
@@ -31,8 +34,8 @@ body,
 #app {
   height: 100%;
   margin: 0;
-  background-color: #0f172a;
-  color: #f1f5f9;
+  background-color: #edf1fa;
+  color: #1a2744;
 }
 
 ::-webkit-scrollbar {
@@ -44,10 +47,10 @@ body,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #c8d9f0;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #b0c8e8;
 }

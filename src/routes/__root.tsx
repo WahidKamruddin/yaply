@@ -1,4 +1,4 @@
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
+import { HeadContent, Scripts, createRootRoute, Navigate } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import Providers from '@/app/Providers'
@@ -13,6 +13,7 @@ export const Route = createRootRoute({
     ],
     links: [{ rel: 'stylesheet', href: appCss }],
   }),
+  notFoundComponent: () => <Navigate to="/chat" />,
   shellComponent: RootDocument,
 })
 

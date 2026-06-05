@@ -63,15 +63,15 @@ export default function MessageInput({ onSend, onAttachment, replyMessage, disab
   }
 
   return (
-    <div className="border-t border-slate-700/50 bg-[#1e293b] px-4 py-3">
+    <div className="border-t border-[#dce7f8] bg-white px-4 py-3">
       {/* Reply strip */}
       {replyMessage && (
-        <div className="flex items-center justify-between mb-2 px-3 py-2 bg-slate-800 rounded-lg border-l-2 border-amber-500">
+        <div className="flex items-center justify-between mb-2 px-3 py-2 bg-[#edf3ff] rounded-lg border-l-2 border-[#5b8def]">
           <div className="min-w-0">
-            <p className="text-xs text-amber-400 font-medium">Replying to {replyMessage.senderProfile?.username ?? 'message'}</p>
-            <p className="text-xs text-slate-400 truncate">{replyMessage.content}</p>
+            <p className="text-xs text-[#5b8def] font-medium">Replying to {replyMessage.senderProfile?.username ?? 'message'}</p>
+            <p className="text-xs text-[#6b84ab] truncate">{replyMessage.content}</p>
           </div>
-          <button onClick={() => setReplyId(null)} className="text-slate-500 hover:text-slate-300 ml-2 flex-shrink-0">
+          <button onClick={() => setReplyId(null)} className="text-[#9ab0cc] hover:text-[#6b84ab] ml-2 flex-shrink-0">
             <X size={14} />
           </button>
         </div>
@@ -79,9 +79,9 @@ export default function MessageInput({ onSend, onAttachment, replyMessage, disab
 
       {/* Command palette */}
       {showCommands && (
-        <div className="mb-2 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-xl">
-          <div className="px-3 py-2 border-b border-slate-700">
-            <span className="text-xs text-slate-500 font-medium">COMMANDS</span>
+        <div className="mb-2 bg-white border border-[#dce7f8] rounded-xl overflow-hidden shadow-lg shadow-[#dce7f8]/60">
+          <div className="px-3 py-2 border-b border-[#dce7f8]">
+            <span className="text-xs text-[#9ab0cc] font-medium">COMMANDS</span>
           </div>
           {[
             { name: 'remind', desc: 'Set a reminder' },
@@ -93,15 +93,15 @@ export default function MessageInput({ onSend, onAttachment, replyMessage, disab
           ].map((cmd) => (
             <button
               key={cmd.name}
-              className="w-full flex items-baseline gap-3 px-3 py-2 hover:bg-slate-700 transition-colors text-left"
+              className="w-full flex items-baseline gap-3 px-3 py-2 hover:bg-[#f3f7ff] transition-colors text-left"
               onClick={() => {
                 setText(`/${cmd.name} `)
                 setShowCommands(false)
                 textareaRef.current?.focus()
               }}
             >
-              <span className="text-sm text-amber-400 font-mono font-medium">/{cmd.name}</span>
-              <span className="text-xs text-slate-400">{cmd.desc}</span>
+              <span className="text-sm text-[#5b8def] font-mono font-medium">/{cmd.name}</span>
+              <span className="text-xs text-[#6b84ab]">{cmd.desc}</span>
             </button>
           ))}
         </div>
@@ -110,7 +110,7 @@ export default function MessageInput({ onSend, onAttachment, replyMessage, disab
       <div className="flex items-end gap-2">
         <button
           onClick={onAttachment}
-          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors"
+          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-[#9ab0cc] hover:text-[#5b8def] hover:bg-[#edf3ff] transition-colors"
         >
           <Paperclip size={18} />
         </button>
@@ -123,11 +123,11 @@ export default function MessageInput({ onSend, onAttachment, replyMessage, disab
           placeholder="Message... (/ for commands)"
           disabled={disabled}
           rows={1}
-          className="flex-1 resize-none bg-slate-800 rounded-2xl px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-amber-500/50 transition max-h-40 leading-relaxed disabled:opacity-50"
+          className="flex-1 resize-none bg-[#f3f7ff] rounded-2xl px-4 py-2.5 text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40 transition max-h-40 leading-relaxed disabled:opacity-50"
         />
 
         <button
-          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors"
+          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-[#9ab0cc] hover:text-[#5b8def] hover:bg-[#edf3ff] transition-colors"
         >
           <Smile size={18} />
         </button>
@@ -135,7 +135,7 @@ export default function MessageInput({ onSend, onAttachment, replyMessage, disab
         <button
           onClick={submit}
           disabled={!text.trim() || disabled}
-          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-amber-500 hover:bg-amber-400 text-black disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[#5b8def] hover:bg-[#4a7de4] text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           <Send size={16} />
         </button>

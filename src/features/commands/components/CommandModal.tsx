@@ -13,13 +13,13 @@ interface Props {
 }
 
 const icons: Record<CreateItemType, React.ReactNode> = {
-  task: <CheckSquare size={18} className="text-amber-400" />,
-  poll: <BarChart2 size={18} className="text-amber-400" />,
-  event: <Calendar size={18} className="text-amber-400" />,
-  note: <FileText size={18} className="text-amber-400" />,
-  album: <Image size={18} className="text-amber-400" />,
-  budget: <DollarSign size={18} className="text-amber-400" />,
-  plan: <Map size={18} className="text-amber-400" />,
+  task: <CheckSquare size={18} className="text-[#5b8def]" />,
+  poll: <BarChart2 size={18} className="text-[#5b8def]" />,
+  event: <Calendar size={18} className="text-[#5b8def]" />,
+  note: <FileText size={18} className="text-[#5b8def]" />,
+  album: <Image size={18} className="text-[#5b8def]" />,
+  budget: <DollarSign size={18} className="text-[#5b8def]" />,
+  plan: <Map size={18} className="text-[#5b8def]" />,
 }
 
 export default function CommandModal({ type, initialTitle = '', conversationId, userId, onClose, onCreated }: Props) {
@@ -79,14 +79,14 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-[#1e293b] border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md mx-4">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700">
-          <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+      <div className="bg-white border border-[#dce7f8] rounded-2xl shadow-2xl shadow-[#dce7f8]/60 w-full max-w-md mx-4">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#dce7f8]">
+          <h2 className="text-base font-semibold text-[#1a2744] flex items-center gap-2">
             {icons[type]}
             {type.charAt(0).toUpperCase() + type.slice(1)}
           </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200">
+          <button onClick={onClose} className="text-[#9ab0cc] hover:text-[#1a2744] transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -98,7 +98,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
             placeholder="Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-800 rounded-lg text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-amber-500/50"
+            className="w-full px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
           />
 
           {(type === 'task' || type === 'note' || type === 'event' || type === 'plan') && (
@@ -107,7 +107,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 bg-slate-800 rounded-lg text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-amber-500/50 resize-none"
+              className="w-full px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40 resize-none"
             />
           )}
 
@@ -116,7 +116,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
               type="datetime-local"
               value={dueAt}
               onChange={(e) => setDueAt(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 rounded-lg text-sm text-slate-300 outline-none focus:ring-1 focus:ring-amber-500/50"
+              className="w-full px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
             />
           )}
 
@@ -128,7 +128,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
               onChange={(e) => setAmount(e.target.value)}
               min="0"
               step="0.01"
-              className="w-full px-3 py-2 bg-slate-800 rounded-lg text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-amber-500/50"
+              className="w-full px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
             />
           )}
 
@@ -141,13 +141,13 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
                     placeholder={`Option ${i + 1}`}
                     value={opt}
                     onChange={(e) => setPollOptions((prev) => prev.map((o, j) => (j === i ? e.target.value : o)))}
-                    className="flex-1 px-3 py-2 bg-slate-800 rounded-lg text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-amber-500/50"
+                    className="flex-1 px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
                   />
                   {pollOptions.length > 2 && (
                     <button
                       type="button"
                       onClick={() => setPollOptions((prev) => prev.filter((_, j) => j !== i))}
-                      className="text-slate-500 hover:text-red-400"
+                      className="text-[#9ab0cc] hover:text-red-400"
                     >
                       <X size={16} />
                     </button>
@@ -157,7 +157,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
               <button
                 type="button"
                 onClick={() => setPollOptions((prev) => [...prev, ''])}
-                className="text-xs text-amber-400 hover:text-amber-300"
+                className="text-xs text-[#5b8def] hover:text-[#4a7de4]"
               >
                 + Add option
               </button>
@@ -165,13 +165,13 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
           )}
 
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[#6b84ab] hover:text-[#1a2744] transition-colors">
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 text-sm font-medium bg-amber-500 hover:bg-amber-400 text-black rounded-lg disabled:opacity-50 transition-colors"
+              className="px-4 py-2 text-sm font-medium bg-[#5b8def] hover:bg-[#4a7de4] text-white rounded-lg disabled:opacity-50 transition-colors"
             >
               {saving ? 'Creating...' : 'Create'}
             </button>

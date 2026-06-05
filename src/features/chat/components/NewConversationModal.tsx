@@ -55,14 +55,14 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-[#1e293b] border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md mx-4">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700">
-          <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
-            {selected.length > 1 ? <Users size={18} className="text-amber-400" /> : <UserPlus size={18} className="text-amber-400" />}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+      <div className="bg-white border border-[#dce7f8] rounded-2xl shadow-2xl shadow-[#dce7f8]/60 w-full max-w-md mx-4">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#dce7f8]">
+          <h2 className="text-base font-semibold text-[#1a2744] flex items-center gap-2">
+            {selected.length > 1 ? <Users size={18} className="text-[#5b8def]" /> : <UserPlus size={18} className="text-[#5b8def]" />}
             {selected.length > 1 ? 'New Group' : 'New Conversation'}
           </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200 transition-colors">
+          <button onClick={onClose} className="text-[#9ab0cc] hover:text-[#1a2744] transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -71,9 +71,9 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
           {selected.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {selected.map((p) => (
-                <span key={p.id} className="flex items-center gap-1 bg-amber-500/20 text-amber-300 text-xs rounded-full px-2.5 py-1">
+                <span key={p.id} className="flex items-center gap-1 bg-[#edf3ff] text-[#5b8def] text-xs rounded-full px-2.5 py-1">
                   {p.display_name ?? p.username}
-                  <button onClick={() => toggleSelect(p)} className="hover:text-amber-100">
+                  <button onClick={() => toggleSelect(p)} className="hover:text-[#4a7de4]">
                     <X size={12} />
                   </button>
                 </span>
@@ -87,25 +87,25 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
               placeholder="Group name (optional)"
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 rounded-lg text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-amber-500/50"
+              className="w-full px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
             />
           )}
 
           <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ab0cc]" />
             <input
               type="text"
               placeholder="Search by username..."
               value={query}
               onChange={(e) => void handleSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 bg-slate-800 rounded-lg text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-amber-500/50"
+              className="w-full pl-8 pr-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
             />
           </div>
 
           <div className="max-h-52 overflow-y-auto space-y-1">
-            {searching && <p className="text-xs text-slate-500 text-center py-3">Searching...</p>}
+            {searching && <p className="text-xs text-[#9ab0cc] text-center py-3">Searching...</p>}
             {!searching && results.length === 0 && query.length >= 2 && (
-              <p className="text-xs text-slate-500 text-center py-3">No users found</p>
+              <p className="text-xs text-[#9ab0cc] text-center py-3">No users found</p>
             )}
             {results.map((profile) => {
               const isSelected = !!selected.find((p) => p.id === profile.id)
@@ -113,30 +113,30 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
                 <button
                   key={profile.id}
                   onClick={() => toggleSelect(profile)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isSelected ? 'bg-amber-500/20' : 'hover:bg-slate-800'}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isSelected ? 'bg-[#edf3ff]' : 'hover:bg-[#f3f7ff]'}`}
                 >
-                  <div className="w-8 h-8 rounded-full bg-amber-600 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-[#5b8def] flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
                     {(profile.display_name ?? profile.username).charAt(0).toUpperCase()}
                   </div>
                   <div className="text-left min-w-0">
-                    <p className="text-sm text-slate-200 font-medium truncate">{profile.display_name ?? profile.username}</p>
-                    <p className="text-xs text-slate-500 truncate">@{profile.username}</p>
+                    <p className="text-sm text-[#1a2744] font-medium truncate">{profile.display_name ?? profile.username}</p>
+                    <p className="text-xs text-[#9ab0cc] truncate">@{profile.username}</p>
                   </div>
-                  {isSelected && <span className="ml-auto w-4 h-4 rounded-full bg-amber-500 flex-shrink-0" />}
+                  {isSelected && <span className="ml-auto w-4 h-4 rounded-full bg-[#5b8def] flex-shrink-0" />}
                 </button>
               )
             })}
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-slate-700 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors">
+        <div className="px-5 py-4 border-t border-[#dce7f8] flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-[#6b84ab] hover:text-[#1a2744] transition-colors">
             Cancel
           </button>
           <button
             onClick={() => void handleCreate()}
             disabled={selected.length === 0 || loading}
-            className="px-4 py-2 text-sm font-medium bg-amber-500 hover:bg-amber-400 text-black rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 text-sm font-medium bg-[#5b8def] hover:bg-[#4a7de4] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? 'Creating...' : selected.length > 1 ? 'Create Group' : 'Start Chat'}
           </button>

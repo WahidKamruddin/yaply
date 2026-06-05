@@ -1,7 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useCallback } from 'react'
 import { useAtom, useAtomValue } from 'jotai'
-import { supabase } from '@/lib/supabase'
+import { getUser, onAuthStateChange } from '@/lib/auth'
 import ConversationList from '@/features/chat/components/ConversationList'
 import ChatView from '@/features/chat/components/ChatView'
 import CommandProvider from '@/features/commands/components/CommandProvider'
@@ -11,23 +11,33 @@ import { uploadMediaFile } from '@/features/media/api/upload'
 import { sendMessage } from '@/features/chat/api/messages'
 import type { User } from '@supabase/supabase-js'
 
-export const Route = createFileRoute('/chat')({ component: ChatPage })
+export const Route = createFileRoute('/chat')({
+  beforeLoad: async () => {
+    const user = await getUser()
+    if (!user) throw redirect({ to: '/auth' })
+  },
+  component: ChatPage,
+})
 
 function ChatPage() {
   const [user, setUser] = useState<User | null>(null)
   const [, setActiveId] = useAtom(activeConversationIdAtom)
   const activeConvId = useAtomValue(activeConversationIdAtom)
+  const navigate = useNavigate()
 
   useEffect(() => {
-    void supabase.auth.getUser().then(({ data }) => setUser(data.user))
+    void getUser().then(setUser)
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
-      if (!session) setActiveId(null)
+      if (!session) {
+        setActiveId(null)
+        void navigate({ to: '/auth' })
+      }
     })
 
     return () => listener.subscription.unsubscribe()
-  }, [setActiveId])
+  }, [navigate, setActiveId])
 
   const handleFileDrop = useCallback(
     async (file: File) => {
@@ -50,19 +60,7 @@ function ChatPage() {
     [activeConvId, user],
   )
 
-  if (!user) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-[#0f172a]">
-        <div className="text-center">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500 flex items-center justify-center mx-auto mb-4">
-            <span className="text-black font-bold text-2xl">y</span>
-          </div>
-          <h1 className="text-2xl font-bold text-slate-100 mb-2">yaply</h1>
-          <p className="text-slate-500 text-sm">Please sign in to continue</p>
-        </div>
-      </div>
-    )
-  }
+  if (!user) return null
 
   return (
     <CommandProvider userId={user.id}>

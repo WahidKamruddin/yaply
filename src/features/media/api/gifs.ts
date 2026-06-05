@@ -7,27 +7,42 @@ export interface GifResult {
   height: number
 }
 
-const TENOR_KEY = import.meta.env.VITE_TENOR_API_KEY as string
-const BASE = 'https://tenor.googleapis.com/v2'
+const GIPHY_KEY = import.meta.env.VITE_GIPHY_API_KEY as string
+const BASE = 'https://api.giphy.com/v1/gifs'
 
-async function tenorFetch(path: string): Promise<GifResult[]> {
-  const res = await fetch(`${BASE}${path}&key=${TENOR_KEY}&client_key=yaply&media_filter=gif,tinygif`)
-  if (!res.ok) throw new Error('Tenor API error')
-  const json = await res.json() as { results: Array<{ id: string; title: string; media_formats: { gif: { url: string; dims: number[] }; tinygif: { url: string } } }> }
-  return json.results.map((r) => ({
+interface GiphyImage {
+  url: string
+  width: string
+  height: string
+}
+
+interface GiphyItem {
+  id: string
+  title: string
+  images: {
+    original: GiphyImage
+    fixed_height_small: GiphyImage
+  }
+}
+
+async function giphyFetch(path: string): Promise<GifResult[]> {
+  const res = await fetch(`${BASE}${path}&api_key=${GIPHY_KEY}&limit=20&rating=g`)
+  if (!res.ok) throw new Error('Giphy API error')
+  const json = (await res.json()) as { data: GiphyItem[] }
+  return json.data.map((r) => ({
     id: r.id,
     title: r.title,
-    url: r.media_formats.gif.url,
-    previewUrl: r.media_formats.tinygif.url,
-    width: r.media_formats.gif.dims[0] ?? 0,
-    height: r.media_formats.gif.dims[1] ?? 0,
+    url: r.images.original.url,
+    previewUrl: r.images.fixed_height_small.url,
+    width: parseInt(r.images.original.width, 10),
+    height: parseInt(r.images.original.height, 10),
   }))
 }
 
 export async function searchGifs(query: string): Promise<GifResult[]> {
-  return tenorFetch(`/search?q=${encodeURIComponent(query)}&limit=20`)
+  return giphyFetch(`/search?q=${encodeURIComponent(query)}`)
 }
 
 export async function getTrendingGifs(): Promise<GifResult[]> {
-  return tenorFetch('/featured?limit=20')
+  return giphyFetch('/trending')
 }

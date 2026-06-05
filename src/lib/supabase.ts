@@ -13,27 +13,31 @@ import type { Database } from './database.types.js'
 
 const supabaseUrl = import.meta.env['VITE_SUPABASE_URL'] as string | undefined
 const supabaseAnonKey = import.meta.env['VITE_SUPABASE_ANON_KEY'] as string | undefined
+const devBypass = import.meta.env['VITE_DEV_BYPASS_AUTH'] === 'true'
 
-if (!supabaseUrl || !supabaseAnonKey) {
+if (!devBypass && (!supabaseUrl || !supabaseAnonKey)) {
   throw new Error(
     'Missing Supabase environment variables. ' +
       'Create a .env.local file with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.',
   )
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storageKey: 'yaply-auth',
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
-})
+// In dev bypass mode this client is never called — cast to satisfy imports elsewhere.
+export const supabase = devBypass
+  ? ({} as ReturnType<typeof createClient<Database>>)
+  : createClient<Database>(supabaseUrl!, supabaseAnonKey!, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: 'yaply-auth',
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10,
+        },
+      },
+    })
 
 // ─── Type-safe table helpers ──────────────────────────────────────────────────
 export type { Database } from './database.types.js'
