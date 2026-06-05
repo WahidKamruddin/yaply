@@ -14,3 +14,7 @@ todos.json
 
 # Local Netlify folder
 .netlify
+
+# Sister platform apps (each has its own GitHub repo)
+yaply-ios/
+yaply-android/
