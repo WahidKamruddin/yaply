@@ -1,18 +1,19 @@
 import { useState } from 'react'
-import { Search, Plus, MessageSquare, LogOut } from 'lucide-react'
+import { Search, Plus, MessageSquare } from 'lucide-react'
 import { useAtom } from 'jotai'
 import { activeConversationIdAtom } from '@/features/chat/store/chat.atoms'
 import { useConversations } from '@/features/chat/hooks/useConversations'
-import { supabase } from '@/lib/supabase'
 import ConversationItem from './ConversationItem'
 import NewConversationModal from './NewConversationModal'
+import BottomBar from './BottomBar'
 
 interface Props {
   currentUserId: string
+  userEmail: string
   className?: string
 }
 
-export default function ConversationList({ currentUserId, className = '' }: Props) {
+export default function ConversationList({ currentUserId, userEmail, className = '' }: Props) {
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [activeId, setActiveId] = useAtom(activeConversationIdAtom)
@@ -30,21 +31,12 @@ export default function ConversationList({ currentUserId, className = '' }: Prop
       <div className="px-4 pt-5 pb-3 border-b border-[#dce7f8]">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-bold text-[#1a2744]">Messages</h1>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setShowNew(true)}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-[#5b8def] hover:bg-[#4a7de4] text-white transition-colors"
-            >
-              <Plus size={18} />
-            </button>
-            <button
-              onClick={() => void supabase.auth.signOut()}
-              title="Sign out"
-              className="w-8 h-8 flex items-center justify-center rounded-full text-[#9ab0cc] hover:text-[#1a2744] hover:bg-[#edf1fa] transition-colors"
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
+          <button
+            onClick={() => setShowNew(true)}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-[#5b8def] hover:bg-[#4a7de4] text-white transition-colors"
+          >
+            <Plus size={18} />
+          </button>
         </div>
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ab0cc]" />
@@ -93,6 +85,8 @@ export default function ConversationList({ currentUserId, className = '' }: Prop
           }}
         />
       )}
+
+      <BottomBar userId={currentUserId} userEmail={userEmail} />
     </div>
   )
 }

@@ -7,11 +7,13 @@ import type { DecryptedMessage } from '@/features/chat/types'
 interface Props {
   onSend: (text: string) => void
   onAttachment?: () => void
+  onTyping?: () => void
+  onStopTyping?: () => void
   replyMessage?: DecryptedMessage | null
   disabled?: boolean
 }
 
-export default function MessageInput({ onSend, onAttachment, replyMessage, disabled }: Props) {
+export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyping, replyMessage, disabled }: Props) {
   const [text, setText] = useState('')
   const [showCommands, setShowCommands] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -21,6 +23,8 @@ export default function MessageInput({ onSend, onAttachment, replyMessage, disab
     const value = e.target.value
     setText(value)
     setShowCommands(value.startsWith('/'))
+    if (value) onTyping?.()
+    else onStopTyping?.()
 
     // Auto-resize
     const el = textareaRef.current
@@ -28,7 +32,7 @@ export default function MessageInput({ onSend, onAttachment, replyMessage, disab
       el.style.height = 'auto'
       el.style.height = `${Math.min(el.scrollHeight, 160)}px`
     }
-  }, [])
+  }, [onTyping, onStopTyping])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -57,6 +61,7 @@ export default function MessageInput({ onSend, onAttachment, replyMessage, disab
     }
 
     onSend(trimmed)
+    onStopTyping?.()
     setText('')
     setShowCommands(false)
     if (textareaRef.current) textareaRef.current.style.height = 'auto'

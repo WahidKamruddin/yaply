@@ -26,9 +26,11 @@ export async function storeIdentityKeyPair(pub: JsonWebKey, priv: JsonWebKey): P
 
 export async function loadIdentityKeyPair(): Promise<{ pub: JsonWebKey; priv: JsonWebKey } | null> {
   const db = await getDb()
-  const pub = (await db.get(STORE_IDENTITY, 'pub')) as JsonWebKey | undefined
-  const priv = (await db.get(STORE_IDENTITY, 'priv')) as JsonWebKey | undefined
-  if (!pub || !priv) return null
+  const rawPub = await db.get(STORE_IDENTITY, 'pub')
+  const rawPriv = await db.get(STORE_IDENTITY, 'priv')
+  if (!rawPub || !rawPriv) return null
+  const pub = typeof rawPub === 'string' ? JSON.parse(rawPub) as JsonWebKey : rawPub as JsonWebKey
+  const priv = typeof rawPriv === 'string' ? JSON.parse(rawPriv) as JsonWebKey : rawPriv as JsonWebKey
   return { pub, priv }
 }
 

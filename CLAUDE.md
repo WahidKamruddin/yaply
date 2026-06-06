@@ -114,21 +114,18 @@ The project is a pnpm workspace monorepo with two internal packages:
 
 ---
 
-## ⚠️ Schema Discrepancy: Migrations vs Runtime Code
+## Database Schema
 
-**This is the most important thing to understand about the codebase.**
-
-The SQL migration files in `supabase/migrations/` do **not** match the actual Supabase database schema. The migrations were written as a planned ideal schema during early development. The actual database was set up differently. The runtime TypeScript code is the source of truth.
-
-### What the runtime code actually expects
+The migrations in `supabase/migrations/` match the live database. All runtime code uses the column names below.
 
 **`conversations` table:**
 ```
 id          uuid
+type        text   ('direct' | 'group' | 'ai')
 name        text
-is_group    boolean        ← migration has: type enum('direct','group','ai')
 avatar_url  text
 created_by  uuid
+created_at  timestamptz
 updated_at  timestamptz
 ```
 
@@ -136,32 +133,36 @@ updated_at  timestamptz
 ```
 conversation_id  uuid
 user_id          uuid
-is_admin         boolean    ← migration has: role enum('owner','admin','member')
-is_muted         boolean    ← migration has this on the conversation itself
-muted_until      timestamptz
+role             text   ('owner' | 'admin' | 'member')
+joined_at        timestamptz
 last_read_at     timestamptz
 ```
 
 **`messages` table:**
 ```
-id                       uuid
-conversation_id          uuid
-sender_id                uuid
-encrypted_content        text     ← migration has: content
-message_type             integer  ← migration has: type enum (string)
-sender_device_id         integer  ← not in migration
-content_hint             text     ← not in migration
-encrypted_attachment_ref text     ← migration has: media_url/media_mime
-parent_message_id        uuid     ← migration has: reply_to_id / thread_id
-thread_name              text     ← not in migration
-deleted_at               timestamptz
-server_timestamp         timestamptz  ← migration has: created_at
-created_at               timestamptz
+id              uuid
+conversation_id uuid
+sender_id       uuid
+type            text   ('text' | 'image' | 'gif' | 'sticker' | 'file' | 'system' | 'ai')
+content         text   — base64(AES-GCM ciphertext+tag) or plaintext
+iv              text   — base64(nonce[12]); NULL = phase-1 fallback (plain base64 content)
+media_url       text
+media_mime      text
+reply_to_id     uuid
+thread_id       uuid
+edited_at       timestamptz
+deleted_at      timestamptz
+created_at      timestamptz
 ```
 
-**`profiles` table:** Matches the migration (id, username, display_name, avatar_url, bio, public_key, is_online, last_seen_at, created_at, updated_at).
+**Encryption wire format:** `content = base64(ciphertext + GCM tag[16])`, `iv = base64(nonce[12])` stored as separate columns. If `iv` is NULL, content is plain base64 plaintext (phase-1 fallback).
 
-**`devices` table:** Used by the encryption system. Stores `identity_key` as JSON (JWK format public key).
+**`profiles` table:** id, username, display_name, avatar_url, bio, public_key, is_online, last_seen_at, created_at, updated_at.
+
+**`devices` table:** user_id, device_id (int), identity_key (JSON — JWK format public key).
+
+**Key RPCs:**
+- `find_or_create_direct_conversation(target_user_id uuid)` — finds or creates a direct DM, inserts both members correctly. Security definer. Always use this instead of manual inserts for direct chats.
 
 ---
 
@@ -291,12 +292,14 @@ The dev server is also accessible via Netlify Dev at port 8888 (configured in `n
 
 ---
 
-## Planned Sister Projects (this monorepo)
+## Sister Projects (this monorepo)
 
 | Directory | Platform | Status |
 |-----------|----------|--------|
 | `.` (root) | Web (React + Supabase) | Active |
-| `yaply-ios/` | iOS (Swift + SwiftUI) | Planned — will be gitignored here, own GitHub repo |
+| `yaply-ios/` | iOS (Swift + SwiftUI) | Active — own GitHub repo, gitignored here |
 | `yaply-android/` | Android (Kotlin + Jetpack Compose) | Future |
 
-The web repo's `.gitignore` will exclude `yaply-ios/` and `yaply-android/` since they have their own GitHub repositories. The monorepo root exists so Claude Code can cross-reference all platforms in the same working directory during development.
+The web repo's `.gitignore` excludes `yaply-ios/` and `yaply-android/` since they have their own GitHub repositories. The monorepo root exists so Claude Code can cross-reference all platforms in the same working directory.
+
+`yaply-ios/CLAUDE.md` contains iOS-specific architecture notes. Any change to the encryption wire format or database schema **must be reflected in all platform CLAUDE.md files** and implemented consistently across all apps.

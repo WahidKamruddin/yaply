@@ -28,46 +28,48 @@ export interface ConversationListItem {
   updatedAt: string
 }
 
+// Raw DB row — matches the actual messages table schema.
 export interface DbMessage {
   id: string
   conversation_id: string
   sender_id: string | null
-  encrypted_content: string
-  message_type: number
-  sender_device_id: number
-  content_hint: string | null
-  encrypted_attachment_ref: string | null
-  parent_message_id: string | null
-  thread_name: string | null
+  content: string         // base64(AES-GCM ciphertext+tag) or plaintext for system messages
+  iv: string | null       // base64(nonce[12]); null = phase-1 fallback (plain base64)
+  type: string            // 'text' | 'image' | 'gif' | 'sticker' | 'file' | 'system' | 'ai'
+  media_url: string | null
+  media_mime: string | null
+  reply_to_id: string | null
+  thread_id: string | null
+  edited_at: string | null
   deleted_at: string | null
-  server_timestamp: string
   created_at: string
   sender_profile?: Profile
 }
 
+// Post-decryption view model — the only thing the UI should render.
 export interface DecryptedMessage {
   id: string
   conversationId: string
   senderId: string | null
   content: string
-  messageType: number
-  contentHint: string | null
-  attachmentRef: string | null
-  parentMessageId: string | null
-  threadName: string | null
+  type: string
+  mediaUrl: string | null
+  replyToId: string | null
+  threadId: string | null
+  editedAt: string | null
   deletedAt: string | null
-  serverTimestamp: string
+  createdAt: string
   senderProfile?: Profile
 }
 
 export interface SendMessageParams {
   conversationId: string
   senderId: string
-  encryptedContent: string
-  messageType?: number
-  senderDeviceId?: number
-  contentHint?: string | null
-  encryptedAttachmentRef?: string | null
-  parentMessageId?: string | null
-  threadName?: string | null
+  content: string
+  iv: string | null
+  type?: string
+  replyToId?: string | null
+  threadId?: string | null
+  mediaUrl?: string | null
+  mediaMime?: string | null
 }

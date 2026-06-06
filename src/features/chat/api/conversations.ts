@@ -5,19 +5,18 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
   const { data: memberRows, error } = await supabase
     .from('conversation_members')
     .select(`
+      last_read_at,
       is_muted,
       muted_until,
-      last_read_at,
       conversations (
         id,
         name,
-        is_group,
+        type,
         avatar_url,
         updated_at,
         conversation_members (
           user_id,
-          is_admin,
-          is_muted,
+          role,
           last_read_at,
           profiles (
             id,
@@ -40,7 +39,16 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
     .map((r) => (r.conversations as unknown as { id: string } | null)?.id)
     .filter((id): id is string => !!id)
 
+  // Map convId → my last_read_at so we can count unread messages below.
+  const myLastReadAt: Record<string, string | null> = {}
+  for (const row of memberRows) {
+    const convId = (row.conversations as unknown as { id: string } | null)?.id
+    if (convId) myLastReadAt[convId] = row.last_read_at
+  }
+
   let lastMessages: Record<string, DecryptedMessage> = {}
+  const unreadCounts: Record<string, number> = {}
+
   if (convIds.length > 0) {
     const { data: msgs } = await supabase
       .from('messages')
@@ -48,36 +56,53 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
         id,
         conversation_id,
         sender_id,
-        encrypted_content,
-        message_type,
-        content_hint,
-        encrypted_attachment_ref,
-        parent_message_id,
-        thread_name,
+        content,
+        iv,
+        type,
         deleted_at,
-        server_timestamp
+        created_at
       `)
       .in('conversation_id', convIds)
       .is('deleted_at', null)
-      .order('server_timestamp', { ascending: false })
+      .order('created_at', { ascending: false })
 
     if (msgs) {
       const seen = new Set<string>()
-      for (const m of msgs) {
+      for (const m of msgs as unknown as Array<{
+        id: string; conversation_id: string; sender_id: string | null
+        content: string; iv: string | null; type: string
+        deleted_at: string | null; created_at: string
+      }>) {
         if (!seen.has(m.conversation_id)) {
           seen.add(m.conversation_id)
+          // Last message preview uses legacy base64 decode (no shared key available here)
+          let preview = m.content
+          if (!m.iv) {
+            try {
+              const bytes = Uint8Array.from(atob(m.content), (c) => c.charCodeAt(0))
+              preview = new TextDecoder().decode(bytes)
+            } catch { /* keep raw */ }
+          }
           lastMessages[m.conversation_id] = {
             id: m.id,
             conversationId: m.conversation_id,
             senderId: m.sender_id,
-            content: atob(m.encrypted_content),
-            messageType: m.message_type,
-            contentHint: m.content_hint,
-            attachmentRef: m.encrypted_attachment_ref,
-            parentMessageId: m.parent_message_id,
-            threadName: m.thread_name,
+            content: preview,
+            type: m.type,
+            mediaUrl: null,
+            replyToId: null,
+            threadId: null,
+            editedAt: null,
             deletedAt: m.deleted_at,
-            serverTimestamp: m.server_timestamp,
+            createdAt: m.created_at,
+          }
+        }
+
+        // Count messages from others that arrived after my last read timestamp.
+        if (m.sender_id !== userId) {
+          const lastRead = myLastReadAt[m.conversation_id]
+          if (!lastRead || new Date(m.created_at) > new Date(lastRead)) {
+            unreadCounts[m.conversation_id] = (unreadCounts[m.conversation_id] ?? 0) + 1
           }
         }
       }
@@ -89,13 +114,12 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
       const conv = row.conversations as unknown as {
         id: string
         name: string | null
-        is_group: boolean
+        type: string
         avatar_url: string | null
         updated_at: string
         conversation_members: Array<{
           user_id: string
-          is_admin: boolean
-          is_muted: boolean
+          role: string
           last_read_at: string | null
           profiles: Profile | null
         }>
@@ -108,64 +132,49 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
         .map((cm) => ({
           userId: cm.user_id,
           profile: cm.profiles!,
-          isAdmin: cm.is_admin,
-          isMuted: cm.is_muted,
+          isAdmin: cm.role === 'owner' || cm.role === 'admin',
+          isMuted: false,
           lastReadAt: cm.last_read_at,
         }))
 
       const lastMsg = lastMessages[conv.id] ?? null
-      const myMember = conv.conversation_members.find((cm) => cm.user_id === userId)
-      const myLastRead = myMember?.last_read_at
+      const unreadCount = unreadCounts[conv.id] ?? 0
 
-      let unreadCount = 0
-      if (!myLastRead && lastMsg) {
-        unreadCount = 1
-      }
+      const rowMutedUntil = (row as unknown as { muted_until: string | null }).muted_until
+      const isMuted = rowMutedUntil ? new Date(rowMutedUntil) > new Date() : false
 
       const item: ConversationListItem = {
         id: conv.id,
         name: conv.name,
-        isGroup: conv.is_group,
+        isGroup: conv.type === 'group',
         avatarUrl: conv.avatar_url,
         members,
         lastMessage: lastMsg,
         unreadCount,
-        isMuted: row.is_muted,
-        mutedUntil: row.muted_until,
+        isMuted,
+        mutedUntil: rowMutedUntil,
         updatedAt: conv.updated_at,
       }
       return item
     })
     .filter((c): c is ConversationListItem => c !== null)
+    .sort((a, b) => {
+      const aTime = a.lastMessage?.createdAt ?? a.updatedAt
+      const bTime = b.lastMessage?.createdAt ?? b.updatedAt
+      return new Date(bTime).getTime() - new Date(aTime).getTime()
+    })
 }
 
+// Uses the find_or_create_direct_conversation RPC (security definer — bypasses RLS correctly).
 export async function createDirectConversation(
   userId: string,
   otherUserId: string,
 ): Promise<string> {
-  const { data: existing } = await supabase.rpc('find_direct_conversation', {
-    user_a: userId,
-    user_b: otherUserId,
+  const { data, error } = await supabase.rpc('find_or_create_direct_conversation', {
+    target_user_id: otherUserId,
   })
-
-  if (existing) return existing as string
-
-  const { data: conv, error: convError } = await supabase
-    .from('conversations')
-    .insert({ is_group: false, created_by: userId })
-    .select('id')
-    .single()
-
-  if (convError || !conv) throw convError ?? new Error('Failed to create conversation')
-
-  const { error: memberError } = await supabase.from('conversation_members').insert([
-    { conversation_id: conv.id, user_id: userId, is_admin: true },
-    { conversation_id: conv.id, user_id: otherUserId, is_admin: false },
-  ])
-
-  if (memberError) throw memberError
-
-  return conv.id
+  if (error) throw error
+  return data as string
 }
 
 export async function createGroupConversation(
@@ -175,22 +184,26 @@ export async function createGroupConversation(
 ): Promise<string> {
   const { data: conv, error: convError } = await supabase
     .from('conversations')
-    .insert({ is_group: true, name, created_by: userId })
+    .insert({ type: 'group', name, created_by: userId })
     .select('id')
     .single()
 
   if (convError || !conv) throw convError ?? new Error('Failed to create group conversation')
 
-  const allMembers = Array.from(new Set([userId, ...memberIds]))
-  const { error: memberError } = await supabase.from('conversation_members').insert(
-    allMembers.map((uid) => ({
-      conversation_id: conv.id,
-      user_id: uid,
-      is_admin: uid === userId,
-    })),
-  )
+  // Insert creator first (RLS requires creator to exist as owner before adding others)
+  const { error: ownerError } = await supabase
+    .from('conversation_members')
+    .insert({ conversation_id: conv.id, user_id: userId, role: 'owner' })
 
-  if (memberError) throw memberError
+  if (ownerError) throw ownerError
+
+  const otherMembers = Array.from(new Set(memberIds)).filter((uid) => uid !== userId)
+  if (otherMembers.length > 0) {
+    const { error: memberError } = await supabase
+      .from('conversation_members')
+      .insert(otherMembers.map((uid) => ({ conversation_id: conv.id, user_id: uid, role: 'member' })))
+    if (memberError) throw memberError
+  }
 
   return conv.id
 }
@@ -220,7 +233,22 @@ export async function muteConversation(
     })
     .eq('conversation_id', conversationId)
     .eq('user_id', userId)
+  if (error) throw error
+}
 
+export async function addGroupMember(conversationId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('conversation_members')
+    .insert({ conversation_id: conversationId, user_id: userId, role: 'member' })
+  if (error) throw error
+}
+
+export async function removeGroupMember(conversationId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('conversation_members')
+    .delete()
+    .eq('conversation_id', conversationId)
+    .eq('user_id', userId)
   if (error) throw error
 }
 

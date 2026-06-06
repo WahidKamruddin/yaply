@@ -21,6 +21,7 @@ export function useRealtimeMessages(conversationId: string | null) {
         () => {
           void queryClient.invalidateQueries({ queryKey: ['messages', conversationId] })
           void queryClient.invalidateQueries({ queryKey: ['conversations'] })
+          void queryClient.invalidateQueries({ queryKey: ['thread-counts', conversationId] })
         },
       )
       .subscribe()
