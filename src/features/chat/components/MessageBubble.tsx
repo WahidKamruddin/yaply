@@ -1,8 +1,13 @@
 import { useState } from 'react'
 import { CheckCheck, Reply, Trash2, AlertCircle, Smile, MessageSquarePlus, MessageSquare } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
+import * as Dialog from '@radix-ui/react-dialog'
 import type { DecryptedMessage } from '@/features/chat/types'
 import type { ReactionGroup } from '@/features/chat/api/reactions'
+
+function formatMessageTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉']
 
@@ -24,6 +29,8 @@ interface Props {
 export default function MessageBubble({ message, isOwn, isRead, replyMessage, threadCount = 0, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact }: Props) {
   const [hovered, setHovered] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [showTime, setShowTime] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
 
   if (message.deletedAt) {
     return (
@@ -38,7 +45,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
 
   const isMedia = ['image', 'gif', 'sticker'].includes(message.type)
   const isSystem = message.type === 'system'
-  const timeAgo = formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })
+  const time = formatMessageTime(message.createdAt)
 
   if (isSystem) {
     return (
@@ -49,6 +56,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
   }
 
   return (
+    <>
     <div
       className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-1 group`}
       onMouseEnter={() => setHovered(true)}
@@ -61,7 +69,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
           </span>
         )}
 
-        <div className="relative flex items-end gap-2">
+        <div className="relative flex items-center gap-2">
           {/* Action buttons */}
           {hovered && (
             <div className={`flex items-center gap-1 ${isOwn ? 'order-first' : 'order-last'}`}>
@@ -104,7 +112,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
               </button>
               {isOwn && (
                 <button
-                  onClick={() => onDelete(message.id)}
+                  onClick={() => setShowDeleteModal(true)}
                   className="w-7 h-7 flex items-center justify-center rounded-full bg-[#edf1fa] hover:bg-red-50 text-[#6b84ab] hover:text-red-400 transition-colors"
                 >
                   <Trash2 size={13} />
@@ -138,7 +146,8 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
 
             {/* Main message bubble */}
             <div
-              className={`relative rounded-2xl ${
+              onClick={() => setShowTime((v) => !v)}
+              className={`relative rounded-2xl cursor-pointer ${
                 isOwn
                   ? 'bg-[#5b8def] text-white rounded-br-sm'
                   : 'bg-white text-[#1a2744] rounded-bl-sm shadow-sm shadow-[#dce7f8]'
@@ -165,15 +174,17 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
               )}
 
             </div>
-            <div className={`flex items-center gap-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-              <span className="text-[10px] text-[#9ab0cc]">{timeAgo}</span>
-              {isOwn && isRead !== undefined && (
-                <CheckCheck
-                  size={12}
-                  className={isRead ? 'text-[#5b8def]' : 'text-[#9ab0cc]'}
-                />
-              )}
-            </div>
+            {(showTime || (isOwn && isRead !== undefined)) && (
+              <div className={`flex items-center gap-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                {showTime && <span className="text-[10px] text-[#9ab0cc]">{time}</span>}
+                {isOwn && isRead !== undefined && (
+                  <CheckCheck
+                    size={12}
+                    className={isRead ? 'text-[#5b8def]' : 'text-[#9ab0cc]'}
+                  />
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -209,5 +220,40 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
         )}
       </div>
     </div>
+
+    <Dialog.Root open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-[#1a2744]/30 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-white rounded-2xl shadow-xl shadow-[#1a2744]/12 border border-[#dce7f8] p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+          <div className="flex flex-col items-center text-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+              <Trash2 size={20} className="text-red-400" />
+            </div>
+            <div>
+              <Dialog.Title className="text-base font-semibold text-[#1a2744]">
+                Delete Message
+              </Dialog.Title>
+              <Dialog.Description className="mt-1 text-sm text-[#9ab0cc]">
+                This will delete the message for everyone.
+              </Dialog.Description>
+            </div>
+            <div className="flex gap-3 w-full mt-1">
+              <Dialog.Close asChild>
+                <button className="flex-1 px-4 py-2.5 rounded-xl border border-[#dce7f8] text-sm font-medium text-[#6b84ab] hover:bg-[#edf1fa] transition-colors">
+                  Cancel
+                </button>
+              </Dialog.Close>
+              <button
+                onClick={() => { onDelete(message.id); setShowDeleteModal(false) }}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-medium text-white transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+    </>
   )
 }
