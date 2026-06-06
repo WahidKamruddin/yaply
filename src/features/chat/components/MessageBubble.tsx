@@ -133,8 +133,10 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                   <p className="text-[10px] font-semibold text-[#5b8def] mb-0.5 truncate">
                     {replyMessage.senderProfile?.display_name ?? replyMessage.senderProfile?.username ?? 'Unknown'}
                   </p>
-                  <p className="text-[11px] text-[#6b84ab] truncate">
-                    {replyMessage.type === 'image' || replyMessage.type === 'sticker'
+                  <p className={`text-[11px] truncate ${replyMessage.deletedAt ? 'italic text-[#9ab0cc]' : 'text-[#6b84ab]'}`}>
+                    {replyMessage.deletedAt
+                      ? 'Message deleted'
+                      : replyMessage.type === 'image' || replyMessage.type === 'sticker'
                       ? '📷 Photo'
                       : replyMessage.type === 'gif'
                       ? 'GIF'

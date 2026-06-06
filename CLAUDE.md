@@ -89,7 +89,7 @@ The GCM tag is appended to the ciphertext (Web Crypto AES-GCM bundles them). Thi
 
 **Key storage:** Private key and derived shared keys are stored in **IndexedDB** via the `idb` library (browser equivalent of a local database). Store name `identity` holds the keypair JWKs; store name `derived` holds cached per-conversation AES keys keyed by conversation ID.
 
-**Fallback (phase-1):** If either party has no key established yet, the client base64-encodes the plaintext instead of encrypting. Decryption tries AES-GCM first, falls back to `atob()`, then falls back to returning the raw string.
+**Fallback (phase-1):** If either party has no key established yet, the client encodes the plaintext instead of encrypting. **Always use `TextEncoder` / `TextDecoder` for phase-1 encoding — never `btoa()` / `atob()`.** `btoa()` breaks on any non-Latin-1 character (emoji, CJK, etc.). Decryption tries AES-GCM first, falls back to `new TextDecoder().decode(Uint8Array.from(atob(content), c => c.charCodeAt(0)))`, then falls back to returning the raw string.
 
 **Why Web Crypto and not a JS crypto library (e.g. TweetNaCl, forge):**
 - Web Crypto is built into every modern browser — no bundle size cost.
@@ -136,6 +136,7 @@ user_id          uuid
 role             text   ('owner' | 'admin' | 'member')
 joined_at        timestamptz
 last_read_at     timestamptz
+muted_until      timestamptz   — null = not muted; future date = muted until then; 8640000000000 ms epoch = muted forever
 ```
 
 **`messages` table:**
@@ -164,6 +165,9 @@ created_at      timestamptz
 **Key RPCs:**
 - `find_or_create_direct_conversation(target_user_id uuid)` — finds or creates a direct DM, inserts both members correctly. Security definer. Always use this instead of manual inserts for direct chats.
 
+**Postgres trigger — orphan conversation cleanup:**
+`trg_delete_empty_conversation` (AFTER DELETE on `conversation_members`, FOR EACH ROW) — calls `delete_conversation_if_empty()` which deletes the `conversations` row if no members remain. This means deleting your membership from a DM where the other user already left cascades to deleting all messages and the conversation itself. Migration: `delete_conversation_if_empty`.
+
 ---
 
 ## Feature Map
@@ -179,10 +183,14 @@ created_at      timestamptz
 | Message pagination (50/page) | `src/features/chat/hooks/useMessages.ts` |
 | Real-time messages | `src/features/chat/hooks/useRealtimeMessages.ts` |
 | E2E encryption | `packages/crypto/`, `src/features/chat/hooks/useEncryption.ts` |
-| Soft delete messages | `deleteMessage` in `src/features/chat/api/messages.ts` |
+| Soft delete messages (own messages only) | `deleteMessage` in `src/features/chat/api/messages.ts`; deletes update `deleted_at` column |
+| Delete message confirmation modal | Radix UI Dialog in `MessageBubble.tsx` — "Delete Message" / "This will delete the message for everyone." |
+| Reply quotation with deleted-message handling | Reply block in `MessageBubble.tsx` — if `replyMessage.deletedAt` is set, shows italic "Message deleted" in the quotation |
 | Message reply | `replyToMessageIdAtom`, `ReplyStrip` in `MessageInput` |
-| Mute conversations | `muteConversation` in conversations API |
+| Mute conversations | `muteConversation` in conversations API; `muted_until` column in `conversation_members` |
 | Mark conversations read | `markConversationRead` in conversations API |
+| Conversation swipe-to-delete | `ConversationItem.tsx` — pointer-event left swipe reveals red trash area; Radix UI Dialog confirms; calls `deleteConversation` |
+| Delete conversation (self-only) | `deleteConversation` in `src/features/chat/api/conversations.ts` — deletes own row from `conversation_members`; DB trigger cleans up orphaned conversation |
 | User presence (is_online) | Migration `00014_add_presence_to_profiles.sql` |
 | User search | `searchUsers` in conversations API |
 | Dev auth bypass | `VITE_DEV_BYPASS_AUTH=true` in `.env` |

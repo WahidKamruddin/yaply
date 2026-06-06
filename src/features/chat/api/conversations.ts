@@ -252,6 +252,15 @@ export async function removeGroupMember(conversationId: string, userId: string):
   if (error) throw error
 }
 
+export async function deleteConversation(conversationId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('conversation_members')
+    .delete()
+    .eq('conversation_id', conversationId)
+    .eq('user_id', userId)
+  if (error) throw error
+}
+
 export async function markConversationRead(
   conversationId: string,
   userId: string,
