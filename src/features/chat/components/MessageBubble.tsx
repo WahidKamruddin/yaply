@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { CheckCheck, Reply, Trash2, AlertCircle, Smile, MessageSquarePlus, MessageSquare } from 'lucide-react'
+import { CheckCheck, Reply, Trash2, AlertCircle, Smile, MessageSquarePlus, MessageSquare, BookImage } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { DecryptedMessage } from '@/features/chat/types'
 import type { ReactionGroup } from '@/features/chat/api/reactions'
+import AddToAlbumModal from './AddToAlbumModal'
 
 function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr)
@@ -17,6 +18,8 @@ interface Props {
   isRead?: boolean
   replyMessage?: DecryptedMessage | null
   threadCount?: number
+  conversationId?: string
+  currentUserId?: string
   onReply: (messageId: string) => void
   onDelete: (messageId: string) => void
   onQuotationClick?: (messageId: string) => void
@@ -24,13 +27,66 @@ interface Props {
   onReplyInThread?: (messageId: string) => void
   reactions?: ReactionGroup[]
   onReact?: (messageId: string, emoji: string) => void
+  onOpenPanel?: (tab: string) => void
 }
 
-export default function MessageBubble({ message, isOwn, isRead, replyMessage, threadCount = 0, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact }: Props) {
+const SYSTEM_TAB_MAP: Array<[RegExp, string]> = [
+  [/Plan created/i,     'events'],
+  [/Event created/i,    'events'],
+  [/Album created/i,    'albums'],
+  [/Task created/i,     'tasks'],
+  [/Note created/i,     'notes'],
+  [/Budget created/i,   'budgets'],
+  [/Reminder set/i,     'reminders'],
+]
+
+function getPanelTab(content: string): string | null {
+  for (const [re, tab] of SYSTEM_TAB_MAP) {
+    if (re.test(content)) return tab
+  }
+  return null
+}
+
+const TAB_LABELS: Record<string, string> = {
+  events: 'Events',
+  albums: 'Albums',
+  tasks: 'Tasks',
+  notes: 'Notes',
+  budgets: 'Budgets',
+  reminders: 'Reminders',
+}
+
+export default function MessageBubble({ message, isOwn, isRead, replyMessage, threadCount = 0, conversationId, currentUserId, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact, onOpenPanel }: Props) {
   const [hovered, setHovered] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showTime, setShowTime] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showAddToAlbum, setShowAddToAlbum] = useState(false)
+
+  const isMedia = ['image', 'gif', 'sticker'].includes(message.type)
+  const isSystem = message.type === 'system'
+  const time = formatMessageTime(message.createdAt)
+
+  if (isSystem) {
+    // System messages with a past deletedAt are expired — render nothing.
+    if (message.deletedAt && new Date(message.deletedAt) <= new Date()) return null
+    const panelTab = getPanelTab(message.content)
+    return (
+      <div className="flex justify-center my-2">
+        <div className="flex items-center gap-2 text-xs text-[#6b84ab] bg-[#edf1fa] px-3 py-1.5 rounded-full max-w-sm text-center">
+          <span>{message.content}</span>
+          {panelTab && onOpenPanel && (
+            <button
+              onClick={() => onOpenPanel(panelTab)}
+              className="flex-shrink-0 text-[#5b8def] hover:text-[#4a7de4] font-medium hover:underline underline-offset-2 transition-colors"
+            >
+              Open {TAB_LABELS[panelTab]} →
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   if (message.deletedAt) {
     return (
@@ -39,18 +95,6 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
           <AlertCircle size={12} className="text-[#9ab0cc]" />
           <span className="text-xs text-[#9ab0cc] italic">Message deleted</span>
         </div>
-      </div>
-    )
-  }
-
-  const isMedia = ['image', 'gif', 'sticker'].includes(message.type)
-  const isSystem = message.type === 'system'
-  const time = formatMessageTime(message.createdAt)
-
-  if (isSystem) {
-    return (
-      <div className="flex justify-center my-2">
-        <span className="text-xs text-[#6b84ab] bg-[#edf1fa] px-3 py-1 rounded-full">{message.content}</span>
       </div>
     )
   }
@@ -110,6 +154,15 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
               >
                 <MessageSquarePlus size={13} />
               </button>
+              {message.type === 'image' && message.mediaUrl && conversationId && currentUserId && (
+                <button
+                  onClick={() => setShowAddToAlbum(true)}
+                  className="w-7 h-7 flex items-center justify-center rounded-full bg-[#edf1fa] hover:bg-[#dce7f8] text-[#6b84ab] hover:text-[#1a2744] transition-colors"
+                  title="Add to album"
+                >
+                  <BookImage size={13} />
+                </button>
+              )}
               {isOwn && (
                 <button
                   onClick={() => setShowDeleteModal(true)}
@@ -222,6 +275,17 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
         )}
       </div>
     </div>
+
+    {showAddToAlbum && conversationId && currentUserId && message.mediaUrl && (
+      <AddToAlbumModal
+        conversationId={conversationId}
+        currentUserId={currentUserId}
+        messageId={message.id}
+        mediaUrl={message.mediaUrl}
+        mediaMime={message.mediaMime ?? 'image/jpeg'}
+        onClose={() => setShowAddToAlbum(false)}
+      />
+    )}
 
     <Dialog.Root open={showDeleteModal} onOpenChange={setShowDeleteModal}>
       <Dialog.Portal>

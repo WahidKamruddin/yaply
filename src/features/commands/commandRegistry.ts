@@ -1,9 +1,9 @@
-import { helpHandler } from './handlers/helpHandler'
 import { remindHandler } from './handlers/remindHandler'
 import { muteHandler } from './handlers/muteHandler'
-import { threadHandler } from './handlers/threadHandler'
-import { createHandler, type CreateItemType } from './handlers/createHandler'
+import type { CreateItemType } from './handlers/createHandler'
+import { createHandler } from './handlers/createHandler'
 import type { MemberSummary } from '@/features/chat/types'
+import type { QueryClient } from '@tanstack/react-query'
 
 export interface CommandContext {
   conversationId: string
@@ -11,9 +11,11 @@ export interface CommandContext {
   args: string[]
   rawArgs: string
   members: MemberSummary[]
+  queryClient: QueryClient
   openModal: (type: CreateItemType, title?: string) => void
-  sendSystemMessage: (text: string) => void
-  parentMessageId?: string | null
+  openHelp: () => void
+  sendSystemMessage: (text: string) => Promise<void>
+  showLocalFeedback: (text: string) => void
 }
 
 export async function executeCommand(name: string, ctx: CommandContext): Promise<void> {
@@ -21,7 +23,7 @@ export async function executeCommand(name: string, ctx: CommandContext): Promise
 
   switch (name) {
     case 'help':
-      result = helpHandler()
+      ctx.openHelp()
       break
 
     case 'remind':
@@ -29,8 +31,10 @@ export async function executeCommand(name: string, ctx: CommandContext): Promise
         conversationId: ctx.conversationId,
         createdBy: ctx.userId,
         args: ctx.args,
-        members: ctx.members.map((m) => ({ userId: m.userId, profile: { username: m.profile.username } })),
       })
+      if (result.startsWith('⏰')) {
+        void ctx.queryClient.invalidateQueries({ queryKey: ['reminders'] })
+      }
       break
 
     case 'mute':
@@ -41,16 +45,6 @@ export async function executeCommand(name: string, ctx: CommandContext): Promise
       })
       break
 
-    case 'thread':
-      result = await threadHandler({
-        conversationId: ctx.conversationId,
-        senderId: ctx.userId,
-        args: ctx.args,
-        parentMessageId: ctx.parentMessageId,
-      })
-      break
-
-    case 'create':
     case 'task':
     case 'poll':
     case 'event':
@@ -58,11 +52,10 @@ export async function executeCommand(name: string, ctx: CommandContext): Promise
     case 'album':
     case 'budget':
     case 'plan': {
-      const args = name === 'create' ? ctx.args : [name, ...ctx.args]
       result = createHandler({
         conversationId: ctx.conversationId,
         createdBy: ctx.userId,
-        args,
+        args: [name, ...ctx.args],
         openModal: ctx.openModal,
       })
       break
@@ -72,5 +65,5 @@ export async function executeCommand(name: string, ctx: CommandContext): Promise
       result = `Unknown command "/${name}". Type /help to see available commands.`
   }
 
-  if (result) ctx.sendSystemMessage(result)
+  if (result) ctx.showLocalFeedback(result)
 }

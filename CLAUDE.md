@@ -184,34 +184,205 @@ created_at      timestamptz
 | Real-time messages | `src/features/chat/hooks/useRealtimeMessages.ts` |
 | E2E encryption | `packages/crypto/`, `src/features/chat/hooks/useEncryption.ts` |
 | Soft delete messages (own messages only) | `deleteMessage` in `src/features/chat/api/messages.ts`; deletes update `deleted_at` column |
-| Delete message confirmation modal | Radix UI Dialog in `MessageBubble.tsx` — "Delete Message" / "This will delete the message for everyone." |
-| Reply quotation with deleted-message handling | Reply block in `MessageBubble.tsx` — if `replyMessage.deletedAt` is set, shows italic "Message deleted" in the quotation |
+| Delete message confirmation modal | Radix UI Dialog in `MessageBubble.tsx` |
+| Reply quotation with deleted-message handling | Reply block in `MessageBubble.tsx` |
 | Message reply | `replyToMessageIdAtom`, `ReplyStrip` in `MessageInput` |
 | Mute conversations | `muteConversation` in conversations API; `muted_until` column in `conversation_members` |
 | Mark conversations read | `markConversationRead` in conversations API |
-| Conversation swipe-to-delete | `ConversationItem.tsx` — pointer-event left swipe reveals red trash area; Radix UI Dialog confirms; calls `deleteConversation` |
-| Delete conversation (self-only) | `deleteConversation` in `src/features/chat/api/conversations.ts` — deletes own row from `conversation_members`; DB trigger cleans up orphaned conversation |
+| Conversation swipe-to-delete | `ConversationItem.tsx` |
+| Delete conversation (self-only) | `deleteConversation` in `src/features/chat/api/conversations.ts` |
 | User presence (is_online) | Migration `00014_add_presence_to_profiles.sql` |
 | User search | `searchUsers` in conversations API |
-| Dev auth bypass | `VITE_DEV_BYPASS_AUTH=true` in `.env` |
-| GIF picker (Giphy) | `src/features/media/` — UI exists, wired as phase 3 placeholder |
-| Slash command system | `src/features/commands/` — parser + registry built |
-| /remind, /mute, /thread | `src/features/commands/handlers/` |
-| /create (task/note/album/budget) | `src/features/commands/handlers/createHandler.ts` |
+| Slash command system (local feedback only) | `src/features/commands/` — outputs shown only to the typing user via `commandFeedbackAtom`, never written to DB |
+| /remind, /mute, /thread, /create | `src/features/commands/handlers/` |
+| **Threads** (tier 3) | `thread_id` filter in `fetchMessages`; `/thread` returns local usage text |
+| **Stickers** (tier 3) | `stickers` table (user_id, storage_path, name); `src/features/media/` components |
+| **Tasks** (tier 3) | `src/features/chat/hooks/useTasks.ts`, `src/features/chat/components/panel/TaskList.tsx`, ConversationPanel Tasks tab |
+| **Notes** (tier 3) | `src/features/chat/hooks/useNotes.ts`, `src/features/chat/components/panel/NoteList.tsx`, ConversationPanel Notes tab |
+| **Reminders** (tier 3) | `src/features/chat/hooks/useReminders.ts`, `src/features/chat/components/panel/ReminderList.tsx`, 60s polling + Web Notifications API |
+| **Albums** (tier 3) | `src/features/chat/hooks/useAlbums.ts`, `src/features/chat/components/panel/AlbumList.tsx`, gallery grid |
+| **Budgets + Splitwise** (tier 3) | `src/features/chat/hooks/useBudgets.ts`, `src/features/chat/hooks/useSplitwise.ts`, `src/lib/splitwise.ts`, `src/features/chat/components/panel/BudgetList.tsx` |
+| ConversationPanel right panel | `src/features/chat/components/ConversationPanel.tsx` — tabs: Tasks, Notes, Reminders, Albums, Budgets |
 
-### Built but not yet integrated (schema defined, UI is placeholder)
+### Not yet integrated
 
 | Feature | Status |
 |---------|--------|
 | Media upload (images, files) | Service and drag-drop zone built; picker shown as "Phase 3" placeholder in ChatView |
-| Sticker creation and picker | Components built; Supabase storage migration done |
-| Tasks | Schema migrated; create handler exists; no list/detail view |
-| Notes | Schema migrated; create handler exists; no list/detail view |
-| Reminders | Schema migrated; handler exists; no scheduler/notification system |
-| Albums | Schema migrated; create handler exists; no gallery view |
-| Budgets | Schema migrated; create handler exists; no expense view |
+| GIF picker (Giphy) | `src/features/media/` — UI exists, wired as phase 3 placeholder |
 | AI conversations | Schema migrated; no UI or AI API integration |
-| Threads | Schema design done; no thread view UI |
+
+---
+
+## Tier 3 — iOS Implementation Reference
+
+This section documents everything iOS needs to replicate the tier 3 features. Web is the reference implementation. All features share the same Supabase database.
+
+---
+
+### Threads
+
+**How it works on web:**
+- Main message list query adds `.is('thread_id', null)` — thread replies are excluded from the main view.
+- A thread is a set of messages where `thread_id = <parent_message_id>`.
+- The `/thread` command shows usage instructions locally (not sent as a message).
+
+**iOS implementation:**
+- In the message list query, filter `WHERE thread_id IS NULL`.
+- Thread view: query `WHERE thread_id = '<parentId>'` ordered by `created_at ASC`.
+- Show a "thread" indicator on messages that have replies (count rows WHERE `thread_id = msg.id`).
+- Tapping the thread indicator opens the thread view sheet.
+- The same E2E encryption applies to thread replies — they are regular messages with a `thread_id` set.
+
+---
+
+### Stickers
+
+**Schema:** `stickers (id uuid, user_id uuid, storage_path text, name text, created_at timestamptz)`
+
+**How it works on web:**
+- User uploads an image to Supabase Storage bucket `stickers/`.
+- Row inserted into `stickers` with the `storage_path`.
+- Sending a sticker creates a message with `type = 'sticker'` and `media_url` pointing to the public URL.
+
+**iOS implementation:**
+- `PHPickerViewController` or image picker → upload to Supabase Storage `stickers/` bucket.
+- Insert sticker row. Show sticker picker in keyboard accessory or toolbar.
+- Sending: insert message row with `type = 'sticker'`, `media_url = <storage public URL>`, content = empty or sticker name.
+- Receiving: render sticker messages as images (no decryption — stickers are not encrypted).
+
+---
+
+### Tasks
+
+**Schema:** `tasks (id, conversation_id, created_by, assigned_to, title, description, status, priority, due_at, completed_at, created_at, updated_at)`
+- `status`: `'todo' | 'in_progress' | 'done'`
+- `priority`: `'low' | 'medium' | 'high'`
+
+**RLS:** Conversation members can SELECT; creator/assignee can UPDATE; creator can DELETE.
+
+**How it works on web:**
+- Created via `/task [title]` → opens a modal for description/priority/due date → inserts row.
+- A creation system message is sent to the conversation (visible to all members): "Task created: [title]".
+- Shown in ConversationPanel > Tasks tab: checkbox toggles `todo ↔ done`, priority badge, due date.
+
+**iOS implementation:**
+- Task creation: command `/task` or a dedicated "+" button in the conversation detail sheet.
+- Task list: fetch `WHERE conversation_id = ? ORDER BY created_at DESC`.
+- Toggle status: `UPDATE tasks SET status = 'done', completed_at = now() WHERE id = ?` (or back to `todo`).
+- Show priority with color: low = grey, medium = amber, high = red.
+- Show `due_at` with a clock icon; highlight overdue tasks in amber/red.
+
+---
+
+### Notes
+
+**Schema:** `notes (id, user_id, conversation_id, title, content, created_at, updated_at)`
+
+**RLS:** "owner only" — a user can only see and delete their own notes.
+
+**How it works on web:**
+- Created via `/note [title]` → opens a modal for content → inserts row.
+- Shown in ConversationPanel > Notes tab: expandable cards with title + content preview.
+- Only the creating user sees their notes (RLS enforces this).
+
+**iOS implementation:**
+- Notes are private — only the authenticated user's notes are returned by Supabase.
+- Note creation: `/note` command or tapping "+" in the notes section of the conversation sheet.
+- Show expandable cells or a detail view with `content` as a text view.
+- Allow deletion (swipe-to-delete): `DELETE FROM notes WHERE id = ? AND user_id = ?`.
+
+---
+
+### Reminders
+
+**Schema:** `reminders (id, user_id, conversation_id, message, remind_at, status, created_at)`
+- `status`: `'pending' | 'sent' | 'dismissed'`
+
+**RLS:** "owner only" — a user can only see and update their own reminders.
+
+**How it works on web:**
+- Created via `/remind [time] [message]` (e.g. `/remind 30m Take out the trash`).
+- `remind_at` is computed from the time argument relative to `now()`.
+- Background polling every 60s: query `WHERE user_id = ? AND status = 'pending' AND remind_at <= now()` → fire Web Notifications API → batch-update `status = 'sent'` in one query (`.in('id', ids)`).
+- Dismissed via the dismiss button in the Reminders tab → `UPDATE status = 'dismissed'`.
+
+**iOS implementation (key difference from web):**
+- On reminder creation, schedule a `UNNotificationRequest` immediately using `UNCalendarNotificationTrigger` with the `remind_at` date — **do not poll**.
+- In `UNUserNotificationCenterDelegate.userNotificationCenter(_:didReceive:)`, update `status = 'sent'` in Supabase after delivery.
+- Dismissal: update `status = 'dismissed'` and cancel the pending `UNNotificationRequest` by identifier.
+- Show the same Reminders list in the conversation detail sheet; filter `neq('status', 'dismissed')` and `eq('user_id', currentUserId)`.
+- Parse the time argument the same way as web: e.g. `30m` = 30 minutes, `2h` = 2 hours, `tomorrow` = next day at 9am.
+
+---
+
+### Albums
+
+**Schema:**
+- `albums (id, conversation_id, name, created_by, created_at)`
+- `album_media (id, album_id, message_id, media_url, media_mime, created_at)`
+
+**RLS:** Conversation members can SELECT and INSERT; creator can DELETE album.
+
+**How it works on web:**
+- Created via `/album [name]` → inserts album row.
+- Images from chat can be added to an album → inserts `album_media` row with `media_url` and `media_mime`.
+- Shown in ConversationPanel > Albums tab as a 2-col grid; tapping an album opens a 3-col media gallery.
+
+**iOS implementation:**
+- Album creation: `/album` command or "+" in conversation detail sheet.
+- Gallery view: `LazyVGrid` with 3 columns; tap to open full-screen viewer (`UIImageView` / `AsyncImage`).
+- Long-press on an image message in chat → "Add to Album" → sheet to pick or create an album → insert `album_media` row.
+- `media_url` is a direct Supabase Storage public URL — render with `AsyncImage`.
+
+---
+
+### Budgets + Splitwise
+
+**Schema:**
+- `budgets (id, conversation_id, name, total_amount, currency, created_by, created_at, splitwise_group_id text | null)`
+- `expenses (id, budget_id, paid_by, description, amount, category, split_between, created_at)`
+
+**RLS:** Conversation members can SELECT and INSERT; creator can DELETE.
+
+**Splitwise integration:**
+- If `splitwise_group_id` is non-null, the budget is linked to a Splitwise group.
+- Linked budgets display expenses from the Splitwise API instead of the local `expenses` table.
+- Splitwise API base: `https://secure.splitwise.com/api/v3.0/`
+- Auth: OAuth2 client credentials grant (POST `/oauth/token` with `grant_type=client_credentials`).
+- Endpoints used:
+  - `GET /get_groups` → list groups for the link picker
+  - `GET /get_expenses?group_id=X&limit=50` → expense list (filter out "Settle" settlement expenses)
+  - `POST /create_expense` → add expense with equal split; `users[0][user_id]`, `users[0][paid_share]`, `users[0][owed_share]` fields; payer identified by `paidBySplitwiseUserId` (match by index in `splitAmong` array, not always index 0)
+
+**How it works on web:**
+- Created via `/budget [name]` → modal for total amount + currency.
+- Budget list in ConversationPanel > Budgets tab.
+- Unlinked budget: shows local expenses from `expenses` table + "Link to Splitwise" button.
+- Linked budget: shows Splitwise expenses + simplified debt balances; "Add expense" writes directly to Splitwise API.
+- `splitwise_group_id` updated via `UPDATE budgets SET splitwise_group_id = ? WHERE id = ?`.
+
+**iOS implementation:**
+- Budget creation: `/budget` command or "+" in conversation detail sheet.
+- Use the Splitwise REST API directly (no SDK available for Swift — call with `URLSession`).
+- Store the OAuth2 access token in Keychain; refresh when expired.
+- Linking: show a sheet with group picker (from `GET /get_groups`); on selection, update `splitwise_group_id` in Supabase.
+- Linked budget view: fetch expenses from Splitwise API, show `simplified_debts` for who owes whom (note: `simplified_debts` may be null if the group has "simplify debts" disabled — handle gracefully).
+- Add expense: POST to Splitwise with equal split; assign `paid_share` to the correct `user_id` (not always index 0 — find the payer's index in the members array).
+
+---
+
+### Command Feedback (local only)
+
+**Critical behavior:** Command outputs — help text, error messages, usage prompts, and confirmations like "Reminder set" — are **never written to the database**. They are shown only to the user who typed the command as an ephemeral in-app message.
+
+**The only things written to the conversation (visible to all members):**
+- A system message when a task, note, album, or budget is successfully created (e.g. "Task created: Fix login bug"). This is inserted with `type = 'system'`, `iv = NULL`, `content = base64(TextEncoder(text))`.
+
+**iOS implementation:**
+- Show command feedback as a transient banner or inline note above the message input — auto-dismiss after ~6 seconds.
+- Never send command output as a message to the conversation.
+- System messages (`type = 'system'`) from creation events should be rendered differently in the message list (centered grey text, no bubble, no sender name).
 
 ---
 

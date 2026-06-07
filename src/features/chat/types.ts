@@ -72,4 +72,5 @@ export interface SendMessageParams {
   threadId?: string | null
   mediaUrl?: string | null
   mediaMime?: string | null
+  deletedAt?: string | null
 }

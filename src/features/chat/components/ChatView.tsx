@@ -1,9 +1,9 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import { flushSync } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Phone, Video, Info, ChevronDown, ArrowLeft, Search, X } from 'lucide-react'
-import { useAtom } from 'jotai'
-import { activeConversationIdAtom, replyToMessageIdAtom } from '@/features/chat/store/chat.atoms'
+import { Phone, Video, Info, ChevronDown, ArrowLeft, Search, X, PanelRight } from 'lucide-react'
+import { useAtom, useSetAtom } from 'jotai'
+import { activeConversationIdAtom, replyToMessageIdAtom, conversationPanelOpenAtom, conversationPanelTabAtom } from '@/features/chat/store/chat.atoms'
 import { useConversations } from '@/features/chat/hooks/useConversations'
 import { useMessages } from '@/features/chat/hooks/useMessages'
 import { useSendMessage } from '@/features/chat/hooks/useSendMessage'
@@ -15,6 +15,8 @@ import { markConversationRead } from '@/features/chat/api/conversations'
 import { deleteMessage, fetchThreadCounts } from '@/features/chat/api/messages'
 import { useReadReceipts } from '@/features/chat/hooks/useReadReceipts'
 import GroupInfoModal from './GroupInfoModal'
+import ConversationPanel from './ConversationPanel'
+import { useReminderNotifications } from '@/features/chat/hooks/useReminders'
 import {
   fetchReactions,
   buildReactionGroups,
@@ -53,6 +55,10 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
   const queryClient = useQueryClient()
   const [activeId, setActiveId] = useAtom(activeConversationIdAtom)
   const [replyId, setReplyId] = useAtom(replyToMessageIdAtom)
+  const [panelOpen, setPanelOpen] = useAtom(conversationPanelOpenAtom)
+  const setPanelTab = useSetAtom(conversationPanelTabAtom)
+
+  useReminderNotifications(currentUserId)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [decrypted, setDecrypted] = useState<DecryptedMessage[]>([])
   const [reactionsMap, setReactionsMap] = useState<Record<string, ReactionGroup[]>>({})
@@ -310,6 +316,11 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
     if (msg) setThreadViewRoot(msg)
   }, [decrypted])
 
+  const handleOpenPanel = useCallback((tab: string) => {
+    setPanelOpen(true)
+    setPanelTab(tab)
+  }, [setPanelOpen, setPanelTab])
+
   const handleReact = useCallback(async (messageId: string, emoji: string) => {
     const existing = reactionsMap[messageId]?.find((r) => r.emoji === emoji && r.reactedByMe)
     setReactionsMap((prev) => {
@@ -378,6 +389,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
   let lastDate = ''
 
   return (
+    <div className="flex-1 flex flex-row h-full overflow-hidden">
     <div className="flex-1 flex flex-col h-full bg-[#edf1fa] overflow-hidden relative">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-[#dce7f8] bg-white">
@@ -421,6 +433,13 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
               <Info size={16} />
             </button>
           )}
+          <button
+            onClick={() => setPanelOpen((v) => !v)}
+            className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${panelOpen ? 'bg-[#5b8def] text-white' : 'text-[#9ab0cc] hover:text-[#5b8def] hover:bg-[#edf3ff]'}`}
+            title="Conversation details"
+          >
+            <PanelRight size={16} />
+          </button>
           <div className="w-px h-4 bg-[#dce7f8] mx-1" />
           <button
             onClick={() => setShowProfile(true)}
@@ -490,6 +509,8 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
                 isRead={msg.senderId === currentUserId && msg.id === lastOwnMessageId ? readByOtherSet.has(msg.id) : undefined}
                 replyMessage={msg.replyToId ? decrypted.find((m) => m.id === msg.replyToId) ?? null : null}
                 threadCount={threadCounts[msg.id] ?? 0}
+                conversationId={activeId ?? undefined}
+                currentUserId={currentUserId}
                 onReply={(id) => setReplyId(id)}
                 onDelete={(id) => void handleDelete(id)}
                 onQuotationClick={handleQuotationClick}
@@ -497,6 +518,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
                 onReplyInThread={handleOpenThread}
                 reactions={reactionsMap[msg.id] ?? []}
                 onReact={handleReact}
+                onOpenPanel={handleOpenPanel}
               />
             </div>
           )
@@ -588,6 +610,17 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
           onClose={() => setShowGroupInfo(false)}
         />
       )}
+    </div>
+
+    {/* Conversation details panel */}
+    {panelOpen && activeId && (
+      <ConversationPanel
+        conversationId={activeId}
+        currentUserId={currentUserId}
+        members={conversation?.members ?? []}
+        onClose={() => setPanelOpen(false)}
+      />
+    )}
     </div>
   )
 }

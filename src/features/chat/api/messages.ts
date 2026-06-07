@@ -33,6 +33,7 @@ export async function fetchMessages(
       )
     `)
     .eq('conversation_id', conversationId)
+    .is('thread_id', null)
     .order('created_at', { ascending: false })
     .limit(PAGE_SIZE)
 
@@ -72,6 +73,7 @@ export async function sendMessage(params: SendMessageParams): Promise<DbMessage>
       thread_id: params.threadId ?? null,
       media_url: params.mediaUrl ?? null,
       media_mime: params.mediaMime ?? null,
+      deleted_at: params.deletedAt ?? null,
     })
     .select(`
       id,
