@@ -20,9 +20,6 @@ const MUTE_OPTIONS: { label: string; hours: number | null }[] = [
   { label: 'Forever', hours: null },
 ]
 
-const REVEAL_WIDTH = 64
-const TRIGGER_THRESHOLD = 36
-
 function Avatar({ src, name, online }: { src?: string | null; name: string; online?: boolean }) {
   return (
     <div className="relative flex-shrink-0 w-10 h-10 overflow-hidden rounded-full">
@@ -47,10 +44,10 @@ export default function ConversationItem({ conversation, currentUserId, isActive
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [swipeOffset, setSwipeOffset] = useState(0)
-  const [isDragging, setIsDragging] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const dragStartX = useRef(0)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pointerStartPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const wasLongPress = useRef(false)
 
   const otherMembers = conversation.members.filter((m) => m.userId !== currentUserId)
   const displayName = conversation.isGroup
@@ -71,43 +68,45 @@ export default function ConversationItem({ conversation, currentUserId, isActive
     ? formatDistanceToNow(new Date(conversation.updatedAt), { addSuffix: false })
     : ''
 
+  const openMenu = useCallback((x: number, y: number) => {
+    const MENU_W = 188
+    const MENU_H = 240
+    setMenuPos({
+      x: Math.min(x, window.innerWidth - MENU_W - 8),
+      y: Math.min(y, window.innerHeight - MENU_H - 8),
+    })
+  }, [])
+
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId)
-    dragStartX.current = e.clientX
-    setIsDragging(true)
+    pointerStartPos.current = { x: e.clientX, y: e.clientY }
+    wasLongPress.current = false
+    longPressTimer.current = setTimeout(() => {
+      wasLongPress.current = true
+      openMenu(e.clientX, e.clientY)
+    }, 500)
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!isDragging) return
-    const dx = e.clientX - dragStartX.current
-    if (dx < 0) {
-      setSwipeOffset(Math.max(-REVEAL_WIDTH, dx))
-    } else if (swipeOffset < 0) {
-      setSwipeOffset(Math.min(0, swipeOffset + dx))
+    const dx = Math.abs(e.clientX - pointerStartPos.current.x)
+    const dy = Math.abs(e.clientY - pointerStartPos.current.y)
+    if (dx > 8 || dy > 8) {
+      if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
     }
   }
 
-  const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
-    e.currentTarget.releasePointerCapture(e.pointerId)
-    setIsDragging(false)
-    setSwipeOffset(swipeOffset <= -TRIGGER_THRESHOLD ? -REVEAL_WIDTH : 0)
+  const handlePointerUp = () => {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
   }
 
   const handleClick = () => {
-    if (swipeOffset < -8) { setSwipeOffset(0); return }
+    if (wasLongPress.current) { wasLongPress.current = false; return }
     onClick()
   }
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
-    setSwipeOffset(0)
-    const MENU_W = 168
-    const MENU_H = 160
-    setMenuPos({
-      x: Math.min(e.clientX, window.innerWidth - MENU_W - 8),
-      y: Math.min(e.clientY, window.innerHeight - MENU_H - 8),
-    })
-  }, [])
+    openMenu(e.clientX, e.clientY)
+  }, [openMenu])
 
   const closeMenu = useCallback(() => setMenuPos(null), [])
 
@@ -130,10 +129,8 @@ export default function ConversationItem({ conversation, currentUserId, isActive
     await deleteConversation(conversation.id, currentUserId)
     void queryClient.invalidateQueries({ queryKey: ['conversations'] })
     setShowDeleteModal(false)
-    setSwipeOffset(0)
   }, [conversation.id, currentUserId, queryClient])
 
-  // Close menu on outside click
   useEffect(() => {
     if (!menuPos) return
     const handler = (e: MouseEvent) => {
@@ -143,29 +140,9 @@ export default function ConversationItem({ conversation, currentUserId, isActive
     return () => document.removeEventListener('mousedown', handler)
   }, [menuPos, closeMenu])
 
-  // Close swipe when clicking outside
-  useEffect(() => {
-    if (swipeOffset === 0) return
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setSwipeOffset(0)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [swipeOffset])
-
   return (
     <>
-      <div ref={containerRef} className="relative overflow-hidden rounded-xl">
-        {/* Delete area revealed by left swipe */}
-        <div
-          className="absolute right-0 top-0 bottom-0 w-16 flex items-center justify-center bg-red-500 cursor-pointer"
-          onClick={() => setShowDeleteModal(true)}
-        >
-          <Trash2 size={18} className="text-white" />
-        </div>
-
+      <div ref={containerRef} className="relative rounded-xl">
         <button
           onClick={handleClick}
           onContextMenu={handleContextMenu}
@@ -173,21 +150,17 @@ export default function ConversationItem({ conversation, currentUserId, isActive
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
-          style={{
-            transform: `translateX(${swipeOffset}px)`,
-            transition: isDragging ? 'none' : 'transform 0.22s ease-out',
-          }}
-          className={`relative w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left select-none ${
+          className={`relative w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left select-none transition-all ${
             isActive
-              ? 'bg-[#edf3ff] border-l-2 border-[#5b8def]'
-              : 'bg-white hover:bg-[#f3f7ff] border-l-2 border-transparent'
+              ? 'bg-white ring-2 ring-[#1a2744]/70 ring-inset'
+              : 'bg-white hover:bg-[#f3f7ff]'
           }`}
         >
           <Avatar src={avatarSrc} name={displayName} online={!conversation.isGroup ? isOnline : undefined} />
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-1">
-              <span className={`font-medium text-sm truncate ${isActive ? 'text-[#5b8def]' : 'text-[#1a2744]'}`}>
+              <span className="font-medium text-sm truncate text-[#1a2744]">
                 {displayName}
               </span>
               <div className="flex items-center gap-1 flex-shrink-0">
@@ -209,11 +182,11 @@ export default function ConversationItem({ conversation, currentUserId, isActive
         </button>
       </div>
 
-      {/* Context menu */}
+      {/* Long-press / right-click context menu */}
       {menuPos && (
         <div
           ref={menuRef}
-          className="fixed z-50 bg-white rounded-xl shadow-lg shadow-[#1a2744]/12 border border-[#dce7f8] py-1 min-w-[160px]"
+          className="fixed z-50 bg-white rounded-xl shadow-lg shadow-[#1a2744]/12 border border-[#dce7f8] py-1 min-w-[180px]"
           style={{ top: menuPos.y, left: menuPos.x }}
         >
           {conversation.isMuted ? (
@@ -239,6 +212,14 @@ export default function ConversationItem({ conversation, currentUserId, isActive
               ))}
             </>
           )}
+          <div className="my-1 border-t border-[#f0f4fc]" />
+          <button
+            onClick={() => { closeMenu(); setShowDeleteModal(true) }}
+            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+          >
+            <Trash2 size={14} />
+            Delete conversation
+          </button>
         </div>
       )}
 
@@ -256,7 +237,7 @@ export default function ConversationItem({ conversation, currentUserId, isActive
                   Delete Conversation
                 </Dialog.Title>
                 <Dialog.Description className="mt-1 text-sm text-[#9ab0cc]">
-                  This will remove the conversation from your list.
+                  This will remove the conversation from your list. If both parties leave, all messages and shared data will be permanently deleted.
                 </Dialog.Description>
               </div>
               <div className="flex gap-3 w-full mt-1">

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { X, MapPin, Calendar, Users, Image, FileText, DollarSign, Link, Trash2 } from 'lucide-react'
+import { X, MapPin, Calendar, Users, Image, FileText, DollarSign, Link, Trash2, Link2 } from 'lucide-react'
+import * as Dialog from '@radix-ui/react-dialog'
 import type { Event, EventRsvp } from '../../hooks/useEvents'
 import { useEventRsvp, useSetRsvp, useEventNotes, useEventAlbums, useEventBudgets, useLinkToEvent, useDeleteEvent } from '../../hooks/useEvents'
 import { useNotes } from '../../hooks/useNotes'
@@ -127,10 +128,12 @@ function LinkPicker({
 export default function EventModal({ event, currentUserId, conversationId, members, onClose }: Props) {
   const [subTab, setSubTab] = useState<SubTab>('notes')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [pendingUnlinkAlbum, setPendingUnlinkAlbum] = useState<{ id: string; name: string } | null>(null)
 
   const { data: rsvps = [] } = useEventRsvp(event.id)
   const { mutate: setRsvp } = useSetRsvp(event.id)
   const { mutate: deleteEvent } = useDeleteEvent()
+  const { mutate: unlink } = useLinkToEvent()
 
   const { data: linkedNotes = [] } = useEventNotes(event.id)
   const { data: linkedAlbums = [] } = useEventAlbums(event.id)
@@ -166,15 +169,11 @@ export default function EventModal({ event, currentUserId, conversationId, membe
         <div className="flex items-start justify-between px-5 py-4 border-b border-[#dce7f8] flex-shrink-0">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
-              <span
-                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                  isPlanning
-                    ? 'bg-[#edf1fa] text-[#5b8def]'
-                    : 'bg-green-50 text-green-600'
-                }`}
-              >
-                {isPlanning ? 'Planning' : 'Confirmed'}
-              </span>
+              {isPlanning && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#edf1fa] text-[#5b8def]">
+                  Planning
+                </span>
+              )}
               <span className="text-[10px] text-[#b0c0d8]">by {creatorName}</span>
             </div>
             <h2 className="text-base font-semibold text-[#1a2744] truncate">{event.name}</h2>
@@ -226,6 +225,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                 event={event}
                 currentUserId={currentUserId}
                 members={calendarMembers}
+                onConfirmed={onClose}
               />
             </div>
           ) : (
@@ -324,11 +324,20 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                       {linkedNotes.length === 0 ? (
                         <p className="text-xs text-[#9ab0cc] py-2">No notes linked to this event.</p>
                       ) : (
-                        <div className="space-y-2 mb-1">
+                        <div className="space-y-0 mb-1">
                           {(linkedNotes as Array<{ id: string; title: string; content: string }>).map((n) => (
-                            <div key={n.id} className="py-2 border-b border-[#f0f4fc] last:border-0">
-                              <p className="text-sm font-medium text-[#1a2744]">{n.title}</p>
-                              {n.content && <p className="text-xs text-[#9ab0cc] line-clamp-2 mt-0.5">{n.content}</p>}
+                            <div key={n.id} className="flex items-start gap-2 py-2 border-b border-[#f0f4fc] last:border-0">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-[#1a2744]">{n.title}</p>
+                                {n.content && <p className="text-xs text-[#9ab0cc] line-clamp-2 mt-0.5">{n.content}</p>}
+                              </div>
+                              <button
+                                onClick={() => unlink({ table: 'notes', itemId: n.id, eventId: null })}
+                                className="flex-shrink-0 p-0.5 text-[#c5d5e8] hover:text-red-400 transition-colors mt-0.5"
+                                title="Unlink"
+                              >
+                                <X size={13} />
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -346,10 +355,17 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                       {linkedAlbums.length === 0 ? (
                         <p className="text-xs text-[#9ab0cc] py-2">No albums linked to this event.</p>
                       ) : (
-                        <div className="space-y-2 mb-1">
+                        <div className="space-y-0 mb-1">
                           {(linkedAlbums as Array<{ id: string; name: string }>).map((a) => (
-                            <div key={a.id} className="py-2 border-b border-[#f0f4fc] last:border-0">
-                              <p className="text-sm font-medium text-[#1a2744]">{a.name}</p>
+                            <div key={a.id} className="flex items-center gap-2 py-2 border-b border-[#f0f4fc] last:border-0">
+                              <p className="flex-1 text-sm font-medium text-[#1a2744]">{a.name}</p>
+                              <button
+                                onClick={() => setPendingUnlinkAlbum({ id: a.id, name: a.name })}
+                                className="flex-shrink-0 p-0.5 text-[#c5d5e8] hover:text-red-400 transition-colors"
+                                title="Unlink"
+                              >
+                                <X size={13} />
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -367,11 +383,20 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                       {linkedBudgets.length === 0 ? (
                         <p className="text-xs text-[#9ab0cc] py-2">No budgets linked to this event.</p>
                       ) : (
-                        <div className="space-y-2 mb-1">
+                        <div className="space-y-0 mb-1">
                           {(linkedBudgets as Array<{ id: string; name: string; total_amount: number; currency: string }>).map((b) => (
-                            <div key={b.id} className="py-2 border-b border-[#f0f4fc] last:border-0">
-                              <p className="text-sm font-medium text-[#1a2744]">{b.name}</p>
-                              <p className="text-xs text-[#9ab0cc] mt-0.5">{b.currency} {b.total_amount.toFixed(2)}</p>
+                            <div key={b.id} className="flex items-start gap-2 py-2 border-b border-[#f0f4fc] last:border-0">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-[#1a2744]">{b.name}</p>
+                                <p className="text-xs text-[#9ab0cc] mt-0.5">{b.currency} {b.total_amount.toFixed(2)}</p>
+                              </div>
+                              <button
+                                onClick={() => unlink({ table: 'budgets', itemId: b.id, eventId: null })}
+                                className="flex-shrink-0 p-0.5 text-[#c5d5e8] hover:text-red-400 transition-colors mt-0.5"
+                                title="Unlink"
+                              >
+                                <X size={13} />
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -390,6 +415,43 @@ export default function EventModal({ event, currentUserId, conversationId, membe
           )}
         </div>
       </div>
+
+      <Dialog.Root open={!!pendingUnlinkAlbum} onOpenChange={(open) => { if (!open) setPendingUnlinkAlbum(null) }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-[#1a2744]/30 backdrop-blur-sm z-[60] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-sm bg-white rounded-2xl shadow-xl shadow-[#1a2744]/12 border border-[#dce7f8] p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-[#edf3ff] flex items-center justify-center">
+                <Link2 size={20} className="text-[#5b8def]" />
+              </div>
+              <div>
+                <Dialog.Title className="text-base font-semibold text-[#1a2744]">Unlink Album</Dialog.Title>
+                <Dialog.Description className="mt-1 text-sm text-[#9ab0cc]">
+                  Remove "{pendingUnlinkAlbum?.name}" from "{event.name}"?
+                </Dialog.Description>
+              </div>
+              <div className="flex gap-3 w-full mt-1">
+                <Dialog.Close asChild>
+                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-[#dce7f8] text-sm font-medium text-[#6b84ab] hover:bg-[#edf1fa] transition-colors">
+                    Cancel
+                  </button>
+                </Dialog.Close>
+                <button
+                  onClick={() => {
+                    if (pendingUnlinkAlbum) {
+                      unlink({ table: 'albums', itemId: pendingUnlinkAlbum.id, eventId: null })
+                      setPendingUnlinkAlbum(null)
+                    }
+                  }}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-[#5b8def] hover:bg-[#4a7de4] text-sm font-medium text-white transition-colors"
+                >
+                  Unlink
+                </button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }

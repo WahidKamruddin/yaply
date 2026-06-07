@@ -11,6 +11,7 @@ import {
   useCreateSplitwiseExpense,
   type SplitwiseGroup,
 } from '../../hooks/useSplitwise'
+import { useEvents, useLinkToEvent } from '../../hooks/useEvents'
 
 // ─── Link panel ──────────────────────────────────────────────────────────────
 
@@ -411,6 +412,8 @@ function CreateBudgetForm({ conversationId, currentUserId, onDone }: { conversat
 
 export default function BudgetList({ conversationId, currentUserId }: { conversationId: string; currentUserId: string }) {
   const { data: budgets = [], isLoading } = useBudgets(conversationId)
+  const { data: events = [] } = useEvents(conversationId)
+  const { mutate: linkToEvent } = useLinkToEvent()
   const [selected, setSelected] = useState<Budget | null>(null)
   const [creating, setCreating] = useState(false)
   const splitwiseEnabled = useSplitwiseEnabled()
@@ -438,25 +441,39 @@ export default function BudgetList({ conversationId, currentUserId }: { conversa
       ) : (
         <div className="space-y-2">
           {budgets.map((b) => (
-            <button
-              key={b.id}
-              onClick={() => setSelected(b)}
-              className="w-full flex items-center justify-between px-3 py-2.5 border border-[#dce7f8] rounded-xl hover:bg-[#f3f7ff] transition-colors text-left"
-            >
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-medium text-[#1a2744]">{b.name}</p>
-                  {b.splitwise_group_id && (
-                    <span className="text-xs px-1 py-0.5 bg-green-100 text-green-700 rounded font-medium">SW</span>
-                  )}
+            <div key={b.id} className="border border-[#dce7f8] rounded-xl overflow-hidden">
+              <button
+                onClick={() => setSelected(b)}
+                className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-[#f3f7ff] transition-colors text-left"
+              >
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium text-[#1a2744]">{b.name}</p>
+                    {b.splitwise_group_id && (
+                      <span className="text-xs px-1 py-0.5 bg-green-100 text-green-700 rounded font-medium">SW</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-[#b0c0d8]">by {b.creator?.display_name ?? b.creator?.username ?? 'Unknown'}</p>
                 </div>
-                <p className="text-[10px] text-[#b0c0d8]">by {b.creator?.display_name ?? b.creator?.username ?? 'Unknown'}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-semibold text-[#5b8def]">${b.total_amount.toFixed(2)}</p>
-                <p className="text-xs text-[#9ab0cc]">{b.currency}</p>
-              </div>
-            </button>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-[#5b8def]">${b.total_amount.toFixed(2)}</p>
+                  <p className="text-xs text-[#9ab0cc]">{b.currency}</p>
+                </div>
+              </button>
+              {events.length > 0 && (
+                <div className="border-t border-[#f0f4fc] px-3 py-1.5 flex items-center gap-1">
+                  <Link2 size={9} className="text-[#9ab0cc] flex-shrink-0" />
+                  <select
+                    value={b.event_id ?? ''}
+                    onChange={(e) => linkToEvent({ table: 'budgets', itemId: b.id, eventId: e.target.value || null })}
+                    className="flex-1 text-[10px] text-[#6b84ab] bg-transparent outline-none cursor-pointer"
+                  >
+                    <option value="">No event</option>
+                    {events.map((ev) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}

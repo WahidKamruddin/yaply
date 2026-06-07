@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, Lock } from 'lucide-react'
+import * as Dialog from '@radix-ui/react-dialog'
 import type { Event, EventAvailability } from '../../hooks/useEvents'
 import { useEventAvailability, useSetAvailability, useConfirmEventTime } from '../../hooks/useEvents'
 
@@ -7,6 +8,7 @@ interface Props {
   event: Event
   currentUserId: string
   members: Array<{ id: string; display_name: string | null; username: string; avatar_url: string | null }>
+  onConfirmed?: () => void
 }
 
 const SLOT_MINUTES = 30
@@ -62,7 +64,7 @@ function buildAvailMap(availability: EventAvailability[]): Record<string, Set<st
   return map
 }
 
-export default function AvailabilityCalendar({ event, currentUserId, members }: Props) {
+export default function AvailabilityCalendar({ event, currentUserId, members, onConfirmed }: Props) {
   const { data: availability = [] } = useEventAvailability(event.id)
   const { mutate: saveAvailability, isPending: saving } = useSetAvailability(event.id)
   const { mutate: confirmTime, isPending: confirming } = useConfirmEventTime(event.id)
@@ -74,6 +76,9 @@ export default function AvailabilityCalendar({ event, currentUserId, members }: 
   })
   const [hoveredSlot, setHoveredSlot] = useState<string | null>(null)
   const [hoveredMember, setHoveredMember] = useState<string | null>(null)
+  const [lockingTime, setLockingTime] = useState(false)
+  const [lockTimeValue, setLockTimeValue] = useState('')
+  const [confirmingLock, setConfirmingLock] = useState(false)
 
   // Sync mySlots when availability loads
   useEffect(() => {
@@ -165,8 +170,19 @@ export default function AvailabilityCalendar({ event, currentUserId, members }: 
   function handleConfirm(slot: string) {
     const end = new Date(slot)
     end.setMinutes(end.getMinutes() + 60)
-    confirmTime({ startsAt: slot, endsAt: end.toISOString() })
+    confirmTime({ startsAt: slot, endsAt: end.toISOString() }, { onSuccess: () => onConfirmed?.() })
   }
+
+  function handleLockTime() {
+    if (!lockTimeValue) return
+    const startsAt = new Date(lockTimeValue).toISOString()
+    const endsAt = new Date(new Date(lockTimeValue).getTime() + 60 * 60 * 1000).toISOString()
+    confirmTime({ startsAt, endsAt }, { onSuccess: () => { setLockingTime(false); onConfirmed?.() } })
+  }
+
+  const lockTimeFormatted = lockTimeValue
+    ? new Date(lockTimeValue).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : ''
 
   return (
     <div className="flex flex-col h-full select-none">
@@ -302,18 +318,80 @@ export default function AvailabilityCalendar({ event, currentUserId, members }: 
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-t border-[#dce7f8] flex-shrink-0 bg-white">
-        <p className="text-[10px] text-[#9ab0cc]">
-          {isCreator ? 'Hover a shared slot to confirm' : 'Click or drag to mark availability'}
-        </p>
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[#dce7f8] flex-shrink-0 bg-white">
+        {isCreator ? (
+          lockingTime ? (
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <input
+                type="datetime-local"
+                value={lockTimeValue}
+                onChange={(e) => setLockTimeValue(e.target.value)}
+                className="flex-1 min-w-0 text-xs border border-[#dce7f8] rounded-lg px-2 py-1 text-[#1a2744] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+              />
+              <button
+                onClick={() => lockTimeValue && setConfirmingLock(true)}
+                disabled={!lockTimeValue || confirming}
+                className="px-2.5 py-1 text-xs font-medium bg-green-500 hover:bg-green-600 text-white rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
+              >
+                {confirming ? 'Locking…' : 'Lock'}
+              </button>
+              <button onClick={() => setLockingTime(false)} className="text-xs text-[#9ab0cc] hover:text-[#6b84ab] transition-colors whitespace-nowrap">
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setLockingTime(true)}
+              className="flex items-center gap-1.5 text-xs font-medium text-[#5b8def] hover:text-[#4a7de4] transition-colors"
+            >
+              <Lock size={12} /> Lock Time
+            </button>
+          )
+        ) : (
+          <p className="text-[10px] text-[#9ab0cc]">Click or drag to mark availability</p>
+        )}
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-3 py-1.5 text-xs font-medium bg-[#5b8def] hover:bg-[#4a7de4] text-white rounded-lg disabled:opacity-50 transition-colors"
+          className="px-3 py-1.5 text-xs font-medium bg-[#5b8def] hover:bg-[#4a7de4] text-white rounded-lg disabled:opacity-50 transition-colors flex-shrink-0"
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
+
+      <Dialog.Root open={confirmingLock} onOpenChange={setConfirmingLock}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-[#1a2744]/30 backdrop-blur-sm z-[60] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-sm bg-white rounded-2xl shadow-xl shadow-[#1a2744]/12 border border-[#dce7f8] p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center">
+                <Lock size={20} className="text-green-500" />
+              </div>
+              <div>
+                <Dialog.Title className="text-base font-semibold text-[#1a2744]">Lock Event Time</Dialog.Title>
+                <Dialog.Description className="mt-1 text-sm text-[#9ab0cc]">
+                  Set "{event.name}" as confirmed for{' '}
+                  <span className="font-medium text-[#1a2744]">{lockTimeFormatted}</span>?
+                  This will move the event from Planning to Confirmed.
+                </Dialog.Description>
+              </div>
+              <div className="flex gap-3 w-full mt-1">
+                <Dialog.Close asChild>
+                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-[#dce7f8] text-sm font-medium text-[#6b84ab] hover:bg-[#edf1fa] transition-colors">
+                    Cancel
+                  </button>
+                </Dialog.Close>
+                <button
+                  onClick={() => { setConfirmingLock(false); handleLockTime() }}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-sm font-medium text-white transition-colors"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }

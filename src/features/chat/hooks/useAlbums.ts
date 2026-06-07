@@ -9,6 +9,7 @@ export interface Album {
   created_at: string
   event_id: string | null
   creator: { display_name: string | null; username: string | null } | null
+  album_media?: Array<{ media_url: string }>
 }
 
 export interface AlbumMedia {
@@ -34,7 +35,7 @@ export function useAlbums(conversationId: string | null) {
       if (!conversationId) return []
       const { data, error } = await supabase
         .from('albums')
-        .select('*, creator:profiles!albums_created_by_fkey(display_name, username)')
+        .select('*, creator:profiles!albums_created_by_fkey(display_name, username), album_media(media_url)')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
       if (error) throw error

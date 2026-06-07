@@ -28,9 +28,11 @@ function EventItem({ event, currentUserId, onOpen, onDelete }: { event: Event; c
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-[#1a2744] truncate">{event.name}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
-            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${isPlanning ? 'bg-[#edf1fa] text-[#5b8def]' : 'bg-green-50 text-green-600'}`}>
-              {isPlanning ? 'Planning' : 'Confirmed'}
-            </span>
+            {isPlanning && (
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#edf1fa] text-[#5b8def]">
+                Planning
+              </span>
+            )}
             {event.starts_at && !isPlanning && (
               <span className="text-[10px] text-[#9ab0cc]">
                 {new Date(event.starts_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -55,16 +57,17 @@ function EventItem({ event, currentUserId, onOpen, onDelete }: { event: Event; c
 }
 
 type CreateType = 'event' | 'plan'
+type EventFilter = 'all' | 'planning' | 'confirmed'
 
 export default function EventList({ conversationId, currentUserId, members }: Props) {
   const { data: events = [], isLoading } = useEvents(conversationId)
   const [selected, setSelected] = useState<Event | null>(null)
   const [creating, setCreating] = useState<CreateType | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Event | null>(null)
+  const [filter, setFilter] = useState<EventFilter>('all')
   const { mutate: deleteEvent } = useDeleteEvent()
 
-  const confirmed = events.filter((e) => e.status === 'confirmed')
-  const planning = events.filter((e) => e.status === 'planning')
+  const filtered = filter === 'all' ? events : events.filter((e) => e.status === filter)
 
   return (
     <>
@@ -89,6 +92,24 @@ export default function EventList({ conversationId, currentUserId, members }: Pr
           </div>
         </div>
 
+        {events.length > 0 && (
+          <div className="flex items-center gap-1 mb-2">
+            {(['all', 'planning', 'confirmed'] as EventFilter[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`text-[10px] font-medium px-2 py-0.5 rounded-full transition-colors capitalize ${
+                  filter === f
+                    ? 'bg-[#5b8def] text-white'
+                    : 'bg-[#edf1fa] text-[#6b84ab] hover:bg-[#dce7f8]'
+                }`}
+              >
+                {f === 'all' ? 'All' : f === 'planning' ? 'Planning' : 'Confirmed'}
+              </button>
+            ))}
+          </div>
+        )}
+
         {isLoading ? (
           <p className="text-xs text-[#9ab0cc] py-4 text-center">Loading…</p>
         ) : !events.length ? (
@@ -100,20 +121,14 @@ export default function EventList({ conversationId, currentUserId, members }: Pr
               <button onClick={() => setCreating('event')} className="text-xs text-[#5b8def] hover:underline">+ Event</button>
             </div>
           </div>
+        ) : filtered.length === 0 ? (
+          <p className="text-xs text-[#9ab0cc] py-3 text-center">No {filter} events.</p>
         ) : (
-          <>
-            {confirmed.length > 0 && (
-              <div className="mb-3">
-                {confirmed.map((e) => <EventItem key={e.id} event={e} currentUserId={currentUserId} onOpen={setSelected} onDelete={setPendingDelete} />)}
-              </div>
-            )}
-            {planning.length > 0 && (
-              <div>
-                <p className="text-[10px] font-semibold text-[#9ab0cc] uppercase tracking-wide mb-1">Planning</p>
-                {planning.map((e) => <EventItem key={e.id} event={e} currentUserId={currentUserId} onOpen={setSelected} onDelete={setPendingDelete} />)}
-              </div>
-            )}
-          </>
+          <div>
+            {filtered.map((e) => (
+              <EventItem key={e.id} event={e} currentUserId={currentUserId} onOpen={setSelected} onDelete={setPendingDelete} />
+            ))}
+          </div>
         )}
       </div>
 

@@ -19,14 +19,17 @@ function AlbumGallery({ album, conversationId, currentUserId, onBack }: { album:
   const { data: chatImages = [] } = useConversationImages(conversationId)
   const { data: events = [] } = useEvents(conversationId)
   const { mutate: linkToEvent, isPending: linking } = useLinkToEvent()
+  const { mutate: deleteAlbum } = useDeleteAlbum()
 
   const [showAddPhotos, setShowAddPhotos] = useState(false)
   const [photoTab, setPhotoTab] = useState<PhotoTab>('chat')
   const [selectedChatImages, setSelectedChatImages] = useState<Set<string>>(new Set())
   const [deviceFiles, setDeviceFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const canDelete = album.created_by === currentUserId
   const existingUrls = new Set(media.map((m) => m.media_url))
   const availableChatImages = chatImages.filter((img) => !existingUrls.has(img.media_url))
 
@@ -80,12 +83,22 @@ function AlbumGallery({ album, conversationId, currentUserId, onBack }: { album:
           <h3 className="text-sm font-semibold text-[#1a2744]">{album.name}</h3>
           <p className="text-[10px] text-[#b0c0d8]">by {album.creator?.display_name ?? album.creator?.username ?? 'Unknown'}</p>
         </div>
-        <button
-          onClick={() => setShowAddPhotos((v) => !v)}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${showAddPhotos ? 'bg-[#5b8def] text-white' : 'bg-[#edf1fa] text-[#5b8def] hover:bg-[#dce7f8]'}`}
-        >
-          <Plus size={12} /> Add photos
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => canDelete && setPendingDelete(true)}
+            disabled={!canDelete}
+            className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+            title="Delete album"
+          >
+            <Trash2 size={14} />
+          </button>
+          <button
+            onClick={() => setShowAddPhotos((v) => !v)}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${showAddPhotos ? 'bg-[#5b8def] text-white' : 'bg-[#edf1fa] text-[#5b8def] hover:bg-[#dce7f8]'}`}
+          >
+            <Plus size={12} /> Add photos
+          </button>
+        </div>
       </div>
 
       {/* Event link editor */}
@@ -213,6 +226,38 @@ function AlbumGallery({ album, conversationId, currentUserId, onBack }: { album:
           ))}
         </div>
       )}
+
+      <Dialog.Root open={pendingDelete} onOpenChange={(open) => { if (!open) setPendingDelete(false) }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-[#1a2744]/30 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-white rounded-2xl shadow-xl shadow-[#1a2744]/12 border border-[#dce7f8] p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-400" />
+              </div>
+              <div>
+                <Dialog.Title className="text-base font-semibold text-[#1a2744]">Delete Album</Dialog.Title>
+                <Dialog.Description className="mt-1 text-sm text-[#9ab0cc]">
+                  "{album.name}" will be permanently deleted.
+                </Dialog.Description>
+              </div>
+              <div className="flex gap-3 w-full mt-1">
+                <Dialog.Close asChild>
+                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-[#dce7f8] text-sm font-medium text-[#6b84ab] hover:bg-[#edf1fa] transition-colors">
+                    Cancel
+                  </button>
+                </Dialog.Close>
+                <button
+                  onClick={() => { deleteAlbum(album.id); setPendingDelete(false); onBack() }}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-medium text-white transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }
@@ -249,10 +294,8 @@ function CreateAlbumForm({ conversationId, currentUserId, onDone }: { conversati
 
 export default function AlbumList({ conversationId, currentUserId }: Props) {
   const { data: albums = [], isLoading } = useAlbums(conversationId)
-  const { mutate: deleteAlbum } = useDeleteAlbum()
   const [selected, setSelected] = useState<Album | null>(null)
   const [creating, setCreating] = useState(false)
-  const [pendingDelete, setPendingDelete] = useState<Album | null>(null)
 
   if (selected) {
     return (
@@ -286,63 +329,27 @@ export default function AlbumList({ conversationId, currentUserId }: Props) {
       ) : (
         <div className="grid grid-cols-2 gap-2">
           {albums.map((a) => {
-            const canDelete = a.created_by === currentUserId
+            const coverUrl = a.album_media?.[0]?.media_url ?? null
             return (
-              <div key={a.id} className="relative">
-                <button
-                  onClick={() => setSelected(a)}
-                  className="w-full flex flex-col items-center gap-2 p-3 border border-[#dce7f8] rounded-xl hover:bg-[#f3f7ff] transition-colors text-left"
-                >
-                  <div className="w-full aspect-square bg-[#edf1fa] rounded-lg flex items-center justify-center">
+              <button
+                key={a.id}
+                onClick={() => setSelected(a)}
+                className="flex flex-col items-center gap-2 p-3 border border-[#dce7f8] rounded-xl hover:bg-[#f3f7ff] transition-colors text-left"
+              >
+                <div className="w-full aspect-square bg-[#edf1fa] rounded-lg overflow-hidden flex items-center justify-center">
+                  {coverUrl ? (
+                    <img src={coverUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
                     <Image size={24} className="text-[#9ab0cc]" />
-                  </div>
-                  <p className="text-xs font-medium text-[#1a2744] truncate w-full text-center">{a.name}</p>
-                  <p className="text-[10px] text-[#b0c0d8] text-center">by {a.creator?.display_name ?? a.creator?.username ?? 'Unknown'}</p>
-                </button>
-                <button
-                  onClick={() => canDelete && setPendingDelete(a)}
-                  disabled={!canDelete}
-                  className={`absolute top-2 right-2 w-5 h-5 flex items-center justify-center bg-white rounded-full border border-[#dce7f8] shadow-sm transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
-                >
-                  <Trash2 size={10} />
-                </button>
-              </div>
+                  )}
+                </div>
+                <p className="text-xs font-medium text-[#1a2744] truncate w-full text-center">{a.name}</p>
+                <p className="text-[10px] text-[#b0c0d8] text-center">by {a.creator?.display_name ?? a.creator?.username ?? 'Unknown'}</p>
+              </button>
             )
           })}
         </div>
       )}
-
-      <Dialog.Root open={!!pendingDelete} onOpenChange={(open) => { if (!open) setPendingDelete(null) }}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-[#1a2744]/30 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-white rounded-2xl shadow-xl shadow-[#1a2744]/12 border border-[#dce7f8] p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
-            <div className="flex flex-col items-center text-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
-                <Trash2 size={20} className="text-red-400" />
-              </div>
-              <div>
-                <Dialog.Title className="text-base font-semibold text-[#1a2744]">Delete Album</Dialog.Title>
-                <Dialog.Description className="mt-1 text-sm text-[#9ab0cc]">
-                  "{pendingDelete?.name}" will be permanently deleted.
-                </Dialog.Description>
-              </div>
-              <div className="flex gap-3 w-full mt-1">
-                <Dialog.Close asChild>
-                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-[#dce7f8] text-sm font-medium text-[#6b84ab] hover:bg-[#edf1fa] transition-colors">
-                    Cancel
-                  </button>
-                </Dialog.Close>
-                <button
-                  onClick={() => { if (pendingDelete) { deleteAlbum(pendingDelete.id); setPendingDelete(null) } }}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-medium text-white transition-colors"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
     </div>
   )
 }
