@@ -10,6 +10,7 @@ export interface Note {
   created_at: string
   updated_at: string
   event_id: string | null
+  creator: { display_name: string | null; username: string | null } | null
 }
 
 export function useNotes(conversationId: string | null) {
@@ -19,7 +20,7 @@ export function useNotes(conversationId: string | null) {
       if (!conversationId) return []
       const { data, error } = await supabase
         .from('notes')
-        .select('*')
+        .select('*, creator:profiles!notes_user_id_fkey(display_name, username)')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
       if (error) throw error

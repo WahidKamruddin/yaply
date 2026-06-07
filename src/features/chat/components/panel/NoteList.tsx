@@ -9,10 +9,11 @@ interface Props {
   currentUserId: string
 }
 
-function NoteCard({ note }: { note: Note }) {
+function NoteCard({ note, currentUserId }: { note: Note; currentUserId: string }) {
   const [expanded, setExpanded] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const { mutate: deleteNote } = useDeleteNote()
+  const canDelete = note.user_id === currentUserId
 
   return (
     <>
@@ -23,7 +24,8 @@ function NoteCard({ note }: { note: Note }) {
         >
           <span className="text-sm font-medium text-[#1a2744] truncate pr-2">{note.title}</span>
           <div className="flex items-center gap-1 flex-shrink-0">
-            <span className="text-xs text-[#9ab0cc]">{new Date(note.created_at).toLocaleDateString()}</span>
+            <span className="text-xs text-[#b0c0d8]">by {note.creator?.display_name ?? note.creator?.username ?? 'Unknown'}</span>
+            <span className="text-xs text-[#9ab0cc]">· {new Date(note.created_at).toLocaleDateString()}</span>
             {expanded ? <ChevronUp size={14} className="text-[#9ab0cc]" /> : <ChevronDown size={14} className="text-[#9ab0cc]" />}
           </div>
         </button>
@@ -31,8 +33,9 @@ function NoteCard({ note }: { note: Note }) {
           <div className="px-3 pb-3 border-t border-[#dce7f8] bg-[#fafbff]">
             <p className="text-sm text-[#3d5a80] mt-2 whitespace-pre-wrap">{note.content || <em className="text-[#9ab0cc]">No content</em>}</p>
             <button
-              className="mt-2 flex items-center gap-1 text-xs text-red-400 hover:text-red-500 transition-colors"
-              onClick={() => setShowConfirm(true)}
+              disabled={!canDelete}
+              className={`mt-2 flex items-center gap-1 text-xs transition-colors ${canDelete ? 'text-red-400 hover:text-red-500' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+              onClick={() => canDelete && setShowConfirm(true)}
             >
               <Trash2 size={12} /> Delete
             </button>
@@ -134,7 +137,7 @@ export default function NoteList({ conversationId, currentUserId }: Props) {
       ) : !notes.length && !creating ? (
         <p className="text-xs text-[#9ab0cc] text-center py-6">No notes yet.</p>
       ) : (
-        <div>{notes.map((n) => <NoteCard key={n.id} note={n} />)}</div>
+        <div>{notes.map((n) => <NoteCard key={n.id} note={n} currentUserId={currentUserId} />)}</div>
       )}
     </div>
   )

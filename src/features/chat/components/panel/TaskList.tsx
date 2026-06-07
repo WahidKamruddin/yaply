@@ -9,15 +9,16 @@ interface Props {
   currentUserId: string
 }
 
-function TaskItem({ task }: { task: Task }) {
+function TaskItem({ task, currentUserId }: { task: Task; currentUserId: string }) {
   const { mutate: updateStatus } = useUpdateTaskStatus()
   const { mutate: deleteTask } = useDeleteTask()
   const [showConfirm, setShowConfirm] = useState(false)
   const isDone = task.status === 'done'
+  const canDelete = task.created_by === currentUserId
 
   return (
     <>
-      <div className="flex items-start gap-2.5 py-2.5 border-b border-[#dce7f8] last:border-0 group">
+      <div className="flex items-start gap-2.5 py-2.5 border-b border-[#dce7f8] last:border-0">
         <button
           className="mt-0.5 flex-shrink-0 text-[#5b8def] hover:text-[#4a7de4] transition-colors"
           onClick={() => updateStatus({ taskId: task.id, status: isDone ? 'todo' : 'done' })}
@@ -26,15 +27,15 @@ function TaskItem({ task }: { task: Task }) {
         </button>
         <div className="flex-1 min-w-0">
           <p className={`text-sm ${isDone ? 'line-through text-[#9ab0cc]' : 'text-[#1a2744]'}`}>{task.title}</p>
-          {task.due_at && (
-            <p className="text-xs text-[#9ab0cc] flex items-center gap-0.5 mt-0.5">
-              <Clock size={10} />{new Date(task.due_at).toLocaleDateString()}
-            </p>
-          )}
+          <p className="text-[10px] text-[#b0c0d8] mt-0.5">
+            by {task.creator?.display_name ?? task.creator?.username ?? 'Unknown'}
+            {task.due_at && <span> · <Clock size={9} className="inline mb-0.5" /> {new Date(task.due_at).toLocaleDateString()}</span>}
+          </p>
         </div>
         <button
           onClick={() => setShowConfirm(true)}
-          className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-[#c5d5e8] hover:text-red-400 transition-all"
+          disabled={!canDelete}
+          className={`flex-shrink-0 transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
         >
           <Trash2 size={13} />
         </button>
@@ -125,7 +126,7 @@ export default function TaskList({ conversationId, currentUserId }: Props) {
       ) : !tasks.length && !creating ? (
         <p className="text-xs text-[#9ab0cc] text-center py-6">No tasks yet.</p>
       ) : (
-        <div>{tasks.map((t) => <TaskItem key={t.id} task={t} />)}</div>
+        <div>{tasks.map((t) => <TaskItem key={t.id} task={t} currentUserId={currentUserId} />)}</div>
       )}
     </div>
   )

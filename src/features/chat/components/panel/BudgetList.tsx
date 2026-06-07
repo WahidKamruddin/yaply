@@ -54,12 +54,16 @@ function SplitwiseBudgetDetail({
   onBack,
   onDelete,
   currentUserId,
+  canDelete,
+  creatorName,
 }: {
   budget: Budget
   group: SplitwiseGroup
   onBack: () => void
   onDelete: () => void
   currentUserId: string
+  canDelete: boolean
+  creatorName: string
 }) {
   const { data: expenses = [], isLoading } = useSplitwiseExpenses(budget.splitwise_group_id)
   const { mutate: createExpense, isPending } = useCreateSplitwiseExpense(budget.splitwise_group_id)
@@ -96,7 +100,12 @@ function SplitwiseBudgetDetail({
         <button onClick={onBack} className="flex items-center gap-1 text-xs text-[#5b8def] hover:text-[#4a7de4] transition-colors">
           <ArrowLeft size={12} /> Back
         </button>
-        <button onClick={onDelete} className="text-[#c5d5e8] hover:text-red-400 transition-colors" title="Delete budget">
+        <button
+          onClick={() => canDelete && onDelete()}
+          disabled={!canDelete}
+          className={`transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+          title="Delete budget"
+        >
           <Trash2 size={13} />
         </button>
       </div>
@@ -104,6 +113,7 @@ function SplitwiseBudgetDetail({
         <h3 className="text-sm font-semibold text-[#1a2744]">{budget.name}</h3>
         <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">Splitwise</span>
       </div>
+      <p className="text-[10px] text-[#b0c0d8] mb-1">by {creatorName}</p>
       <p className="text-xs text-[#9ab0cc] mb-3">Linked to: <span className="text-[#6b84ab] font-medium">{group.name}</span></p>
 
       {/* Balance summary */}
@@ -183,12 +193,16 @@ function LocalBudgetDetail({
   onBack,
   onDelete,
   onLinkSplitwise,
+  canDelete,
+  creatorName,
 }: {
   budget: Budget
   currentUserId: string
   onBack: () => void
   onDelete: () => void
   onLinkSplitwise: () => void
+  canDelete: boolean
+  creatorName: string
 }) {
   const { data: expenses = [] } = useExpenses(budget.id)
   const { mutate: addExpense, isPending } = useAddExpense(budget.id)
@@ -216,7 +230,12 @@ function LocalBudgetDetail({
         <button onClick={onBack} className="flex items-center gap-1 text-xs text-[#5b8def] hover:text-[#4a7de4] transition-colors">
           <ArrowLeft size={12} /> Back
         </button>
-        <button onClick={onDelete} className="text-[#c5d5e8] hover:text-red-400 transition-colors" title="Delete budget">
+        <button
+          onClick={() => canDelete && onDelete()}
+          disabled={!canDelete}
+          className={`transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+          title="Delete budget"
+        >
           <Trash2 size={13} />
         </button>
       </div>
@@ -224,6 +243,7 @@ function LocalBudgetDetail({
         <h3 className="text-sm font-semibold text-[#1a2744]">{budget.name}</h3>
         <span className="text-xs text-[#9ab0cc]">{budget.currency}</span>
       </div>
+      <p className="text-[10px] text-[#b0c0d8] mb-1">by {creatorName}</p>
       <div className="flex items-center justify-between text-xs text-[#6b84ab] mb-2">
         <span>Budget: <strong className="text-[#1a2744]">${budget.total_amount.toFixed(2)}</strong></span>
         <span>Spent: <strong className={totalSpent > budget.total_amount ? 'text-red-500' : 'text-[#1a2744]'}>${totalSpent.toFixed(2)}</strong></span>
@@ -292,6 +312,8 @@ function BudgetDetail({
   const { data: groups = [] } = useSplitwiseGroups()
   const { mutate: deleteBudget } = useDeleteBudget()
   const linkedGroup = groups.find((g) => String(g.id) === budget.splitwise_group_id) ?? null
+  const canDelete = budget.created_by === currentUserId
+  const creatorName = budget.creator?.display_name ?? budget.creator?.username ?? 'Unknown'
 
   function handleDelete() {
     deleteBudget(budget.id, { onSuccess: onBack })
@@ -301,8 +323,8 @@ function BudgetDetail({
   const subView = linkingOpen
     ? <LinkSplitwisePanel budgetId={budget.id} onClose={() => setLinkingOpen(false)} />
     : budget.splitwise_group_id && linkedGroup
-    ? <SplitwiseBudgetDetail budget={budget} group={linkedGroup} onBack={onBack} currentUserId={currentUserId} onDelete={() => setShowDeleteConfirm(true)} />
-    : <LocalBudgetDetail budget={budget} currentUserId={currentUserId} onBack={onBack} onDelete={() => setShowDeleteConfirm(true)} onLinkSplitwise={() => setLinkingOpen(true)} />
+    ? <SplitwiseBudgetDetail budget={budget} group={linkedGroup} onBack={onBack} currentUserId={currentUserId} onDelete={() => setShowDeleteConfirm(true)} canDelete={canDelete} creatorName={creatorName} />
+    : <LocalBudgetDetail budget={budget} currentUserId={currentUserId} onBack={onBack} onDelete={() => setShowDeleteConfirm(true)} onLinkSplitwise={() => setLinkingOpen(true)} canDelete={canDelete} creatorName={creatorName} />
 
   return (
     <>
@@ -428,7 +450,7 @@ export default function BudgetList({ conversationId, currentUserId }: { conversa
                     <span className="text-xs px-1 py-0.5 bg-green-100 text-green-700 rounded font-medium">SW</span>
                   )}
                 </div>
-                <p className="text-xs text-[#9ab0cc]">{new Date(b.created_at).toLocaleDateString()}</p>
+                <p className="text-[10px] text-[#b0c0d8]">by {b.creator?.display_name ?? b.creator?.username ?? 'Unknown'}</p>
               </div>
               <div className="text-right">
                 <p className="text-sm font-semibold text-[#5b8def]">${b.total_amount.toFixed(2)}</p>

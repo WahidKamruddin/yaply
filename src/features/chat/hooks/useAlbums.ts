@@ -8,6 +8,7 @@ export interface Album {
   created_by: string
   created_at: string
   event_id: string | null
+  creator: { display_name: string | null; username: string | null } | null
 }
 
 export interface AlbumMedia {
@@ -33,7 +34,7 @@ export function useAlbums(conversationId: string | null) {
       if (!conversationId) return []
       const { data, error } = await supabase
         .from('albums')
-        .select('*')
+        .select('*, creator:profiles!albums_created_by_fkey(display_name, username)')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
       if (error) throw error

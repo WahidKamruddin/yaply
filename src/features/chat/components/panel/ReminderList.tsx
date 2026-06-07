@@ -123,6 +123,7 @@ export default function ReminderList({ conversationId, currentUserId }: Props) {
             {reminders.map((r) => {
               const { label, isPast } = formatRemindAt(r.remind_at)
               const creatorName = r.creator?.display_name ?? r.creator?.username ?? null
+              const canDismiss = r.user_id === currentUserId
               return (
                 <div key={r.id} className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border ${isPast ? 'border-amber-200 bg-amber-50' : 'border-[#dce7f8] bg-white'}`}>
                   <Bell size={14} className={`mt-0.5 flex-shrink-0 ${isPast ? 'text-amber-500' : 'text-[#5b8def]'}`} />
@@ -135,7 +136,11 @@ export default function ReminderList({ conversationId, currentUserId }: Props) {
                       <p className="text-[10px] text-[#b0c0d8] mt-0.5">set by {creatorName}</p>
                     )}
                   </div>
-                  <button onClick={() => setPendingDismiss(r)} className="flex-shrink-0 text-[#9ab0cc] hover:text-[#6b84ab] transition-colors">
+                  <button
+                    onClick={() => canDismiss && setPendingDismiss(r)}
+                    disabled={!canDismiss}
+                    className={`flex-shrink-0 transition-colors ${canDismiss ? 'text-[#9ab0cc] hover:text-[#6b84ab]' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+                  >
                     <X size={14} />
                   </button>
                 </div>

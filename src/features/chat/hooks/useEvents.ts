@@ -13,6 +13,7 @@ export interface Event {
   ends_at: string | null
   created_at: string
   updated_at: string
+  creator: { display_name: string | null; username: string | null } | null
 }
 
 export interface EventAvailability {
@@ -38,7 +39,7 @@ export function useEvents(conversationId: string | null) {
       if (!conversationId) return []
       const { data, error } = await supabase
         .from('events')
-        .select('*')
+        .select('*, creator:profiles!events_created_by_fkey(display_name, username)')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
       if (error) throw error

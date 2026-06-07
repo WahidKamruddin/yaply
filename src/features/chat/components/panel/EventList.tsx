@@ -13,10 +13,11 @@ interface Props {
   members: MemberSummary[]
 }
 
-function EventItem({ event, onOpen, onDelete }: { event: Event; onOpen: (e: Event) => void; onDelete: (e: Event) => void }) {
+function EventItem({ event, currentUserId, onOpen, onDelete }: { event: Event; currentUserId: string; onOpen: (e: Event) => void; onDelete: (e: Event) => void }) {
   const isPlanning = event.status === 'planning'
+  const canDelete = event.created_by === currentUserId
   return (
-    <div className="relative group flex items-start border-b border-[#dce7f8] last:border-0">
+    <div className="relative flex items-start border-b border-[#dce7f8] last:border-0">
       <button
         onClick={() => onOpen(event)}
         className="flex-1 text-left flex items-start gap-3 py-2.5 hover:bg-[#f8faff] transition-colors -mx-1 px-1 rounded"
@@ -36,11 +37,15 @@ function EventItem({ event, onOpen, onDelete }: { event: Event; onOpen: (e: Even
               </span>
             )}
           </div>
+          <p className="text-[10px] text-[#b0c0d8] mt-0.5">
+            by {event.creator?.display_name ?? event.creator?.username ?? 'Unknown'}
+          </p>
         </div>
       </button>
       <button
-        onClick={() => onDelete(event)}
-        className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-full text-[#c5d5e8] hover:text-red-400 transition-all"
+        onClick={() => canDelete && onDelete(event)}
+        disabled={!canDelete}
+        className={`absolute right-0 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
         title="Delete event"
       >
         <Trash2 size={12} />
@@ -99,13 +104,13 @@ export default function EventList({ conversationId, currentUserId, members }: Pr
           <>
             {confirmed.length > 0 && (
               <div className="mb-3">
-                {confirmed.map((e) => <EventItem key={e.id} event={e} onOpen={setSelected} onDelete={setPendingDelete} />)}
+                {confirmed.map((e) => <EventItem key={e.id} event={e} currentUserId={currentUserId} onOpen={setSelected} onDelete={setPendingDelete} />)}
               </div>
             )}
             {planning.length > 0 && (
               <div>
                 <p className="text-[10px] font-semibold text-[#9ab0cc] uppercase tracking-wide mb-1">Planning</p>
-                {planning.map((e) => <EventItem key={e.id} event={e} onOpen={setSelected} onDelete={setPendingDelete} />)}
+                {planning.map((e) => <EventItem key={e.id} event={e} currentUserId={currentUserId} onOpen={setSelected} onDelete={setPendingDelete} />)}
               </div>
             )}
           </>

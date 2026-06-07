@@ -156,10 +156,12 @@ export default function EventModal({ event, currentUserId, conversationId, membe
   }
 
   const isPlanning = event.status === 'planning'
+  const canDelete = event.created_by === currentUserId
+  const creatorName = event.creator?.display_name ?? event.creator?.username ?? 'Unknown'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
-      <div className="bg-white border border-[#dce7f8] rounded-2xl shadow-2xl shadow-[#dce7f8]/60 w-full max-w-2xl max-h-[85vh] flex flex-col">
+      <div className="bg-white border border-[#dce7f8] rounded-2xl shadow-2xl shadow-[#dce7f8]/60 w-full max-w-2xl h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-[#dce7f8] flex-shrink-0">
           <div className="flex-1 min-w-0">
@@ -173,6 +175,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
               >
                 {isPlanning ? 'Planning' : 'Confirmed'}
               </span>
+              <span className="text-[10px] text-[#b0c0d8]">by {creatorName}</span>
             </div>
             <h2 className="text-base font-semibold text-[#1a2744] truncate">{event.name}</h2>
             {event.description && (
@@ -181,8 +184,9 @@ export default function EventModal({ event, currentUserId, conversationId, membe
           </div>
           <div className="ml-3 flex-shrink-0 flex items-center gap-1">
             <button
-              onClick={() => setConfirmingDelete(true)}
-              className="p-1 text-[#c5d5e8] hover:text-red-400 transition-colors"
+              onClick={() => canDelete && setConfirmingDelete(true)}
+              disabled={!canDelete}
+              className={`p-1 transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
               title="Delete event"
             >
               <Trash2 size={16} />
@@ -214,10 +218,10 @@ export default function EventModal({ event, currentUserId, conversationId, membe
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           {isPlanning ? (
             /* Planning: show availability calendar */
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden min-h-0">
               <AvailabilityCalendar
                 event={event}
                 currentUserId={currentUserId}

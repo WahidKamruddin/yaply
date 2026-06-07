@@ -76,7 +76,10 @@ function AlbumGallery({ album, conversationId, currentUserId, onBack }: { album:
       </button>
 
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-[#1a2744]">{album.name}</h3>
+        <div>
+          <h3 className="text-sm font-semibold text-[#1a2744]">{album.name}</h3>
+          <p className="text-[10px] text-[#b0c0d8]">by {album.creator?.display_name ?? album.creator?.username ?? 'Unknown'}</p>
+        </div>
         <button
           onClick={() => setShowAddPhotos((v) => !v)}
           className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${showAddPhotos ? 'bg-[#5b8def] text-white' : 'bg-[#edf1fa] text-[#5b8def] hover:bg-[#dce7f8]'}`}
@@ -282,26 +285,30 @@ export default function AlbumList({ conversationId, currentUserId }: Props) {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2">
-          {albums.map((a) => (
-            <div key={a.id} className="relative group">
-              <button
-                onClick={() => setSelected(a)}
-                className="w-full flex flex-col items-center gap-2 p-3 border border-[#dce7f8] rounded-xl hover:bg-[#f3f7ff] transition-colors text-left"
-              >
-                <div className="w-full aspect-square bg-[#edf1fa] rounded-lg flex items-center justify-center">
-                  <Image size={24} className="text-[#9ab0cc]" />
-                </div>
-                <p className="text-xs font-medium text-[#1a2744] truncate w-full text-center">{a.name}</p>
-                <p className="text-xs text-[#9ab0cc]">{new Date(a.created_at).toLocaleDateString()}</p>
-              </button>
-              <button
-                onClick={() => setPendingDelete(a)}
-                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center bg-white rounded-full border border-[#dce7f8] text-[#c5d5e8] hover:text-red-400 transition-all shadow-sm"
-              >
-                <Trash2 size={10} />
-              </button>
-            </div>
-          ))}
+          {albums.map((a) => {
+            const canDelete = a.created_by === currentUserId
+            return (
+              <div key={a.id} className="relative">
+                <button
+                  onClick={() => setSelected(a)}
+                  className="w-full flex flex-col items-center gap-2 p-3 border border-[#dce7f8] rounded-xl hover:bg-[#f3f7ff] transition-colors text-left"
+                >
+                  <div className="w-full aspect-square bg-[#edf1fa] rounded-lg flex items-center justify-center">
+                    <Image size={24} className="text-[#9ab0cc]" />
+                  </div>
+                  <p className="text-xs font-medium text-[#1a2744] truncate w-full text-center">{a.name}</p>
+                  <p className="text-[10px] text-[#b0c0d8] text-center">by {a.creator?.display_name ?? a.creator?.username ?? 'Unknown'}</p>
+                </button>
+                <button
+                  onClick={() => canDelete && setPendingDelete(a)}
+                  disabled={!canDelete}
+                  className={`absolute top-2 right-2 w-5 h-5 flex items-center justify-center bg-white rounded-full border border-[#dce7f8] shadow-sm transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+                >
+                  <Trash2 size={10} />
+                </button>
+              </div>
+            )
+          })}
         </div>
       )}
 

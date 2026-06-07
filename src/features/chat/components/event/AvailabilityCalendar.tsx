@@ -187,7 +187,7 @@ export default function AvailabilityCalendar({ event, currentUserId, members }: 
         </button>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Grid area */}
         <div className="flex-1 overflow-auto">
           {/* Day headers */}

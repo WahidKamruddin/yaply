@@ -11,6 +11,7 @@ export interface Budget {
   created_at: string
   splitwise_group_id: string | null
   event_id: string | null
+  creator: { display_name: string | null; username: string | null } | null
 }
 
 export interface Expense {
@@ -38,7 +39,7 @@ export function useBudgets(conversationId: string | null) {
       if (!conversationId) return []
       const { data, error } = await supabase
         .from('budgets')
-        .select('*')
+        .select('*, creator:profiles!budgets_created_by_fkey(display_name, username)')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
       if (error) throw error

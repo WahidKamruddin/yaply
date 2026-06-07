@@ -162,6 +162,28 @@ created_at      timestamptz
 
 **`devices` table:** user_id, device_id (int), identity_key (JSON — JWK format public key).
 
+**`notes` table:** `id, user_id, conversation_id, title, content, created_at, updated_at` — RLS: `user_id = auth.uid()` (owner only).
+
+**`tasks` table:** `id, conversation_id, created_by, assigned_to, title, description, status ('todo'|'in_progress'|'done'), priority ('low'|'medium'|'high'), due_at, completed_at, created_at, updated_at` — RLS: conversation members can SELECT; creator/assignee can UPDATE; creator can DELETE.
+
+**`reminders` table:** `id, user_id, conversation_id, message, remind_at, status ('pending'|'sent'|'dismissed'), created_at` — RLS after migration 00022: all conversation members can view/update/delete. Creator identified by `user_id`.
+
+**`events` table:** `id, conversation_id, created_by, name, description, location, status ('planning'|'confirmed'), starts_at, ends_at, created_at, updated_at` — migration 00020. `planning` = when2meet mode (no date locked), `confirmed` = date set.
+
+**`event_availability` table:** `id, event_id, user_id, slots (jsonb — array of ISO datetime strings for 30-min slots), updated_at` — UNIQUE(event_id, user_id).
+
+**`event_rsvp` table:** `id, event_id, user_id, response ('going'|'maybe'|'not_going'|'pending'), updated_at` — UNIQUE(event_id, user_id).
+
+**`albums` table:** `id, conversation_id, name, created_by, created_at, event_id (nullable FK → events)` — RLS: conversation members can SELECT/INSERT; creator can DELETE.
+
+**`album_media` table:** `id, album_id, message_id, media_url, media_mime, created_at` — RLS: conversation members.
+
+**`budgets` table:** `id, conversation_id, name, total_amount, currency, created_by, created_at, event_id (nullable FK → events)` — RLS: conversation members can SELECT/INSERT; creator can DELETE.
+
+**`expenses` table:** `id, budget_id, paid_by, description, amount, category (expense_category enum), split_between (uuid[]), created_at`.
+
+**FK cascade note:** `albums.event_id`, `notes.event_id`, `budgets.event_id` → `ON DELETE SET NULL` (migration 00021). Deleting an event detaches linked albums/notes/budgets rather than cascading their deletion.
+
 **Key RPCs:**
 - `find_or_create_direct_conversation(target_user_id uuid)` — finds or creates a direct DM, inserts both members correctly. Security definer. Always use this instead of manual inserts for direct chats.
 
@@ -199,10 +221,14 @@ created_at      timestamptz
 | **Stickers** (tier 3) | `stickers` table (user_id, storage_path, name); `src/features/media/` components |
 | **Tasks** (tier 3) | `src/features/chat/hooks/useTasks.ts`, `src/features/chat/components/panel/TaskList.tsx`, ConversationPanel Tasks tab |
 | **Notes** (tier 3) | `src/features/chat/hooks/useNotes.ts`, `src/features/chat/components/panel/NoteList.tsx`, ConversationPanel Notes tab |
-| **Reminders** (tier 3) | `src/features/chat/hooks/useReminders.ts`, `src/features/chat/components/panel/ReminderList.tsx`, 60s polling + Web Notifications API |
-| **Albums** (tier 3) | `src/features/chat/hooks/useAlbums.ts`, `src/features/chat/components/panel/AlbumList.tsx`, gallery grid |
-| **Budgets + Splitwise** (tier 3) | `src/features/chat/hooks/useBudgets.ts`, `src/features/chat/hooks/useSplitwise.ts`, `src/lib/splitwise.ts`, `src/features/chat/components/panel/BudgetList.tsx` |
-| ConversationPanel right panel | `src/features/chat/components/ConversationPanel.tsx` — tabs: Tasks, Notes, Reminders, Albums, Budgets |
+| **Reminders** (tier 3) | `src/features/chat/hooks/useReminders.ts`, `src/features/chat/components/panel/ReminderList.tsx`, 60s polling + Web Notifications API. **Shared** — all conversation members can view/dismiss (migration 00022). |
+| **Albums** (tier 3) | `src/features/chat/hooks/useAlbums.ts`, `src/features/chat/components/panel/AlbumList.tsx`, gallery grid with add-photos (chat images + device upload) + event link editor |
+| **Budgets + Splitwise** (tier 3) | `src/features/chat/hooks/useBudgets.ts`, `src/features/chat/hooks/useSplitwise.ts`, `src/lib/splitwise.ts`, `src/features/chat/components/panel/BudgetList.tsx` — delete with confirmation |
+| ConversationPanel right panel | `src/features/chat/components/ConversationPanel.tsx` — tabs: Tasks, Notes, Reminders, **Events**, Albums, Budgets |
+| **Events** (tier 4) | DB: `events`, `event_availability`, `event_rsvp` tables (migrations 00020–00021). `src/features/chat/hooks/useEvents.ts`, `src/features/chat/components/panel/EventList.tsx`, `src/features/chat/components/event/EventModal.tsx`, `src/features/chat/components/event/AvailabilityCalendar.tsx`. `/plan` → status='planning', `/event` → status='confirmed'. |
+| **System message hyperlinks** (tier 4) | `MessageBubble.tsx` — system messages show inline "Open {Tab} →" button that opens sidebar at the relevant tab. 1-week auto-destruct: `deleted_at = now + 7d` at insert. Expired system messages are hidden silently. |
+| **Command cache invalidation** (tier 4) | `CommandProvider.tsx` threads `QueryClient` through `CommandContext`; `CommandModal.tsx` invalidates the right query key after insert; `/remind` invalidates `['reminders']`. Fixes sidebar not updating after slash command creation. |
+| **Delete confirmations** (tier 4) | All list views (TaskList, NoteList, AlbumList, BudgetList, EventList, ReminderList) use Radix Dialog for destructive confirmations before deletes. |
 
 ### Not yet integrated
 
@@ -299,7 +325,7 @@ This section documents everything iOS needs to replicate the tier 3 features. We
 **Schema:** `reminders (id, user_id, conversation_id, message, remind_at, status, created_at)`
 - `status`: `'pending' | 'sent' | 'dismissed'`
 
-**RLS:** "owner only" — a user can only see and update their own reminders.
+**RLS:** After migration 00022 — all conversation members can SELECT/UPDATE/DELETE reminders. `user_id` identifies the creator. iOS queries without a `user_id` filter; RLS returns all reminders in the conversation.
 
 **How it works on web:**
 - Created via `/remind [time] [message]` (e.g. `/remind 30m Take out the trash`).
@@ -369,6 +395,31 @@ This section documents everything iOS needs to replicate the tier 3 features. We
 - Linking: show a sheet with group picker (from `GET /get_groups`); on selection, update `splitwise_group_id` in Supabase.
 - Linked budget view: fetch expenses from Splitwise API, show `simplified_debts` for who owes whom (note: `simplified_debts` may be null if the group has "simplify debts" disabled — handle gracefully).
 - Add expense: POST to Splitwise with equal split; assign `paid_share` to the correct `user_id` (not always index 0 — find the payer's index in the members array).
+
+---
+
+### Events + Availability Calendar
+
+**Schema:**
+- `events (id, conversation_id, created_by, name, description, location, status, starts_at, ends_at, created_at, updated_at)`
+- `event_availability (id, event_id, user_id, slots jsonb, updated_at)` — UNIQUE(event_id, user_id)
+- `event_rsvp (id, event_id, user_id, response, updated_at)` — UNIQUE(event_id, user_id)
+
+**RLS:** Conversation members can SELECT all event rows; only creator can UPDATE/DELETE the event; users can INSERT/UPDATE their own availability and RSVP rows.
+
+**How it works on web:**
+- `/plan [name]` → inserts `events` row with `status='planning'` (no `starts_at`). EventModal shows the `AvailabilityCalendar` component.
+- `/event [name]` → inserts `events` row with `status='confirmed'` and a required `starts_at`. EventModal shows RSVP + linked Notes/Albums/Budgets tabs.
+- Availability grid: 7 days × 28 rows (8am–10pm, 30-min slots). Each cell's slot key is the UTC ISO string of the slot start time (e.g. `"2025-06-10T14:00:00.000Z"`). Slots stored in `event_availability.slots` as a jsonb array.
+- Heatmap: cell color scales from transparent (no one) to accent blue (everyone). Creator can long-press a multi-person slot to confirm the event, which sets `status='confirmed'` and `starts_at`.
+
+**iOS implementation — fully implemented:**
+- `EventListView` shows two sections: Confirmed and Planning. Create sheet has a Planning/Event type picker.
+- `EventDetailSheet` drives the planning/confirmed split:
+  - **Planning:** compact header + `AvailabilityCalendarView` (full when2meet grid with heatmap, tap-to-toggle, member chips, Save button, creator long-press confirm).
+  - **Confirmed:** full header + RSVP buttons (Going/Maybe/Can't Go) + member response list.
+- Slot keys must match the web exactly: use `Calendar.current` to build local-time `Date` values for 8am–10pm in 30-min increments, then format with `ISO8601DateFormatter` with `timeZone = UTC` and `.withFractionalSeconds` option.
+- After confirming a slot, post `.yaplyItemCreated` notification so `EventListView` refetches.
 
 ---
 
