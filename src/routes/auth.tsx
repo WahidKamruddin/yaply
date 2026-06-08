@@ -1,12 +1,13 @@
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { getUser } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 
 export const Route = createFileRoute('/auth')({
   beforeLoad: async () => {
-    const user = await getUser()
-    if (user) throw redirect({ to: '/chat' })
+    if (typeof document === 'undefined') return // SSR — no localStorage, client handles it
+    const session = await getSession()
+    if (session) throw redirect({ to: '/chat' })
   },
   component: AuthPage,
 })

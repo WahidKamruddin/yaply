@@ -1,5 +1,37 @@
 # yaply — Codebase Reference
 
+## Working Mode & Workflow Rules
+
+### Platform Context
+
+When the user says **"ios"** — work exclusively inside `yaply-ios/`. That directory is the Swift/SwiftUI app and is its own git repo connected to its own GitHub. Do not reference or modify files in the web root.
+
+When the user says **"web"** — work exclusively inside the yaply root folder (this repo). Ignore `yaply-ios/` entirely.
+
+Both repos are independent: they have separate git histories, separate GitHub remotes, and separate issue trackers. Any reported bug or feature request must be filed against the correct repo — never mix them.
+
+**GitHub Remotes:**
+- Web: https://github.com/WahidKamruddin/yaply
+- iOS: https://github.com/WahidKamruddin/yaply-ios
+
+### GitHub Issues
+
+When the user describes a problem or request, determine which platform(s) it affects and push the issue to that repo's GitHub only. Categorize by label (bug, enhancement, etc.) and use the repo's existing label conventions. Never create a web issue for an iOS-only concern, or vice versa.
+
+### Committing & Pushing
+
+When the user says **"both apps are good"**:
+1. Stage all changed files in each repo separately (`git add` the relevant files in `yaply-ios/` and in the web root).
+2. Propose a commit message following the repo's existing style — conventional commits format: `feat(): …`, `fix(): …`, `refactor(): …`, etc. Generate a message, then ask the user what to change before committing.
+3. **Never include "Co-authored-by: Claude" or any AI attribution in commit messages.**
+4. After the user approves the message, commit and push to `main`. Create a branch only if the user asks; by default push straight to `main` since this is a solo project.
+
+### Feature Completion Reminder
+
+After every feature is finished and the user confirms it's good, ask: "Want to commit and push?" Then follow the steps above.
+
+---
+
 ## What This Is
 
 yaply is a web-based E2E encrypted messaging application. It is a Progressive Web App (PWA-capable) built with React and backed entirely by Supabase. It lives as the web platform in a planned monorepo that will eventually include `yaply-ios` (Swift/SwiftUI) and `yaply-android` (Kotlin). All platforms share one Supabase project.
@@ -524,11 +556,11 @@ The dev server is also accessible via Netlify Dev at port 8888 (configured in `n
 
 ## Sister Projects (this monorepo)
 
-| Directory | Platform | Status |
-|-----------|----------|--------|
-| `.` (root) | Web (React + Supabase) | Active |
-| `yaply-ios/` | iOS (Swift + SwiftUI) | Active — own GitHub repo, gitignored here |
-| `yaply-android/` | Android (Kotlin + Jetpack Compose) | Future |
+| Directory | Platform | GitHub | Status |
+|-----------|----------|--------|--------|
+| `.` (root) | Web (React + Supabase) | https://github.com/WahidKamruddin/yaply | Active |
+| `yaply-ios/` | iOS (Swift + SwiftUI) | https://github.com/WahidKamruddin/yaply-ios | Active — own GitHub repo, gitignored here |
+| `yaply-android/` | Android (Kotlin + Jetpack Compose) | — | Future |
 
 The web repo's `.gitignore` excludes `yaply-ios/` and `yaply-android/` since they have their own GitHub repositories. The monorepo root exists so Claude Code can cross-reference all platforms in the same working directory.
 

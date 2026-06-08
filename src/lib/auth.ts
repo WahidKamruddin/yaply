@@ -15,6 +15,13 @@ export const DEV_USER: User = {
   is_anonymous: false,
 }
 
+// Use for route guards — reads localStorage, no network request.
+export async function getSession() {
+  if (DEV_BYPASS) return { user: DEV_USER }
+  const { data } = await supabase.auth.getSession()
+  return data.session
+}
+
 export async function getUser(): Promise<User | null> {
   if (DEV_BYPASS) return DEV_USER
   const { data } = await supabase.auth.getUser()
