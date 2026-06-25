@@ -11,6 +11,11 @@
   targetPort = 3000
   port = 8888
 
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/server"
+  status = 200
+
 [[headers]]
   for = "/*"
   [headers.values]
