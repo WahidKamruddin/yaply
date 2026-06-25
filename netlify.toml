@@ -1,6 +1,6 @@
 [build]
   base = "."
-  command = "vite build"
+  command = "vite build && node scripts/generate-html.mjs"
   publish = "dist/client"
 
 [build.environment]
@@ -13,7 +13,7 @@
 
 [[redirects]]
   from = "/*"
-  to = "/.netlify/functions/server"
+  to = "/index.html"
   status = 200
 
 [[headers]]
