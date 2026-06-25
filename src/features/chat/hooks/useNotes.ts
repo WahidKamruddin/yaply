@@ -7,6 +7,7 @@ export interface Note {
   conversation_id: string | null
   title: string
   content: string
+  locked: boolean
   created_at: string
   updated_at: string
   event_id: string | null
@@ -36,6 +37,17 @@ export function useDeleteNote() {
   return useMutation({
     mutationFn: async (noteId: string) => {
       const { error } = await supabase.from('notes').delete().eq('id', noteId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notes'] }),
+  })
+}
+
+export function useLockNote() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ noteId, locked }: { noteId: string; locked: boolean }) => {
+      const { error } = await supabase.from('notes').update({ locked }).eq('id', noteId)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notes'] }),

@@ -33,6 +33,7 @@ interface Props {
 
 export default function ConversationPanel({ conversationId, currentUserId, members, onClose }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('reminders')
+  const isCurrentUserAdmin = members.find((m) => m.userId === currentUserId)?.isAdmin ?? false
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const [requestedTab, setRequestedTab] = useAtom(conversationPanelTabAtom)
@@ -127,12 +128,12 @@ export default function ConversationPanel({ conversationId, currentUserId, membe
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-3">
-        {activeTab === 'reminders' && <ReminderList conversationId={conversationId} currentUserId={currentUserId} />}
-        {activeTab === 'events'    && <EventList    conversationId={conversationId} currentUserId={currentUserId} members={members} />}
-        {activeTab === 'albums'    && <AlbumList    conversationId={conversationId} currentUserId={currentUserId} />}
-        {activeTab === 'tasks'     && <TaskList     conversationId={conversationId} currentUserId={currentUserId} />}
-        {activeTab === 'notes'     && <NoteList     conversationId={conversationId} currentUserId={currentUserId} />}
-        {activeTab === 'budgets'   && <BudgetList   conversationId={conversationId} currentUserId={currentUserId} />}
+        {activeTab === 'reminders' && <ReminderList conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />}
+        {activeTab === 'events'    && <EventList    conversationId={conversationId} currentUserId={currentUserId} members={members} isCurrentUserAdmin={isCurrentUserAdmin} />}
+        {activeTab === 'albums'    && <AlbumList    conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />}
+        {activeTab === 'tasks'     && <TaskList     conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />}
+        {activeTab === 'notes'     && <NoteList     conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />}
+        {activeTab === 'budgets'   && <BudgetList   conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />}
       </div>
     </div>
   )

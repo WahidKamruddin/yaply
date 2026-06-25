@@ -150,17 +150,17 @@ export default function ConversationItem({ conversation, currentUserId, isActive
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
-          className={`relative w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left select-none transition-all ${
+          className={`relative w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left select-none transition-all border-l-2 ${
             isActive
-              ? 'bg-white ring-2 ring-[#1a2744]/70 ring-inset'
-              : 'bg-white hover:bg-[#f3f7ff]'
+              ? 'bg-[#edf3ff] border-[#5b8def]'
+              : 'bg-white hover:bg-[#f3f7ff] border-transparent'
           }`}
         >
           <Avatar src={avatarSrc} name={displayName} online={!conversation.isGroup ? isOnline : undefined} />
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-1">
-              <span className="font-medium text-sm truncate text-[#1a2744]">
+              <span className={`font-medium text-sm truncate ${isActive ? 'text-[#5b8def]' : 'text-[#1a2744]'}`}>
                 {displayName}
               </span>
               <div className="flex items-center gap-1 flex-shrink-0">

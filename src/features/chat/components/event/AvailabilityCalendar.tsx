@@ -1,6 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Check, Lock } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
+import { DatePicker } from '@mui/x-date-pickers/DatePicker'
+import { TimePicker } from '@mui/x-date-pickers/TimePicker'
 import type { Event, EventAvailability } from '../../hooks/useEvents'
 import { useEventAvailability, useSetAvailability, useConfirmEventTime } from '../../hooks/useEvents'
 
@@ -77,7 +81,8 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
   const [hoveredSlot, setHoveredSlot] = useState<string | null>(null)
   const [hoveredMember, setHoveredMember] = useState<string | null>(null)
   const [lockingTime, setLockingTime] = useState(false)
-  const [lockTimeValue, setLockTimeValue] = useState('')
+  const [lockDate, setLockDate] = useState<Date | null>(null)
+  const [lockTime, setLockTime] = useState<Date | null>(null)
   const [confirmingLock, setConfirmingLock] = useState(false)
 
   // Sync mySlots when availability loads
@@ -173,15 +178,24 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
     confirmTime({ startsAt: slot, endsAt: end.toISOString() }, { onSuccess: () => onConfirmed?.() })
   }
 
+  function buildLockDateTime(): Date | null {
+    if (!lockDate || !lockTime) return null
+    const combined = new Date(lockDate)
+    combined.setHours(lockTime.getHours(), lockTime.getMinutes(), 0, 0)
+    return combined
+  }
+
   function handleLockTime() {
-    if (!lockTimeValue) return
-    const startsAt = new Date(lockTimeValue).toISOString()
-    const endsAt = new Date(new Date(lockTimeValue).getTime() + 60 * 60 * 1000).toISOString()
+    const dt = buildLockDateTime()
+    if (!dt) return
+    const startsAt = dt.toISOString()
+    const endsAt = new Date(dt.getTime() + 60 * 60 * 1000).toISOString()
     confirmTime({ startsAt, endsAt }, { onSuccess: () => { setLockingTime(false); onConfirmed?.() } })
   }
 
-  const lockTimeFormatted = lockTimeValue
-    ? new Date(lockTimeValue).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  const lockDateTime = buildLockDateTime()
+  const lockTimeFormatted = lockDateTime
+    ? lockDateTime.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
     : ''
 
   return (
@@ -321,24 +335,52 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
       <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[#dce7f8] flex-shrink-0 bg-white">
         {isCreator ? (
           lockingTime ? (
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <input
-                type="datetime-local"
-                value={lockTimeValue}
-                onChange={(e) => setLockTimeValue(e.target.value)}
-                className="flex-1 min-w-0 text-xs border border-[#dce7f8] rounded-lg px-2 py-1 text-[#1a2744] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
-              />
-              <button
-                onClick={() => lockTimeValue && setConfirmingLock(true)}
-                disabled={!lockTimeValue || confirming}
-                className="px-2.5 py-1 text-xs font-medium bg-green-500 hover:bg-green-600 text-white rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
-              >
-                {confirming ? 'Locking…' : 'Lock'}
-              </button>
-              <button onClick={() => setLockingTime(false)} className="text-xs text-[#9ab0cc] hover:text-[#6b84ab] transition-colors whitespace-nowrap">
-                Cancel
-              </button>
-            </div>
+            <LocalizationProvider dateAdapter={AdapterDateFns}>
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <DatePicker
+                  value={lockDate}
+                  onChange={(val) => setLockDate(val)}
+                  slotProps={{
+                    textField: {
+                      size: 'small',
+                      sx: {
+                        width: 140,
+                        '& .MuiInputBase-root': { fontSize: '0.75rem', borderRadius: '8px', color: '#1a2744' },
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#dce7f8' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
+                        '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
+                      },
+                    },
+                  }}
+                />
+                <TimePicker
+                  value={lockTime}
+                  onChange={(val) => setLockTime(val)}
+                  slotProps={{
+                    textField: {
+                      size: 'small',
+                      sx: {
+                        width: 120,
+                        '& .MuiInputBase-root': { fontSize: '0.75rem', borderRadius: '8px', color: '#1a2744' },
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#dce7f8' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
+                        '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
+                      },
+                    },
+                  }}
+                />
+                <button
+                  onClick={() => buildLockDateTime() && setConfirmingLock(true)}
+                  disabled={!buildLockDateTime() || confirming}
+                  className="px-2.5 py-1 text-xs font-medium bg-green-500 hover:bg-green-600 text-white rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
+                >
+                  {confirming ? 'Locking…' : 'Lock'}
+                </button>
+                <button onClick={() => setLockingTime(false)} className="text-xs text-[#9ab0cc] hover:text-[#6b84ab] transition-colors whitespace-nowrap">
+                  Cancel
+                </button>
+              </div>
+            </LocalizationProvider>
           ) : (
             <button
               onClick={() => setLockingTime(true)}

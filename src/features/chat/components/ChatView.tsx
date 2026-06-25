@@ -60,6 +60,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
 
   useReminderNotifications(currentUserId)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
+  const [newMsgCount, setNewMsgCount] = useState(0)
   const [decrypted, setDecrypted] = useState<DecryptedMessage[]>([])
   const [reactionsMap, setReactionsMap] = useState<Record<string, ReactionGroup[]>>({})
   const [showMedia, setShowMedia] = useState(false)
@@ -67,6 +68,8 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
   const [mediaUploading, setMediaUploading] = useState(false)
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const [pendingMessages, setPendingMessages] = useState<DecryptedMessage[]>([])
+  const [preAnimIds, setPreAnimIds] = useState<Set<string>>(new Set())
+  const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set())
   const [threadViewRoot, setThreadViewRoot] = useState<DecryptedMessage | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -76,6 +79,8 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const initialScrollRef = useRef(true)
+  const isNearBottomRef = useRef(true)
   const decryptedIdsRef = useRef<string[]>([])
   // Maps tempId → realId so pending messages are removed only once the real message lands in decrypted
   const pendingConfirmedRef = useRef<Map<string, string>>(new Map())
@@ -92,6 +97,9 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
 
   const currentUsername = currentUserProfile?.display_name ?? currentUserProfile?.username ?? 'You'
   const { typingUsers, notifyTyping, notifyStopTyping } = useTypingIndicator(activeId, currentUserId, currentUsername)
+  const typingProfile = typingUsers.length > 0
+    ? conversation?.members.find((m) => m.profile.username === typingUsers[0])?.profile ?? null
+    : null
 
   const allDbMessages = useMemo(
     () => (data?.pages ?? []).flatMap((p) => p.messages).reverse(),
@@ -104,10 +112,13 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
   // Pending IDs for optimistic-update styling
   const pendingIdSet = useMemo(() => new Set(pendingMessages.map((m) => m.id)), [pendingMessages])
 
-  // Clear all pending when switching conversations
+  // Clear all pending and reset initial-scroll flag when switching conversations
   useEffect(() => {
     setPendingMessages([])
     pendingConfirmedRef.current.clear()
+    initialScrollRef.current = true
+    isNearBottomRef.current = true
+    setNewMsgCount(0)
   }, [activeId])
 
   // Eagerly derive the shared key when a direct conversation opens so the first send is instant
@@ -234,16 +245,41 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
     })
   }, [activeId, currentUserId, queryClient])
 
-  // Scroll to bottom on new messages (both confirmed and optimistic pending)
+  // Scroll to show typing indicator when it appears and user is near bottom
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [allMessages.length])
+    if (typingUsers.length > 0 && isNearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [typingUsers.length])
+
+  // Scroll logic: instant on initial load, proximity-based for other users' messages
+  useEffect(() => {
+    if (allMessages.length === 0) return
+
+    if (initialScrollRef.current) {
+      initialScrollRef.current = false
+      bottomRef.current?.scrollIntoView({ behavior: 'instant' })
+      return
+    }
+
+    const lastMsg = allMessages[allMessages.length - 1]
+    if (lastMsg?.senderId === currentUserId) return
+
+    if (isNearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    } else {
+      setNewMsgCount((c) => c + 1)
+    }
+  }, [allMessages.length, currentUserId])
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    setShowScrollBtn(distFromBottom > 300)
+    const nearBottom = distFromBottom <= el.clientHeight
+    setShowScrollBtn(!nearBottom)
+    isNearBottomRef.current = nearBottom
+    if (nearBottom) setNewMsgCount(0)
     if (el.scrollTop < 80 && hasNextPage && !isFetchingNextPage) {
       void fetchNextPage()
     }
@@ -272,10 +308,23 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
       createdAt: new Date().toISOString(),
       senderProfile: currentUserProfile ?? undefined,
     }
-    // Force synchronous DOM commit so the message appears before encryption runs
+    // Force synchronous DOM commit: message appears at opacity 0 (pre-animation state)
     flushSync(() => {
       setPendingMessages((prev) => [...prev, tempMsg])
+      setPreAnimIds((prev) => new Set([...prev, tempId]))
       setReplyId(null)
+    })
+    // Step 2: instant scroll now that height is in the DOM
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+    // Step 3: next frame — move to animating so the slide-in plays against the settled position
+    requestAnimationFrame(() => {
+      setPreAnimIds((prev) => { const n = new Set(prev); n.delete(tempId); return n })
+      setAnimatingIds((prev) => new Set([...prev, tempId]))
+      setTimeout(() => {
+        setAnimatingIds((prev) => { const n = new Set(prev); n.delete(tempId); return n })
+      }, 500)
     })
 
     const targetUserId = otherMember?.userId
@@ -500,7 +549,12 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
             <div
               key={msg.id}
               id={`msg-${msg.id}`}
-              className={`transition-all duration-300 rounded-lg ${highlightedMessageId === msg.id ? 'bg-[#5b8def]/10' : ''} ${pendingIdSet.has(msg.id) ? 'opacity-60' : ''}`}
+              className={`transition-opacity duration-300 rounded-lg ${highlightedMessageId === msg.id ? 'bg-[#5b8def]/10' : ''} ${pendingIdSet.has(msg.id) && !preAnimIds.has(msg.id) && !animatingIds.has(msg.id) ? 'opacity-60' : ''}`}
+              style={
+                preAnimIds.has(msg.id) ? { opacity: 0 }
+                : animatingIds.has(msg.id) ? { animation: 'msgSlideIn 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both' }
+                : undefined
+              }
             >
               {showSeparator && <DateSeparator date={msg.createdAt} />}
               <MessageBubble
@@ -529,30 +583,35 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
       {/* Scroll to bottom FAB */}
       {showScrollBtn && (
         <button
-          onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
+          onClick={() => { setNewMsgCount(0); bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }}
           className="absolute bottom-24 right-6 w-9 h-9 flex items-center justify-center rounded-full bg-[#5b8def] text-white shadow-lg hover:bg-[#4a7de4] transition-colors z-10"
         >
           <ChevronDown size={18} />
+          {newMsgCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-[10px] font-bold rounded-full px-1">
+              {newMsgCount > 99 ? '99+' : newMsgCount}
+            </span>
+          )}
         </button>
       )}
 
-      {/* Typing indicator */}
-      {typingUsers.length > 0 && (
-        <div className="px-4 py-1.5 flex items-center gap-2">
-          <div className="flex gap-0.5">
+      {/* Typing indicator — iMessage style, only visible at bottom */}
+      {typingUsers.length > 0 && !showScrollBtn && (
+        <div className="px-4 py-1.5 flex items-end gap-2">
+          <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-[#5b8def] flex items-center justify-center text-white text-[11px] font-semibold">
+            {typingProfile?.avatar_url
+              ? <img src={typingProfile.avatar_url} className="w-full h-full object-cover" alt="" />
+              : (typingUsers[0]?.[0]?.toUpperCase() ?? '?')}
+          </div>
+          <div className="bg-white rounded-2xl rounded-bl-[4px] shadow-sm shadow-[#dce7f8] border border-[#dce7f8] px-3 py-2.5 flex items-center gap-1.5">
             {[0, 1, 2].map((i) => (
               <span
                 key={i}
-                className="w-1.5 h-1.5 rounded-full bg-[#9ab0cc]"
+                className="w-2 h-2 rounded-full bg-[#9ab0cc]"
                 style={{ animation: `typingBounce 1.2s ease-in-out ${i * 0.2}s infinite` }}
               />
             ))}
           </div>
-          <span className="text-xs text-[#9ab0cc]">
-            {typingUsers.length === 1
-              ? `${typingUsers[0]} is typing…`
-              : `${typingUsers.slice(0, -1).join(', ')} and ${typingUsers.at(-1)} are typing…`}
-          </span>
         </div>
       )}
 
@@ -608,6 +667,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
           conversation={conversation}
           currentUserId={currentUserId}
           onClose={() => setShowGroupInfo(false)}
+          onDeleted={() => setActiveId(null)}
         />
       )}
     </div>

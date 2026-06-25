@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { Bell, X, Plus, Trash2 } from 'lucide-react'
+import { Bell, X, Plus, Trash2, Lock, Unlock, Pencil } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { useReminders, useDismissReminder, useCreateReminder } from '../../hooks/useReminders'
+import { useReminders, useDismissReminder, useCreateReminder, useLockReminder, useUpdateReminderTime } from '../../hooks/useReminders'
 import { parseDateTimeArgs } from '@/features/commands/commandParser'
 import type { Reminder } from '../../hooks/useReminders'
 
 interface Props {
   conversationId: string
   currentUserId: string
+  isCurrentUserAdmin: boolean
 }
 
 function formatRemindAt(iso: string) {
@@ -93,11 +94,15 @@ function CreateReminderForm({ conversationId, currentUserId, onDone }: { convers
   )
 }
 
-export default function ReminderList({ conversationId, currentUserId }: Props) {
+export default function ReminderList({ conversationId, currentUserId, isCurrentUserAdmin }: Props) {
   const { data: reminders = [], isLoading } = useReminders(conversationId)
   const { mutate: dismiss } = useDismissReminder()
+  const { mutate: lockReminder } = useLockReminder()
+  const { mutate: updateTime } = useUpdateReminderTime()
   const [creating, setCreating] = useState(false)
   const [pendingDismiss, setPendingDismiss] = useState<Reminder | null>(null)
+  const [editingTimeId, setEditingTimeId] = useState<string | null>(null)
+  const [editTimeValue, setEditTimeValue] = useState('')
 
   return (
     <>
@@ -123,26 +128,68 @@ export default function ReminderList({ conversationId, currentUserId }: Props) {
             {reminders.map((r) => {
               const { label, isPast } = formatRemindAt(r.remind_at)
               const creatorName = r.creator?.display_name ?? r.creator?.username ?? null
-              const canDismiss = r.user_id === currentUserId
+              const canDismiss = r.user_id === currentUserId || isCurrentUserAdmin
+              const isLocked = r.locked
+              const canInteract = !isLocked || isCurrentUserAdmin
+              const isEditingTime = editingTimeId === r.id
+
               return (
                 <div key={r.id} className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border ${isPast ? 'border-amber-200 bg-amber-50' : 'border-[#dce7f8] bg-white'}`}>
                   <Bell size={14} className={`mt-0.5 flex-shrink-0 ${isPast ? 'text-amber-500' : 'text-[#5b8def]'}`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-[#1a2744]">{r.message}</p>
-                    <p className={`text-xs mt-0.5 ${isPast ? 'text-amber-600 font-medium' : 'text-[#9ab0cc]'}`}>
-                      {isPast ? '⚡ ' : ''}{label}{r.status === 'sent' && ' · notified'}
-                    </p>
+                    {isEditingTime ? (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <input
+                          type="datetime-local"
+                          value={editTimeValue}
+                          onChange={(e) => setEditTimeValue(e.target.value)}
+                          className="text-xs bg-[#f3f7ff] rounded px-2 py-0.5 text-[#1a2744] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+                        />
+                        <button
+                          onClick={() => { updateTime({ reminderId: r.id, remindAt: new Date(editTimeValue).toISOString() }); setEditingTimeId(null) }}
+                          className="text-xs text-[#5b8def] font-medium"
+                        >Save</button>
+                        <button onClick={() => setEditingTimeId(null)} className="text-[#9ab0cc]"><X size={12} /></button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <p className={`text-xs ${isPast ? 'text-amber-600 font-medium' : 'text-[#9ab0cc]'}`}>
+                          {isPast ? '⚡ ' : ''}{label}{r.status === 'sent' && ' · notified'}
+                        </p>
+                        {isCurrentUserAdmin && (
+                          <button
+                            onClick={() => { setEditTimeValue(r.remind_at.slice(0, 16)); setEditingTimeId(r.id) }}
+                            className="text-[#9ab0cc] hover:text-[#5b8def] transition-colors"
+                          >
+                            <Pencil size={9} />
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {creatorName && (
                       <p className="text-[10px] text-[#b0c0d8] mt-0.5">set by {creatorName}</p>
                     )}
                   </div>
-                  <button
-                    onClick={() => canDismiss && setPendingDismiss(r)}
-                    disabled={!canDismiss}
-                    className={`flex-shrink-0 transition-colors ${canDismiss ? 'text-[#9ab0cc] hover:text-[#6b84ab]' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
-                  >
-                    <X size={14} />
-                  </button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {isLocked && !isCurrentUserAdmin && <Lock size={10} className="text-amber-400" />}
+                    {isCurrentUserAdmin && (
+                      <button
+                        onClick={() => lockReminder({ reminderId: r.id, locked: !isLocked })}
+                        title={isLocked ? 'Unlock' : 'Lock'}
+                        className="text-[#c5d5e8] hover:text-amber-400 transition-colors"
+                      >
+                        {isLocked ? <Unlock size={12} /> : <Lock size={12} />}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => canDismiss && canInteract && setPendingDismiss(r)}
+                      disabled={!canDismiss || !canInteract}
+                      className={`transition-colors ${canDismiss && canInteract ? 'text-[#9ab0cc] hover:text-[#6b84ab]' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
               )
             })}

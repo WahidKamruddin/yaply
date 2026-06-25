@@ -1,6 +1,10 @@
 import { useState, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { X, Calendar, CheckSquare, BarChart2, FileText, Image, DollarSign, Map, Upload, MessageSquare, Check } from 'lucide-react'
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
+import { DatePicker } from '@mui/x-date-pickers/DatePicker'
+import { TimePicker } from '@mui/x-date-pickers/TimePicker'
 import type { CreateItemType } from '../handlers/createHandler'
 import { supabase } from '@/lib/supabase'
 import { useEvents } from '@/features/chat/hooks/useEvents'
@@ -42,6 +46,8 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
   const [title, setTitle]             = useState(initialTitle)
   const [description, setDescription] = useState('')
   const [dueAt, setDueAt]             = useState('')
+  const [eventDate, setEventDate]     = useState<Date | null>(null)
+  const [eventTime, setEventTime]     = useState<Date | null>(null)
   const [location, setLocation]       = useState('')
   const [amount, setAmount]           = useState('')
   const [pollOptions, setPollOptions] = useState(['', ''])
@@ -154,7 +160,9 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
         onCreated(`🗓️ Plan created: "${title}" — open the Events panel to set availability`)
 
       } else if (type === 'event') {
-        if (!dueAt) { setSaving(false); return }
+        if (!eventDate || !eventTime) { setSaving(false); return }
+        const startsAt = new Date(eventDate)
+        startsAt.setHours(eventTime.getHours(), eventTime.getMinutes(), 0, 0)
         await supabase.from('events').insert({
           conversation_id: conversationId,
           created_by: userId,
@@ -162,7 +170,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
           description: description || null,
           location: location || null,
           status: 'confirmed',
-          starts_at: new Date(dueAt).toISOString(),
+          starts_at: startsAt.toISOString(),
         })
         onCreated(`📅 Event created: "${title}"`)
 
@@ -179,7 +187,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
     }
   }
 
-  const isEventRequired = type === 'event' && !dueAt
+  const isEventRequired = type === 'event' && (!eventDate || !eventTime)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
@@ -218,15 +226,53 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
             />
           )}
 
-          {/* Date/time */}
-          {(type === 'task' || type === 'event') && (
+          {/* Date/time — event uses MUI pickers, task uses native input */}
+          {type === 'event' && (
+            <LocalizationProvider dateAdapter={AdapterDateFns}>
+              <div>
+                <label className="text-xs text-[#9ab0cc] mb-1.5 block">Date & time *</label>
+                <div className="flex gap-2">
+                  <DatePicker
+                    value={eventDate}
+                    onChange={(val) => setEventDate(val)}
+                    slotProps={{
+                      textField: {
+                        size: 'small',
+                        fullWidth: true,
+                        sx: {
+                          '& .MuiInputBase-root': { fontSize: '0.875rem', borderRadius: '8px', color: '#1a2744', backgroundColor: '#f3f7ff' },
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#dce7f8' },
+                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
+                          '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
+                        },
+                      },
+                    }}
+                  />
+                  <TimePicker
+                    value={eventTime}
+                    onChange={(val) => setEventTime(val)}
+                    slotProps={{
+                      textField: {
+                        size: 'small',
+                        sx: {
+                          width: 140,
+                          '& .MuiInputBase-root': { fontSize: '0.875rem', borderRadius: '8px', color: '#1a2744', backgroundColor: '#f3f7ff' },
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#dce7f8' },
+                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
+                          '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
+                        },
+                      },
+                    }}
+                  />
+                </div>
+              </div>
+            </LocalizationProvider>
+          )}
+          {type === 'task' && (
             <div>
-              <label className="text-xs text-[#9ab0cc] mb-1 block">
-                {type === 'event' ? 'Date & time *' : 'Due date (optional)'}
-              </label>
+              <label className="text-xs text-[#9ab0cc] mb-1 block">Due date (optional)</label>
               <input
                 type="datetime-local"
-                required={type === 'event'}
                 value={dueAt}
                 onChange={(e) => setDueAt(e.target.value)}
                 className="w-full px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] outline-none focus:ring-1 focus:ring-[#5b8def]/40"

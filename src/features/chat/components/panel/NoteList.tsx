@@ -1,19 +1,23 @@
 import { useState } from 'react'
-import { Trash2, ChevronDown, ChevronUp, Plus, X } from 'lucide-react'
+import { Trash2, ChevronDown, ChevronUp, Plus, X, Lock, Unlock } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { Note } from '../../hooks/useNotes'
-import { useNotes, useDeleteNote, useCreateNote } from '../../hooks/useNotes'
+import { useNotes, useDeleteNote, useCreateNote, useLockNote } from '../../hooks/useNotes'
 
 interface Props {
   conversationId: string
   currentUserId: string
+  isCurrentUserAdmin: boolean
 }
 
-function NoteCard({ note, currentUserId }: { note: Note; currentUserId: string }) {
+function NoteCard({ note, currentUserId, isCurrentUserAdmin }: { note: Note; currentUserId: string; isCurrentUserAdmin: boolean }) {
   const [expanded, setExpanded] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const { mutate: deleteNote } = useDeleteNote()
-  const canDelete = note.user_id === currentUserId
+  const { mutate: lockNote } = useLockNote()
+  const canDelete = note.user_id === currentUserId || isCurrentUserAdmin
+  const isLocked = note.locked
+  const canInteract = !isLocked || isCurrentUserAdmin
 
   return (
     <>
@@ -22,7 +26,10 @@ function NoteCard({ note, currentUserId }: { note: Note; currentUserId: string }
           className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-[#f3f7ff] transition-colors"
           onClick={() => setExpanded((v) => !v)}
         >
-          <span className="text-sm font-medium text-[#1a2744] truncate pr-2">{note.title}</span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            {isLocked && <Lock size={10} className="text-amber-400 flex-shrink-0" />}
+            <span className="text-sm font-medium text-[#1a2744] truncate pr-2">{note.title}</span>
+          </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <span className="text-xs text-[#b0c0d8]">by {note.creator?.display_name ?? note.creator?.username ?? 'Unknown'}</span>
             <span className="text-xs text-[#9ab0cc]">· {new Date(note.created_at).toLocaleDateString()}</span>
@@ -32,13 +39,28 @@ function NoteCard({ note, currentUserId }: { note: Note; currentUserId: string }
         {expanded && (
           <div className="px-3 pb-3 border-t border-[#dce7f8] bg-[#fafbff]">
             <p className="text-sm text-[#3d5a80] mt-2 whitespace-pre-wrap">{note.content || <em className="text-[#9ab0cc]">No content</em>}</p>
-            <button
-              disabled={!canDelete}
-              className={`mt-2 flex items-center gap-1 text-xs transition-colors ${canDelete ? 'text-red-400 hover:text-red-500' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
-              onClick={() => canDelete && setShowConfirm(true)}
-            >
-              <Trash2 size={12} /> Delete
-            </button>
+            <div className="flex items-center gap-3 mt-2">
+              {canDelete && (
+                <button
+                  disabled={!canInteract}
+                  className={`flex items-center gap-1 text-xs transition-colors ${canInteract ? 'text-red-400 hover:text-red-500' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+                  onClick={() => canInteract && setShowConfirm(true)}
+                >
+                  <Trash2 size={12} /> Delete
+                </button>
+              )}
+              {isCurrentUserAdmin && (
+                <button
+                  onClick={() => lockNote({ noteId: note.id, locked: !isLocked })}
+                  className="flex items-center gap-1 text-xs text-[#9ab0cc] hover:text-amber-400 transition-colors"
+                >
+                  {isLocked ? <><Unlock size={12} /> Unlock</> : <><Lock size={12} /> Lock</>}
+                </button>
+              )}
+              {isLocked && !isCurrentUserAdmin && (
+                <span className="flex items-center gap-1 text-xs text-amber-400"><Lock size={10} /> Locked by admin</span>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -117,7 +139,7 @@ function CreateNoteForm({ conversationId, currentUserId, onDone }: { conversatio
   )
 }
 
-export default function NoteList({ conversationId, currentUserId }: Props) {
+export default function NoteList({ conversationId, currentUserId, isCurrentUserAdmin }: Props) {
   const { data: notes = [], isLoading } = useNotes(conversationId)
   const [creating, setCreating] = useState(false)
 
@@ -137,7 +159,7 @@ export default function NoteList({ conversationId, currentUserId }: Props) {
       ) : !notes.length && !creating ? (
         <p className="text-xs text-[#9ab0cc] text-center py-6">No notes yet.</p>
       ) : (
-        <div>{notes.map((n) => <NoteCard key={n.id} note={n} currentUserId={currentUserId} />)}</div>
+        <div>{notes.map((n) => <NoteCard key={n.id} note={n} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />)}</div>
       )}
     </div>
   )

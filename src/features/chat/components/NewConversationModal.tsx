@@ -17,6 +17,7 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
   const [groupName, setGroupName] = useState('')
   const [loading, setLoading] = useState(false)
   const [searching, setSearching] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
   const handleSearch = useCallback(async (q: string) => {
@@ -40,6 +41,7 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
   async function handleCreate() {
     if (selected.length === 0) return
     setLoading(true)
+    setError(null)
     try {
       let id: string
       if (selected.length === 1) {
@@ -49,6 +51,8 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
       }
       await queryClient.invalidateQueries({ queryKey: ['conversations'] })
       onCreated(id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create conversation')
     } finally {
       setLoading(false)
     }
@@ -129,6 +133,7 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
           </div>
         </div>
 
+        {error && <p className="text-xs text-red-500 px-5 pb-2">{error}</p>}
         <div className="px-5 py-4 border-t border-[#dce7f8] flex justify-end gap-2">
           <button onClick={onClose} className="px-4 py-2 text-sm text-[#6b84ab] hover:text-[#1a2744] transition-colors">
             Cancel

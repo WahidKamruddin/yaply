@@ -90,7 +90,14 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
 
   if (message.deletedAt) {
     return (
-      <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-1`}>
+      <div className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'} mb-1`}>
+        {!isOwn && (
+          <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-[#5b8def] flex items-center justify-center text-white text-[11px] font-semibold">
+            {message.senderProfile?.avatar_url
+              ? <img src={message.senderProfile.avatar_url} className="w-full h-full object-cover" alt="" />
+              : (message.senderProfile?.display_name?.[0] ?? message.senderProfile?.username?.[0] ?? '?').toUpperCase()}
+          </div>
+        )}
         <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#f3f7ff] border border-[#dce7f8]">
           <AlertCircle size={12} className="text-[#9ab0cc]" />
           <span className="text-xs text-[#9ab0cc] italic">Message deleted</span>
@@ -102,11 +109,18 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
   return (
     <>
     <div
-      className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-1 group`}
+      className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'} mb-1 group`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); setShowEmojiPicker(false) }}
     >
-      <div className={`flex flex-col max-w-[70%] ${isOwn ? 'items-end' : 'items-start'}`}>
+      {!isOwn && (
+        <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-[#5b8def] flex items-center justify-center text-white text-[11px] font-semibold">
+          {message.senderProfile?.avatar_url
+            ? <img src={message.senderProfile.avatar_url} className="w-full h-full object-cover" alt="" />
+            : (message.senderProfile?.display_name?.[0] ?? message.senderProfile?.username?.[0] ?? '?').toUpperCase()}
+        </div>
+      )}
+      <div className={`flex flex-col max-w-[65%] ${isOwn ? 'items-end' : 'items-start'}`}>
         {!isOwn && message.senderProfile && (
           <span className="text-xs text-[#5b8def] font-medium mb-1 px-1">
             {message.senderProfile.display_name ?? message.senderProfile.username}

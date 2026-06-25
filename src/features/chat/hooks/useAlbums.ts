@@ -6,6 +6,7 @@ export interface Album {
   conversation_id: string
   name: string
   created_by: string
+  locked: boolean
   created_at: string
   event_id: string | null
   creator: { display_name: string | null; username: string | null } | null
@@ -80,6 +81,17 @@ export function useDeleteAlbum() {
   return useMutation({
     mutationFn: async (albumId: string) => {
       const { error } = await supabase.from('albums').delete().eq('id', albumId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['albums'] }),
+  })
+}
+
+export function useLockAlbum() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ albumId, locked }: { albumId: string; locked: boolean }) => {
+      const { error } = await supabase.from('albums').update({ locked }).eq('id', albumId)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['albums'] }),

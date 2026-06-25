@@ -8,6 +8,7 @@ export interface Budget {
   total_amount: number
   currency: string
   created_by: string
+  locked: boolean
   created_at: string
   splitwise_group_id: string | null
   event_id: string | null
@@ -104,6 +105,17 @@ export function useDeleteBudget() {
   return useMutation({
     mutationFn: async (budgetId: string) => {
       const { error } = await supabase.from('budgets').delete().eq('id', budgetId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['budgets'] }),
+  })
+}
+
+export function useLockBudget() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ budgetId, locked }: { budgetId: string; locked: boolean }) => {
+      const { error } = await supabase.from('budgets').update({ locked }).eq('id', budgetId)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['budgets'] }),

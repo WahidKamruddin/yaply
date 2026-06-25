@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { DollarSign, ArrowLeft, Plus, Link2, ChevronDown, ChevronUp, AlertCircle, X, Trash2 } from 'lucide-react'
+import { DollarSign, ArrowLeft, Plus, Link2, X, Trash2, Lock, Unlock } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { Budget } from '../../hooks/useBudgets'
-import { useBudgets, useExpenses, useAddExpense, useCreateBudget, useDeleteBudget } from '../../hooks/useBudgets'
+import { useBudgets, useExpenses, useAddExpense, useCreateBudget, useDeleteBudget, useLockBudget } from '../../hooks/useBudgets'
 import {
   useSplitwiseEnabled,
   useSplitwiseGroups,
@@ -302,18 +302,22 @@ function LocalBudgetDetail({
 function BudgetDetail({
   budget,
   currentUserId,
+  isCurrentUserAdmin,
   onBack,
 }: {
   budget: Budget
   currentUserId: string
+  isCurrentUserAdmin: boolean
   onBack: () => void
 }) {
   const [linkingOpen, setLinkingOpen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const { data: groups = [] } = useSplitwiseGroups()
   const { mutate: deleteBudget } = useDeleteBudget()
+  const { mutate: lockBudget } = useLockBudget()
   const linkedGroup = groups.find((g) => String(g.id) === budget.splitwise_group_id) ?? null
-  const canDelete = budget.created_by === currentUserId
+  const canDelete = budget.created_by === currentUserId || isCurrentUserAdmin
+  const isLocked = budget.locked
   const creatorName = budget.creator?.display_name ?? budget.creator?.username ?? 'Unknown'
 
   function handleDelete() {
@@ -321,14 +325,26 @@ function BudgetDetail({
     setShowDeleteConfirm(false)
   }
 
+  const effectiveCanDelete = canDelete && !(isLocked && !isCurrentUserAdmin)
+
   const subView = linkingOpen
     ? <LinkSplitwisePanel budgetId={budget.id} onClose={() => setLinkingOpen(false)} />
     : budget.splitwise_group_id && linkedGroup
-    ? <SplitwiseBudgetDetail budget={budget} group={linkedGroup} onBack={onBack} currentUserId={currentUserId} onDelete={() => setShowDeleteConfirm(true)} canDelete={canDelete} creatorName={creatorName} />
-    : <LocalBudgetDetail budget={budget} currentUserId={currentUserId} onBack={onBack} onDelete={() => setShowDeleteConfirm(true)} onLinkSplitwise={() => setLinkingOpen(true)} canDelete={canDelete} creatorName={creatorName} />
+    ? <SplitwiseBudgetDetail budget={budget} group={linkedGroup} onBack={onBack} currentUserId={currentUserId} onDelete={() => setShowDeleteConfirm(true)} canDelete={effectiveCanDelete} creatorName={creatorName} />
+    : <LocalBudgetDetail budget={budget} currentUserId={currentUserId} onBack={onBack} onDelete={() => setShowDeleteConfirm(true)} onLinkSplitwise={() => setLinkingOpen(true)} canDelete={effectiveCanDelete} creatorName={creatorName} />
 
   return (
     <>
+      {isCurrentUserAdmin && !linkingOpen && (
+        <div className="flex justify-end mb-1">
+          <button
+            onClick={() => lockBudget({ budgetId: budget.id, locked: !isLocked })}
+            className={`flex items-center gap-1 text-xs transition-colors ${isLocked ? 'text-amber-400 hover:text-amber-500' : 'text-[#9ab0cc] hover:text-amber-400'}`}
+          >
+            {isLocked ? <><Unlock size={11} /> Unlock</> : <><Lock size={11} /> Lock</>}
+          </button>
+        </div>
+      )}
       {subView}
       <Dialog.Root open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <Dialog.Portal>
@@ -410,7 +426,7 @@ function CreateBudgetForm({ conversationId, currentUserId, onDone }: { conversat
 
 // ─── Budget list ──────────────────────────────────────────────────────────────
 
-export default function BudgetList({ conversationId, currentUserId }: { conversationId: string; currentUserId: string }) {
+export default function BudgetList({ conversationId, currentUserId, isCurrentUserAdmin }: { conversationId: string; currentUserId: string; isCurrentUserAdmin: boolean }) {
   const { data: budgets = [], isLoading } = useBudgets(conversationId)
   const { data: events = [] } = useEvents(conversationId)
   const { mutate: linkToEvent } = useLinkToEvent()
@@ -418,7 +434,7 @@ export default function BudgetList({ conversationId, currentUserId }: { conversa
   const [creating, setCreating] = useState(false)
   const splitwiseEnabled = useSplitwiseEnabled()
 
-  if (selected) return <BudgetDetail budget={selected} currentUserId={currentUserId} onBack={() => setSelected(null)} />
+  if (selected) return <BudgetDetail budget={selected} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} onBack={() => setSelected(null)} />
 
   return (
     <div>
@@ -448,6 +464,7 @@ export default function BudgetList({ conversationId, currentUserId }: { conversa
               >
                 <div>
                   <div className="flex items-center gap-1.5">
+                    {b.locked && <Lock size={10} className="text-amber-400 flex-shrink-0" />}
                     <p className="text-sm font-medium text-[#1a2744]">{b.name}</p>
                     {b.splitwise_group_id && (
                       <span className="text-xs px-1 py-0.5 bg-green-100 text-green-700 rounded font-medium">SW</span>

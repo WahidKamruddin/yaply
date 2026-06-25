@@ -1,44 +1,101 @@
 import { useState } from 'react'
-import { CheckSquare, Square, Clock, Trash2, Plus, X } from 'lucide-react'
+import { CheckSquare, Square, Clock, Trash2, Plus, X, Lock, Unlock, Pencil } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { Task } from '../../hooks/useTasks'
-import { useTasks, useUpdateTaskStatus, useCreateTask, useDeleteTask } from '../../hooks/useTasks'
+import { useTasks, useUpdateTaskStatus, useCreateTask, useDeleteTask, useLockTask, useUpdateTaskDueDate } from '../../hooks/useTasks'
 
 interface Props {
   conversationId: string
   currentUserId: string
+  isCurrentUserAdmin: boolean
 }
 
-function TaskItem({ task, currentUserId }: { task: Task; currentUserId: string }) {
+function TaskItem({ task, currentUserId, isCurrentUserAdmin }: { task: Task; currentUserId: string; isCurrentUserAdmin: boolean }) {
   const { mutate: updateStatus } = useUpdateTaskStatus()
   const { mutate: deleteTask } = useDeleteTask()
+  const { mutate: lockTask } = useLockTask()
+  const { mutate: updateDueDate } = useUpdateTaskDueDate()
   const [showConfirm, setShowConfirm] = useState(false)
+  const [editingDue, setEditingDue] = useState(false)
+  const [dueValue, setDueValue] = useState(task.due_at ? task.due_at.slice(0, 16) : '')
   const isDone = task.status === 'done'
-  const canDelete = task.created_by === currentUserId
+  const canDelete = task.created_by === currentUserId || isCurrentUserAdmin
+  const isLocked = task.locked
+  const canToggleStatus = !isLocked || isCurrentUserAdmin
 
   return (
     <>
       <div className="flex items-start gap-2.5 py-2.5 border-b border-[#dce7f8] last:border-0">
         <button
-          className="mt-0.5 flex-shrink-0 text-[#5b8def] hover:text-[#4a7de4] transition-colors"
-          onClick={() => updateStatus({ taskId: task.id, status: isDone ? 'todo' : 'done' })}
+          className={`mt-0.5 flex-shrink-0 transition-colors ${canToggleStatus ? 'text-[#5b8def] hover:text-[#4a7de4]' : 'text-[#dce7f8] cursor-not-allowed'}`}
+          onClick={() => canToggleStatus && updateStatus({ taskId: task.id, status: isDone ? 'todo' : 'done' })}
+          disabled={!canToggleStatus}
         >
           {isDone ? <CheckSquare size={15} /> : <Square size={15} />}
         </button>
         <div className="flex-1 min-w-0">
           <p className={`text-sm ${isDone ? 'line-through text-[#9ab0cc]' : 'text-[#1a2744]'}`}>{task.title}</p>
-          <p className="text-[10px] text-[#b0c0d8] mt-0.5">
-            by {task.creator?.display_name ?? task.creator?.username ?? 'Unknown'}
-            {task.due_at && <span> · <Clock size={9} className="inline mb-0.5" /> {new Date(task.due_at).toLocaleDateString()}</span>}
-          </p>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <span className="text-[10px] text-[#b0c0d8]">
+              by {task.creator?.display_name ?? task.creator?.username ?? 'Unknown'}
+            </span>
+            {task.due_at && !editingDue && (
+              <span className="text-[10px] text-[#b0c0d8] flex items-center gap-0.5">
+                · <Clock size={9} className="inline mb-0.5" /> {new Date(task.due_at).toLocaleDateString()}
+                {isCurrentUserAdmin && (
+                  <button
+                    onClick={() => { setDueValue(task.due_at?.slice(0, 16) ?? ''); setEditingDue(true) }}
+                    className="ml-0.5 text-[#9ab0cc] hover:text-[#5b8def] transition-colors"
+                  >
+                    <Pencil size={9} />
+                  </button>
+                )}
+              </span>
+            )}
+            {!task.due_at && isCurrentUserAdmin && !editingDue && (
+              <button
+                onClick={() => setEditingDue(true)}
+                className="text-[10px] text-[#9ab0cc] hover:text-[#5b8def] flex items-center gap-0.5 transition-colors"
+              >
+                <Pencil size={9} /> set due date
+              </button>
+            )}
+          </div>
+          {editingDue && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <input
+                type="datetime-local"
+                value={dueValue}
+                onChange={(e) => setDueValue(e.target.value)}
+                className="text-xs bg-[#f3f7ff] rounded px-2 py-0.5 text-[#1a2744] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+              />
+              <button
+                onClick={() => { updateDueDate({ taskId: task.id, dueAt: dueValue ? new Date(dueValue).toISOString() : null }); setEditingDue(false) }}
+                className="text-xs text-[#5b8def] font-medium hover:text-[#4a7de4] transition-colors"
+              >Save</button>
+              <button onClick={() => setEditingDue(false)} className="text-[#9ab0cc] hover:text-[#6b84ab]"><X size={12} /></button>
+            </div>
+          )}
         </div>
-        <button
-          onClick={() => setShowConfirm(true)}
-          disabled={!canDelete}
-          className={`flex-shrink-0 transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
-        >
-          <Trash2 size={13} />
-        </button>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {isLocked && <Lock size={11} className="text-amber-400" />}
+          {isCurrentUserAdmin && (
+            <button
+              onClick={() => lockTask({ taskId: task.id, locked: !isLocked })}
+              title={isLocked ? 'Unlock' : 'Lock'}
+              className="text-[#c5d5e8] hover:text-amber-400 transition-colors"
+            >
+              {isLocked ? <Unlock size={12} /> : <Lock size={12} />}
+            </button>
+          )}
+          <button
+            onClick={() => canDelete && !isLocked && setShowConfirm(true)}
+            disabled={!canDelete || (isLocked && !isCurrentUserAdmin)}
+            className={`transition-colors ${canDelete && !(isLocked && !isCurrentUserAdmin) ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
       </div>
 
       <Dialog.Root open={showConfirm} onOpenChange={setShowConfirm}>
@@ -106,7 +163,7 @@ function CreateTaskForm({ conversationId, currentUserId, onDone }: { conversatio
   )
 }
 
-export default function TaskList({ conversationId, currentUserId }: Props) {
+export default function TaskList({ conversationId, currentUserId, isCurrentUserAdmin }: Props) {
   const { data: tasks = [], isLoading } = useTasks(conversationId)
   const [creating, setCreating] = useState(false)
 
@@ -126,7 +183,7 @@ export default function TaskList({ conversationId, currentUserId }: Props) {
       ) : !tasks.length && !creating ? (
         <p className="text-xs text-[#9ab0cc] text-center py-6">No tasks yet.</p>
       ) : (
-        <div>{tasks.map((t) => <TaskItem key={t.id} task={t} currentUserId={currentUserId} />)}</div>
+        <div>{tasks.map((t) => <TaskItem key={t.id} task={t} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />)}</div>
       )}
     </div>
   )

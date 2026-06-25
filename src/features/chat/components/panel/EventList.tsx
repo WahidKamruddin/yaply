@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Calendar, Map, Plus, Trash2 } from 'lucide-react'
+import { Calendar, Map, Plus, Trash2, Lock, Unlock, Pencil } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { Event } from '../../hooks/useEvents'
-import { useEvents, useDeleteEvent } from '../../hooks/useEvents'
+import { useEvents, useDeleteEvent, useLockEvent, useUpdateEventTime } from '../../hooks/useEvents'
 import type { MemberSummary } from '../../types'
 import EventModal from '../event/EventModal'
 import CommandModal from '@/features/commands/components/CommandModal'
@@ -11,13 +11,19 @@ interface Props {
   conversationId: string
   currentUserId: string
   members: MemberSummary[]
+  isCurrentUserAdmin: boolean
 }
 
-function EventItem({ event, currentUserId, onOpen, onDelete }: { event: Event; currentUserId: string; onOpen: (e: Event) => void; onDelete: (e: Event) => void }) {
+function EventItem({ event, currentUserId, isCurrentUserAdmin, onOpen, onDelete }: { event: Event; currentUserId: string; isCurrentUserAdmin: boolean; onOpen: (e: Event) => void; onDelete: (e: Event) => void }) {
   const isPlanning = event.status === 'planning'
-  const canDelete = event.created_by === currentUserId
+  const isLocked = event.locked
+  const canDelete = event.created_by === currentUserId || isCurrentUserAdmin
+  const { mutate: lockEvent } = useLockEvent()
+  const { mutate: updateEventTime } = useUpdateEventTime()
+  const [editingTime, setEditingTime] = useState(false)
+  const [editStartsAt, setEditStartsAt] = useState(event.starts_at?.slice(0, 16) ?? '')
   return (
-    <div className="relative flex items-start border-b border-[#dce7f8] last:border-0">
+    <div className="flex items-start border-b border-[#dce7f8] last:border-0 gap-1">
       <button
         onClick={() => onOpen(event)}
         className="flex-1 text-left flex items-start gap-3 py-2.5 hover:bg-[#f8faff] transition-colors -mx-1 px-1 rounded"
@@ -26,32 +32,69 @@ function EventItem({ event, currentUserId, onOpen, onDelete }: { event: Event; c
           {isPlanning ? <Map size={12} /> : <Calendar size={12} />}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-[#1a2744] truncate">{event.name}</p>
-          <div className="flex items-center gap-1.5 mt-0.5">
+          <div className="flex items-center gap-1">
+            {isLocked && <Lock size={9} className="text-amber-400 flex-shrink-0" />}
+            <p className="text-sm font-medium text-[#1a2744] truncate">{event.name}</p>
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
             {isPlanning && (
               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#edf1fa] text-[#5b8def]">
                 Planning
               </span>
             )}
-            {event.starts_at && !isPlanning && (
-              <span className="text-[10px] text-[#9ab0cc]">
+            {event.starts_at && !isPlanning && !editingTime && (
+              <span className="text-[10px] text-[#9ab0cc] flex items-center gap-0.5">
                 {new Date(event.starts_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {isCurrentUserAdmin && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setEditStartsAt(event.starts_at?.slice(0, 16) ?? ''); setEditingTime(true) }}
+                    className="text-[#9ab0cc] hover:text-[#5b8def] transition-colors ml-0.5"
+                  >
+                    <Pencil size={9} />
+                  </button>
+                )}
               </span>
             )}
           </div>
+          {editingTime && (
+            <div className="flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="datetime-local"
+                value={editStartsAt}
+                onChange={(e) => setEditStartsAt(e.target.value)}
+                className="text-xs bg-[#f3f7ff] rounded px-1.5 py-0.5 text-[#1a2744] outline-none"
+              />
+              <button
+                onClick={() => { updateEventTime({ eventId: event.id, startsAt: new Date(editStartsAt).toISOString() }); setEditingTime(false) }}
+                className="text-xs text-[#5b8def] font-medium"
+              >Save</button>
+              <button onClick={() => setEditingTime(false)} className="text-[#9ab0cc]"><Map size={10} /></button>
+            </div>
+          )}
           <p className="text-[10px] text-[#b0c0d8] mt-0.5">
             by {event.creator?.display_name ?? event.creator?.username ?? 'Unknown'}
           </p>
         </div>
       </button>
-      <button
-        onClick={() => canDelete && onDelete(event)}
-        disabled={!canDelete}
-        className={`absolute right-0 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
-        title="Delete event"
-      >
-        <Trash2 size={12} />
-      </button>
+      <div className="flex items-center gap-0.5 py-2.5 flex-shrink-0">
+        {isCurrentUserAdmin && (
+          <button
+            onClick={() => lockEvent({ eventId: event.id, locked: !isLocked })}
+            title={isLocked ? 'Unlock' : 'Lock'}
+            className={`w-6 h-6 flex items-center justify-center rounded-full transition-colors ${isLocked ? 'text-amber-400 hover:text-amber-500' : 'text-[#c5d5e8] hover:text-amber-400'}`}
+          >
+            {isLocked ? <Unlock size={11} /> : <Lock size={11} />}
+          </button>
+        )}
+        <button
+          onClick={() => canDelete && !(isLocked && !isCurrentUserAdmin) && onDelete(event)}
+          disabled={!canDelete || (isLocked && !isCurrentUserAdmin)}
+          className={`w-6 h-6 flex items-center justify-center rounded-full transition-colors ${canDelete && !(isLocked && !isCurrentUserAdmin) ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+          title="Delete event"
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
     </div>
   )
 }
@@ -59,7 +102,7 @@ function EventItem({ event, currentUserId, onOpen, onDelete }: { event: Event; c
 type CreateType = 'event' | 'plan'
 type EventFilter = 'all' | 'planning' | 'confirmed'
 
-export default function EventList({ conversationId, currentUserId, members }: Props) {
+export default function EventList({ conversationId, currentUserId, members, isCurrentUserAdmin }: Props) {
   const { data: events = [], isLoading } = useEvents(conversationId)
   const [selected, setSelected] = useState<Event | null>(null)
   const [creating, setCreating] = useState<CreateType | null>(null)
@@ -126,7 +169,7 @@ export default function EventList({ conversationId, currentUserId, members }: Pr
         ) : (
           <div>
             {filtered.map((e) => (
-              <EventItem key={e.id} event={e} currentUserId={currentUserId} onOpen={setSelected} onDelete={setPendingDelete} />
+              <EventItem key={e.id} event={e} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} onOpen={setSelected} onDelete={setPendingDelete} />
             ))}
           </div>
         )}

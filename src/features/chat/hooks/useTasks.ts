@@ -12,6 +12,7 @@ export interface Task {
   priority: 'low' | 'medium' | 'high'
   due_at: string | null
   completed_at: string | null
+  locked: boolean
   created_at: string
   updated_at: string
   creator: { display_name: string | null; username: string | null } | null
@@ -71,6 +72,28 @@ export function useDeleteTask() {
   return useMutation({
     mutationFn: async (taskId: string) => {
       const { error } = await supabase.from('tasks').delete().eq('id', taskId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
+  })
+}
+
+export function useLockTask() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ taskId, locked }: { taskId: string; locked: boolean }) => {
+      const { error } = await supabase.from('tasks').update({ locked }).eq('id', taskId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
+  })
+}
+
+export function useUpdateTaskDueDate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ taskId, dueAt }: { taskId: string; dueAt: string | null }) => {
+      const { error } = await supabase.from('tasks').update({ due_at: dueAt }).eq('id', taskId)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks'] }),

@@ -182,30 +182,13 @@ export async function createGroupConversation(
   memberIds: string[],
   name: string,
 ): Promise<string> {
-  const { data: conv, error: convError } = await supabase
-    .from('conversations')
-    .insert({ type: 'group', name, created_by: userId })
-    .select('id')
-    .single()
-
-  if (convError || !conv) throw convError ?? new Error('Failed to create group conversation')
-
-  // Insert creator first (RLS requires creator to exist as owner before adding others)
-  const { error: ownerError } = await supabase
-    .from('conversation_members')
-    .insert({ conversation_id: conv.id, user_id: userId, role: 'owner' })
-
-  if (ownerError) throw ownerError
-
   const otherMembers = Array.from(new Set(memberIds)).filter((uid) => uid !== userId)
-  if (otherMembers.length > 0) {
-    const { error: memberError } = await supabase
-      .from('conversation_members')
-      .insert(otherMembers.map((uid) => ({ conversation_id: conv.id, user_id: uid, role: 'member' })))
-    if (memberError) throw memberError
-  }
-
-  return conv.id
+  const { data, error } = await supabase.rpc('create_group_conversation', {
+    p_name: name || 'Group',
+    p_member_ids: otherMembers,
+  })
+  if (error) throw error
+  return data as string
 }
 
 export async function searchUsers(query: string, currentUserId: string): Promise<Profile[]> {
@@ -258,6 +241,23 @@ export async function deleteConversation(conversationId: string, userId: string)
     .delete()
     .eq('conversation_id', conversationId)
     .eq('user_id', userId)
+  if (error) throw error
+}
+
+export async function promoteMemberToAdmin(conversationId: string, targetUserId: string): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase.from('conversation_members') as any)
+    .update({ role: 'admin' })
+    .eq('conversation_id', conversationId)
+    .eq('user_id', targetUserId)
+  if (error) throw error
+}
+
+export async function deleteGroupForEveryone(conversationId: string): Promise<void> {
+  const { error } = await supabase
+    .from('conversations')
+    .delete()
+    .eq('id', conversationId)
   if (error) throw error
 }
 

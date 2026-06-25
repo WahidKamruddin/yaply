@@ -1,25 +1,27 @@
 import { useState, useRef } from 'react'
-import { Image, ArrowLeft, Trash2, Plus, X, Upload, Check, Link2 } from 'lucide-react'
+import { Image, ArrowLeft, Trash2, Plus, X, Upload, Check, Link2, Lock, Unlock } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { Album } from '../../hooks/useAlbums'
-import { useAlbums, useAlbumMedia, useAddAlbumMedia, useCreateAlbum, useDeleteAlbum, useConversationImages } from '../../hooks/useAlbums'
+import { useAlbums, useAlbumMedia, useAddAlbumMedia, useCreateAlbum, useDeleteAlbum, useConversationImages, useLockAlbum } from '../../hooks/useAlbums'
 import { useEvents, useLinkToEvent } from '../../hooks/useEvents'
 import { uploadMediaFile } from '@/features/media/api/upload'
 
 interface Props {
   conversationId: string
   currentUserId: string
+  isCurrentUserAdmin: boolean
 }
 
 type PhotoTab = 'chat' | 'device'
 
-function AlbumGallery({ album, conversationId, currentUserId, onBack }: { album: Album; conversationId: string; currentUserId: string; onBack: () => void }) {
+function AlbumGallery({ album, conversationId, currentUserId, isCurrentUserAdmin, onBack }: { album: Album; conversationId: string; currentUserId: string; isCurrentUserAdmin: boolean; onBack: () => void }) {
   const { data: media = [], isLoading } = useAlbumMedia(album.id)
   const { mutate: addMedia, isPending: adding } = useAddAlbumMedia()
   const { data: chatImages = [] } = useConversationImages(conversationId)
   const { data: events = [] } = useEvents(conversationId)
   const { mutate: linkToEvent, isPending: linking } = useLinkToEvent()
   const { mutate: deleteAlbum } = useDeleteAlbum()
+  const { mutate: lockAlbum } = useLockAlbum()
 
   const [showAddPhotos, setShowAddPhotos] = useState(false)
   const [photoTab, setPhotoTab] = useState<PhotoTab>('chat')
@@ -29,7 +31,8 @@ function AlbumGallery({ album, conversationId, currentUserId, onBack }: { album:
   const [pendingDelete, setPendingDelete] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const canDelete = album.created_by === currentUserId
+  const canDelete = album.created_by === currentUserId || isCurrentUserAdmin
+  const isLocked = album.locked
   const existingUrls = new Set(media.map((m) => m.media_url))
   const availableChatImages = chatImages.filter((img) => !existingUrls.has(img.media_url))
 
@@ -84,10 +87,19 @@ function AlbumGallery({ album, conversationId, currentUserId, onBack }: { album:
           <p className="text-[10px] text-[#b0c0d8]">by {album.creator?.display_name ?? album.creator?.username ?? 'Unknown'}</p>
         </div>
         <div className="flex items-center gap-1.5">
+          {isCurrentUserAdmin && (
+            <button
+              onClick={() => lockAlbum({ albumId: album.id, locked: !isLocked })}
+              title={isLocked ? 'Unlock album' : 'Lock album'}
+              className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${isLocked ? 'text-amber-400' : 'text-[#c5d5e8] hover:text-amber-400'}`}
+            >
+              {isLocked ? <Unlock size={14} /> : <Lock size={14} />}
+            </button>
+          )}
           <button
-            onClick={() => canDelete && setPendingDelete(true)}
-            disabled={!canDelete}
-            className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+            onClick={() => canDelete && !(isLocked && !isCurrentUserAdmin) && setPendingDelete(true)}
+            disabled={!canDelete || (isLocked && !isCurrentUserAdmin)}
+            className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${canDelete && !(isLocked && !isCurrentUserAdmin) ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
             title="Delete album"
           >
             <Trash2 size={14} />
@@ -292,7 +304,7 @@ function CreateAlbumForm({ conversationId, currentUserId, onDone }: { conversati
   )
 }
 
-export default function AlbumList({ conversationId, currentUserId }: Props) {
+export default function AlbumList({ conversationId, currentUserId, isCurrentUserAdmin }: Props) {
   const { data: albums = [], isLoading } = useAlbums(conversationId)
   const [selected, setSelected] = useState<Album | null>(null)
   const [creating, setCreating] = useState(false)
@@ -303,6 +315,7 @@ export default function AlbumList({ conversationId, currentUserId }: Props) {
         album={selected}
         conversationId={conversationId}
         currentUserId={currentUserId}
+        isCurrentUserAdmin={isCurrentUserAdmin}
         onBack={() => setSelected(null)}
       />
     )
@@ -343,7 +356,10 @@ export default function AlbumList({ conversationId, currentUserId }: Props) {
                     <Image size={24} className="text-[#9ab0cc]" />
                   )}
                 </div>
-                <p className="text-xs font-medium text-[#1a2744] truncate w-full text-center">{a.name}</p>
+                <div className="flex items-center justify-center gap-1">
+                  {a.locked && <Lock size={9} className="text-amber-400 flex-shrink-0" />}
+                  <p className="text-xs font-medium text-[#1a2744] truncate text-center">{a.name}</p>
+                </div>
                 <p className="text-[10px] text-[#b0c0d8] text-center">by {a.creator?.display_name ?? a.creator?.username ?? 'Unknown'}</p>
               </button>
             )

@@ -11,6 +11,7 @@ export interface Event {
   status: 'planning' | 'confirmed'
   starts_at: string | null
   ends_at: string | null
+  locked: boolean
   created_at: string
   updated_at: string
   creator: { display_name: string | null; username: string | null } | null
@@ -125,6 +126,31 @@ export function useConfirmEventTime(eventId: string) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['events'] })
     },
+  })
+}
+
+export function useLockEvent() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ eventId, locked }: { eventId: string; locked: boolean }) => {
+      const { error } = await supabase.from('events').update({ locked }).eq('id', eventId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
+  })
+}
+
+export function useUpdateEventTime() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ eventId, startsAt, endsAt }: { eventId: string; startsAt: string; endsAt?: string }) => {
+      const { error } = await supabase
+        .from('events')
+        .update({ starts_at: startsAt, ends_at: endsAt ?? null, updated_at: new Date().toISOString() })
+        .eq('id', eventId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
   })
 }
 

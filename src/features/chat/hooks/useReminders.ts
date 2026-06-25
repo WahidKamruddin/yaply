@@ -9,6 +9,7 @@ export interface Reminder {
   message: string
   remind_at: string
   status: 'pending' | 'sent' | 'dismissed'
+  locked: boolean
   created_at: string
   creator: {
     display_name: string | null
@@ -64,6 +65,28 @@ export function useDismissReminder() {
         .from('reminders')
         .update({ status: 'dismissed' })
         .eq('id', reminderId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reminders'] }),
+  })
+}
+
+export function useLockReminder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ reminderId, locked }: { reminderId: string; locked: boolean }) => {
+      const { error } = await supabase.from('reminders').update({ locked }).eq('id', reminderId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reminders'] }),
+  })
+}
+
+export function useUpdateReminderTime() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ reminderId, remindAt }: { reminderId: string; remindAt: string }) => {
+      const { error } = await supabase.from('reminders').update({ remind_at: remindAt, status: 'pending' }).eq('id', reminderId)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reminders'] }),
