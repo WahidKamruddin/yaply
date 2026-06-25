@@ -1,7 +1,20 @@
 [build]
+  base = "."
   command = "vite build"
   publish = "dist/client"
+
+[build.environment]
+  NODE_VERSION = "22"
+
 [dev]
   command = "npm run dev"
   targetPort = 3000
   port = 8888
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
