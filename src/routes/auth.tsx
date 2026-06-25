@@ -2,6 +2,7 @@ import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getSession } from '@/lib/auth'
+import YaplyLogo from '@/components/YaplyLogo'
 
 export const Route = createFileRoute('/auth')({
   beforeLoad: async () => {
@@ -59,8 +60,10 @@ function AuthPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-[#5b8def] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-[#5b8def]/20">
-            <span className="text-white font-bold text-3xl">y</span>
+          <div className="flex justify-center mb-4">
+            <div className="shadow-xl shadow-[#3b6fd4]/30 rounded-[18px]">
+              <YaplyLogo size={64} variant="app-icon" />
+            </div>
           </div>
           <h1 className="text-2xl font-bold text-[#1a2744]">yaply</h1>
           <p className="text-[#9ab0cc] text-sm mt-1">
