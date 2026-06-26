@@ -1,5 +1,35 @@
 @import "tailwindcss";
 
+/* ── Mobile / iOS safe-area utilities ─────────────────────────────── */
+:root {
+  --safe-top:    env(safe-area-inset-top,    0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left,   0px);
+  --safe-right:  env(safe-area-inset-right,  0px);
+}
+
+/* Prevent iOS rubber-band scroll on the root */
+html, body, #app { touch-action: pan-y; }
+
+/* Remove blue tap flash on all tappable elements */
+* { -webkit-tap-highlight-color: transparent; }
+
+/* Bottom safe-area padding helpers */
+.pb-safe   { padding-bottom: var(--safe-bottom); }
+.mb-safe   { margin-bottom:  var(--safe-bottom); }
+
+/* Prevent iOS input zoom: keep font-size ≥ 16px on mobile inputs */
+@media (max-width: 767px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* Hide scrollbars on mobile (touch devices scroll natively) */
+@media (max-width: 767px) {
+  ::-webkit-scrollbar { display: none; }
+}
+
 @theme {
   --color-background: #edf1fa;
   --color-surface: #ffffff;

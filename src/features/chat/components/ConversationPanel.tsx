@@ -62,7 +62,7 @@ export default function ConversationPanel({ conversationId, currentUserId, membe
   const isSecondaryActive = SECONDARY_TABS.some((t) => t.id === activeTab)
 
   return (
-    <div className="flex flex-col w-72 flex-shrink-0 h-full bg-white border-l border-[#dce7f8]">
+    <div className="flex flex-col w-full md:w-72 md:flex-shrink-0 h-full bg-white border-l border-[#dce7f8] absolute inset-0 z-10 md:relative md:inset-auto md:z-auto">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#dce7f8]">
         <span className="text-sm font-semibold text-[#1a2744]">Details</span>

@@ -83,10 +83,17 @@ function ChatPage() {
       <NotificationBanner notification={notification} onDismiss={dismiss} />
       <DragDropZone
         onFileDrop={(file) => void handleFileDrop(file)}
-        className="h-screen flex overflow-hidden"
+        className="h-[100dvh] flex overflow-hidden"
       >
-        <ConversationList currentUserId={user.id} userEmail={user.email ?? ''} className="w-72 flex-shrink-0" />
-        <ChatView currentUserId={user.id} userEmail={user.email ?? ''} />
+        {/* Sidebar: full-screen on mobile when no chat is open; fixed 288px column on ≥ md */}
+        <div className={`flex-col h-full w-full md:w-72 md:flex-shrink-0 ${activeConvId ? 'hidden md:flex' : 'flex'}`}>
+          <ConversationList currentUserId={user.id} userEmail={user.email ?? ''} />
+        </div>
+
+        {/* Chat: full-screen on mobile when a conversation is open; flex-1 column on ≥ md */}
+        <div className={`flex-1 min-w-0 overflow-hidden ${activeConvId ? 'flex' : 'hidden md:flex'}`}>
+          <ChatView currentUserId={user.id} userEmail={user.email ?? ''} />
+        </div>
       </DragDropZone>
     </CommandProvider>
   )

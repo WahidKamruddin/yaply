@@ -157,7 +157,7 @@ export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyp
   )
 
   return (
-    <div className="border-t border-[#dce7f8] bg-white px-4 py-3">
+    <div className="border-t border-[#dce7f8] bg-white px-4 pt-3" style={{ paddingBottom: `max(0.75rem, var(--safe-bottom))` }}>
       {/* Reply strip */}
       {replyMessage && (
         <div className="flex items-center justify-between mb-2 px-3 py-2 bg-[#edf3ff] rounded-lg border-l-2 border-[#5b8def]">

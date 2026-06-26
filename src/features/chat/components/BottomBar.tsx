@@ -35,7 +35,7 @@ export default function BottomBar({ userId, userEmail }: Props) {
 
   return (
     <>
-      <div className="flex items-center gap-2 px-3 py-2.5 border-t border-[#dce7f8] bg-white">
+      <div className="flex items-center gap-2 px-3 pt-2.5 pb-safe border-t border-[#dce7f8] bg-white" style={{ paddingBottom: `max(0.625rem, var(--safe-bottom))` }}>
         <button
           onClick={() => setShowProfile(true)}
           className="flex items-center gap-2.5 flex-1 min-w-0 hover:opacity-75 transition-opacity text-left"

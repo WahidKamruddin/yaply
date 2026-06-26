@@ -10,10 +10,9 @@ import BottomBar from './BottomBar'
 interface Props {
   currentUserId: string
   userEmail: string
-  className?: string
 }
 
-export default function ConversationList({ currentUserId, userEmail, className = '' }: Props) {
+export default function ConversationList({ currentUserId, userEmail }: Props) {
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [activeId, setActiveId] = useAtom(activeConversationIdAtom)
@@ -26,9 +25,9 @@ export default function ConversationList({ currentUserId, userEmail, className =
   })
 
   return (
-    <div className={`flex flex-col h-full bg-white border-r border-[#dce7f8] ${className}`}>
+    <div className="flex flex-col h-full bg-white border-r border-[#dce7f8]">
       {/* Header */}
-      <div className="px-4 pt-5 pb-3 border-b border-[#dce7f8]">
+      <div className="px-4 pb-3 border-b border-[#dce7f8]" style={{ paddingTop: `max(1.25rem, var(--safe-top))` }}>
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-bold text-[#1a2744]">Messages</h1>
           <button

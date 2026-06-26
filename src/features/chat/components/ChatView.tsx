@@ -423,7 +423,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
           <Info size={28} strokeWidth={1.5} className="text-[#5b8def]/50" />
         </div>
         <p className="text-sm font-medium text-[#6b84ab]">Select a conversation</p>
-        <p className="text-xs mt-1">Choose from the list on the left</p>
+        <p className="text-xs mt-1 hidden md:block">Choose from the list on the left</p>
       </div>
     )
   }
@@ -441,9 +441,9 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
     <div className="flex-1 flex flex-row h-full overflow-hidden">
     <div className="flex-1 flex flex-col h-full bg-[#edf1fa] overflow-hidden relative">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#dce7f8] bg-white">
-        <button onClick={() => setActiveId(null)} className="md:hidden text-[#9ab0cc] hover:text-[#1a2744] mr-1">
-          <ArrowLeft size={20} />
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#dce7f8] bg-white" style={{ paddingTop: `max(0.75rem, var(--safe-top))` }}>
+        <button onClick={() => setActiveId(null)} className="md:hidden -ml-1 w-10 h-10 flex items-center justify-center rounded-full text-[#9ab0cc] active:bg-[#edf1fa] transition-colors">
+          <ArrowLeft size={22} />
         </button>
         <div className="relative flex-shrink-0 w-9 h-9">
           {avatarSrc ? (
