@@ -119,7 +119,7 @@ export function useReminderNotifications(currentUserId: string) {
 
         if (!data?.length) return
 
-        if (Notification.permission === 'granted') {
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
           for (const reminder of data) {
             new Notification('yaply reminder', { body: reminder.message, icon: '/favicon.ico' })
           }
@@ -134,7 +134,7 @@ export function useReminderNotifications(currentUserId: string) {
       }
     }
 
-    if (Notification.permission === 'default') {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       void Notification.requestPermission()
     }
 
