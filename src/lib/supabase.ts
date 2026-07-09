@@ -13,7 +13,10 @@ import type { Database } from './database.types.js'
 
 const supabaseUrl = import.meta.env['VITE_SUPABASE_URL'] as string | undefined
 const supabaseAnonKey = import.meta.env['VITE_SUPABASE_ANON_KEY'] as string | undefined
-const devBypass = import.meta.env['VITE_DEV_BYPASS_AUTH'] === 'true'
+// Gated on import.meta.env.DEV so the stub client is never produced in a
+// production build, regardless of the VITE_DEV_BYPASS_AUTH value.
+const devBypass =
+  import.meta.env.DEV && import.meta.env['VITE_DEV_BYPASS_AUTH'] === 'true'
 
 if (!devBypass && (!supabaseUrl || !supabaseAnonKey)) {
   throw new Error(

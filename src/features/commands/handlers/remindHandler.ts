@@ -18,6 +18,8 @@ export async function remindHandler({ conversationId, createdBy, args }: RemindA
   const remindAt = parseDateTimeArgs(dateStr!, timeStr!)
   if (!remindAt) return `Couldn't parse date/time. Use today, tomorrow, or MM/DD/YYYY and HH:MM or HH:MMam/pm.\nExample: /remind tomorrow 3:00pm Call Alice`
 
+  if (remindAt.getTime() <= Date.now()) return `That time is in the past. Pick a future date/time.`
+
   const { error } = await supabase.from('reminders').insert({
     conversation_id: conversationId,
     user_id: createdBy,

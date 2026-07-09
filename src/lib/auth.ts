@@ -1,7 +1,11 @@
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 
-export const DEV_BYPASS = import.meta.env['VITE_DEV_BYPASS_AUTH'] === 'true'
+// Hard-gated on import.meta.env.DEV so a production build (where DEV is
+// statically false) compiles this to `false` and strips the bypass entirely —
+// a misconfigured VITE_DEV_BYPASS_AUTH=true in prod can never disable auth.
+export const DEV_BYPASS =
+  import.meta.env.DEV && import.meta.env['VITE_DEV_BYPASS_AUTH'] === 'true'
 
 export const DEV_USER: User = {
   id: 'dev-user-00000000-0000-0000-0000-000000000000',
