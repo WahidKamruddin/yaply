@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCheck, Reply, Trash2, AlertCircle, Smile, MessageSquarePlus, MessageSquare, BookImage } from 'lucide-react'
+import { CheckCheck, Reply, Trash2, AlertCircle, Smile, MessageSquarePlus, MessageSquare, BookImage, Lock } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { DecryptedMessage } from '@/features/chat/types'
 import type { ReactionGroup } from '@/features/chat/api/reactions'
@@ -207,6 +207,8 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                       ? '📷 Photo'
                       : replyMessage.type === 'gif'
                       ? 'GIF'
+                      : replyMessage.decryptFailed
+                      ? '🔒 Encrypted message'
                       : replyMessage.content.slice(0, 80)}
                   </p>
                 </div>
@@ -238,6 +240,11 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                 >
                   📎 Download file
                 </a>
+              ) : message.decryptFailed ? (
+                <span className={`flex items-center gap-1.5 text-xs italic ${isOwn ? 'text-white/70' : 'text-[#9ab0cc]'}`}>
+                  <Lock size={12} className="flex-shrink-0" />
+                  Couldn't decrypt this message
+                </span>
               ) : (
                 <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{message.content}</p>
               )}

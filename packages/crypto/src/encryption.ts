@@ -12,6 +12,15 @@ export async function generateKeyPair(): Promise<{
   return { publicKeyJwk, privateKeyJwk }
 }
 
+// Stable identifier for a P-256 public key — the JWK x/y coordinates.
+// Used to detect identity-key rotation so cached derived keys are never
+// trusted against a public key that has since changed.
+export function publicKeyFingerprint(pubJwk: JsonWebKey): string {
+  const jwk = asJwk(pubJwk)
+  if (!jwk.x || !jwk.y) throw new Error('[yaply-crypto] fingerprint requires a public EC JWK')
+  return `${jwk.x}.${jwk.y}`
+}
+
 function asJwk(v: JsonWebKey | string | unknown): JsonWebKey {
   if (v == null) throw new Error('[yaply-crypto] asJwk received null/undefined')
   const obj = typeof v === 'string' ? JSON.parse(v) : v

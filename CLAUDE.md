@@ -119,9 +119,13 @@ The GCM tag is appended to the ciphertext (Web Crypto AES-GCM bundles them). Thi
 
 **Key derivation:** Web Crypto's `deriveKey(ECDH)` for AES-GCM-256 uses the raw 32-byte ECDH shared secret (x-coordinate of the shared EC point) directly as the AES key — no HKDF is applied. iOS/Android must mirror this exactly.
 
-**Key storage:** Private key and derived shared keys are stored in **IndexedDB** via the `idb` library (browser equivalent of a local database). Store name `identity` holds the keypair JWKs; store name `derived` holds cached per-conversation AES keys keyed by conversation ID.
+**Key storage:** Private key and derived shared keys are stored in **IndexedDB** via the `idb` library (browser equivalent of a local database), DB `yaply-keys` version 2. Store `identity` holds the keypair JWKs **scoped per user** (`pub:<userId>` / `priv:<userId>` — v1 stored one unscoped pair, which leaked across account switches). Store `derived` holds cached AES keys keyed by `<userId>:<conversationId>:<peerUserId>`, each stored **with the fingerprints (JWK x.y) of both public keys it was derived from**.
 
-**Fallback (phase-1):** If either party has no key established yet, the client encodes the plaintext instead of encrypting. **Always use `TextEncoder` / `TextDecoder` for phase-1 encoding — never `btoa()` / `atob()`.** `btoa()` breaks on any non-Latin-1 character (emoji, CJK, etc.). Decryption tries AES-GCM first, falls back to `new TextDecoder().decode(Uint8Array.from(atob(content), c => c.charCodeAt(0)))`, then falls back to returning the raw string.
+**Key rotation & cache invalidation (critical):** IndexedDB is per-origin, so a new origin/browser/cleared-storage regenerates the identity keypair and overwrites the user's `devices` row (rotation). To survive this, `getSharedKey` always fetches the peer's current public key and rejects any cached derived key whose fingerprints no longer match — it re-derives instead. On an AES-GCM decrypt failure it retries once against a freshly fetched peer key (handles mid-session rotation). If decryption still fails, the UI shows an explicit "Couldn't decrypt this message" state (`DecryptedMessage.decryptFailed`) — **never** raw ciphertext or `atob()` garbage. Messages encrypted under a rotated-away key are permanently unrecoverable and stay in this state. On upgrade from v1, a legacy unscoped keypair is adopted for the current user only if its fingerprint still matches the published `devices.identity_key`. iOS must mirror this fingerprint-validation behavior.
+
+**Groups are NOT E2E encrypted:** pairwise ECDH cannot key a group. Group conversations always send via the phase-1 base64 path (`iv = NULL`). Encrypted inbound group messages (legacy) are decrypted per-sender pairwise; own legacy group messages render as decrypt-failed. A real group-key scheme (see dormant `key_exchanges` design) is future work.
+
+**Fallback (phase-1):** If either party has no key established yet (or the conversation is a group), the client encodes the plaintext instead of encrypting. **Always use `TextEncoder` / `TextDecoder` for phase-1 encoding — never `btoa()` / `atob()`.** `btoa()` breaks on any non-Latin-1 character (emoji, CJK, etc.). Decryption: messages with `iv = NULL` are decoded via `new TextDecoder().decode(Uint8Array.from(atob(content), c => c.charCodeAt(0)))`; messages **with** an `iv` are AES-GCM only — on failure (after the one fresh-key retry) they surface `decryptFailed`, never a decoded-garbage fallback.
 
 **Why Web Crypto and not a JS crypto library (e.g. TweetNaCl, forge):**
 - Web Crypto is built into every modern browser — no bundle size cost.
@@ -133,7 +137,7 @@ The project is a pnpm workspace monorepo with two internal packages:
 
 | Package | Path | Contents |
 |---------|------|---------|
-| `@yaply/crypto` | `packages/crypto/` | `generateKeyPair`, `deriveSharedKey`, `encryptMessage`, `decryptMessage`, `storeIdentityKeyPair`, `loadIdentityKeyPair`, `storeDerivedKey`, `loadDerivedKey`, `clearAllKeys` |
+| `@yaply/crypto` | `packages/crypto/` | `generateKeyPair`, `deriveSharedKey`, `encryptMessage`, `decryptMessage`, `publicKeyFingerprint`, `storeIdentityKeyPair(userId, …)`, `loadIdentityKeyPair(userId)`, `loadLegacyIdentityKeyPair`, `clearLegacyIdentityKeyPair`, `storeDerivedKey(cacheKey, {key,myFp,theirFp})`, `loadDerivedKey(cacheKey)`, `clearDerivedKeys`, `clearAllKeys` |
 | `@yaply/shared` | `packages/shared/` | TypeScript type definitions, constants, validators |
 
 **Why a monorepo:** The iOS and Android apps will need to understand the same data shapes. `packages/shared/types.ts` is the canonical type reference. The `packages/crypto` package documents the encryption contract that all platforms must implement (even though iOS and Android use different crypto libraries, the same wire format and key derivation logic applies).
@@ -192,7 +196,7 @@ created_at      timestamptz
 
 **`profiles` table:** id, username, display_name, avatar_url, bio, public_key, is_online, last_seen_at, created_at, updated_at.
 
-**`devices` table:** user_id, device_id (int), identity_key (JSON — JWK format public key).
+**`devices` table:** user_id, device_id (int), identity_key (text — JSON-stringified JWK public key), signed_prekey, device_name, push_subscription, last_active_at, created_at. UNIQUE(user_id, device_id); the client always upserts `device_id = 1`. RLS: owner can manage own rows; any authenticated user can read (needed for ECDH). Codified in migration `00027_create_devices.sql` (the live DB created it as its own remote-side migration `00002` — do not re-apply).
 
 **`notes` table:** `id, user_id, conversation_id, title, content, created_at, updated_at` — RLS: `user_id = auth.uid()` (owner only).
 

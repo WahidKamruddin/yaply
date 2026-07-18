@@ -52,6 +52,10 @@ export interface DecryptedMessage {
   conversationId: string
   senderId: string | null
   content: string
+  // True when the message has an iv but no valid key could decrypt it
+  // (e.g. a peer rotated identity keys). content is '' in that case and the
+  // UI renders an explicit failure state.
+  decryptFailed?: boolean
   type: string
   mediaUrl: string | null
   replyToId: string | null

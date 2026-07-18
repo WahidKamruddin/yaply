@@ -84,6 +84,9 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
   const decryptedIdsRef = useRef<string[]>([])
   // Maps tempId → realId so pending messages are removed only once the real message lands in decrypted
   const pendingConfirmedRef = useRef<Map<string, string>>(new Map())
+  // Per-conversation plaintext cache so new messages don't re-decrypt the whole
+  // history. null = decryption failed for that message.
+  const decryptCacheRef = useRef<Map<string, string | null>>(new Map())
 
   const { data: conversations = [] } = useConversations(currentUserId)
   const conversation = conversations.find((c) => c.id === activeId) ?? null
@@ -116,6 +119,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
   useEffect(() => {
     setPendingMessages([])
     pendingConfirmedRef.current.clear()
+    decryptCacheRef.current.clear()
     initialScrollRef.current = true
     isNearBottomRef.current = true
     setNewMsgCount(0)
@@ -123,10 +127,10 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
 
   // Eagerly derive the shared key when a direct conversation opens so the first send is instant
   useEffect(() => {
-    if (activeId && otherMember?.userId) {
+    if (activeId && otherMember?.userId && !conversation?.isGroup) {
       void preDeriveKey(activeId, otherMember.userId)
     }
-  }, [activeId, otherMember?.userId, preDeriveKey])
+  }, [activeId, otherMember?.userId, conversation?.isGroup, preDeriveKey])
 
   const allMessages = useMemo(() => [...decrypted, ...pendingMessages], [decrypted, pendingMessages])
 
@@ -158,27 +162,54 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
       return
     }
 
+    const abort = { current: false }
+    const isAborted = () => abort.current
+
     async function run() {
+      const isGroup = conversation?.isGroup ?? false
       const results: DecryptedMessage[] = []
       for (const msg of allDbMessages) {
         let content = msg.content
-        const senderId = msg.sender_id
-        // ECDH is symmetric — sender and recipient derive the same shared key.
-        // For own messages, decrypt using the other member's ID so sent messages
-        // aren't displayed as raw ciphertext after the optimistic pending is removed.
-        const otherId = senderId !== currentUserId ? senderId : otherMember?.userId ?? null
-        if (otherId && msg.iv) {
-          try {
-            content = await decrypt(activeId!, otherId, msg.content, msg.iv)
-          } catch {
-            try { content = atob(msg.content) } catch { /* keep raw */ }
+        let decryptFailed = false
+        const cacheKey = `${msg.id}:${msg.edited_at ?? ''}`
+        const cachedPlain = decryptCacheRef.current.get(cacheKey)
+
+        if (cachedPlain !== undefined) {
+          if (cachedPlain === null) {
+            decryptFailed = true
+            content = ''
+          } else {
+            content = cachedPlain
           }
+        } else if (!msg.iv) {
+          // Phase-1 fallback / system messages: content is plain base64.
+          try {
+            const bytes = Uint8Array.from(atob(msg.content), (c) => c.charCodeAt(0))
+            content = new TextDecoder().decode(bytes)
+          } catch { /* keep raw */ }
+          decryptCacheRef.current.set(cacheKey, content)
         } else {
-          if (!msg.iv) {
+          // Encrypted message. Pairwise ECDH peer: the sender for inbound
+          // messages; for own messages the other member (direct chats only —
+          // ECDH symmetry yields the same shared key on both sides).
+          const senderId = msg.sender_id
+          const peerId = senderId && senderId !== currentUserId
+            ? senderId
+            : (!isGroup ? otherMember?.userId ?? null : null)
+          if (peerId) {
             try {
-              const bytes = Uint8Array.from(atob(msg.content), (c) => c.charCodeAt(0))
-              content = new TextDecoder().decode(bytes)
-            } catch { /* keep raw */ }
+              content = await decrypt(activeId!, peerId, msg.content, msg.iv)
+              decryptCacheRef.current.set(cacheKey, content)
+            } catch {
+              decryptFailed = true
+              content = ''
+              decryptCacheRef.current.set(cacheKey, null)
+            }
+          } else {
+            // No peer to derive against (e.g. own message in a group from the
+            // legacy encrypt path). Don't cache — the peer may still load.
+            decryptFailed = true
+            content = ''
           }
         }
         results.push({
@@ -186,6 +217,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
           conversationId: msg.conversation_id,
           senderId: msg.sender_id,
           content,
+          decryptFailed,
           type: msg.type,
           mediaUrl: msg.media_url,
           replyToId: msg.reply_to_id,
@@ -196,6 +228,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
           senderProfile: msg.sender_profile,
         })
       }
+      if (isAborted()) return
       setDecrypted(results)
       decryptedIdsRef.current = results.map((m) => m.id)
 
@@ -215,12 +248,13 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
       }
 
       const raw = await fetchReactions(decryptedIdsRef.current)
+      if (isAborted()) return
       setReactionsMap(buildReactionGroups(raw, currentUserId))
     }
 
     void run()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allDbMessages, activeId])
+    return () => { abort.current = true }
+  }, [allDbMessages, activeId, currentUserId, otherMember?.userId, conversation?.isGroup, decrypt])
 
   // Realtime reactions subscription
   useEffect(() => {
@@ -327,7 +361,9 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
       }, 500)
     })
 
-    const targetUserId = otherMember?.userId
+    // Pairwise ECDH only works for direct chats — group messages use the
+    // phase-1 base64 path until a real group-key scheme exists.
+    const targetUserId = conversation?.isGroup ? undefined : otherMember?.userId
     const textBytes = new TextEncoder().encode(text)
     let content = btoa(Array.from(textBytes, (b) => String.fromCharCode(b)).join(''))
     let iv: string | null = null
@@ -345,7 +381,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
         onError: () => setPendingMessages((prev) => prev.filter((m) => m.id !== tempId)),
       },
     )
-  }, [activeId, currentUserId, currentUserProfile, encrypt, otherMember?.userId, replyId, replyMessage?.threadId, send, setReplyId])
+  }, [activeId, currentUserId, currentUserProfile, encrypt, otherMember?.userId, conversation?.isGroup, replyId, replyMessage?.threadId, send, setReplyId])
 
   const handleDelete = useCallback(async (messageId: string) => {
     await deleteMessage(messageId)
@@ -657,6 +693,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
           rootMessage={threadViewRoot}
           currentUserId={currentUserId}
           conversationId={activeId}
+          peerUserId={conversation.isGroup ? null : otherMember?.userId ?? null}
           onClose={() => setThreadViewRoot(null)}
         />
       )}

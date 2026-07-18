@@ -11,10 +11,12 @@ interface Props {
   rootMessage: DecryptedMessage
   currentUserId: string
   conversationId: string
+  // The other member of a direct chat; null for groups (no pairwise E2E).
+  peerUserId: string | null
   onClose: () => void
 }
 
-export default function ThreadView({ rootMessage, currentUserId, conversationId, onClose }: Props) {
+export default function ThreadView({ rootMessage, currentUserId, conversationId, peerUserId, onClose }: Props) {
   const [replies, setReplies] = useState<DecryptedMessage[]>([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -27,17 +29,35 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
     const decrypted: DecryptedMessage[] = []
     for (const msg of raw) {
       let content = msg.content
-      if (msg.sender_id && msg.sender_id !== currentUserId) {
-        try { content = await decrypt(conversationId, msg.sender_id, msg.content, msg.iv) }
-        catch { try { content = atob(msg.content) } catch { /* keep raw */ } }
+      let decryptFailed = false
+      if (!msg.iv) {
+        // Phase-1 fallback: plain base64.
+        try {
+          const bytes = Uint8Array.from(atob(msg.content), (c) => c.charCodeAt(0))
+          content = new TextDecoder().decode(bytes)
+        } catch { /* keep raw */ }
       } else {
-        try { content = msg.iv ? msg.content : atob(msg.content) } catch { /* keep raw */ }
+        // Encrypted: peer is the sender for inbound, the DM partner for own
+        // messages (ECDH symmetry). No peer in groups → explicit failure.
+        const peerId = msg.sender_id && msg.sender_id !== currentUserId ? msg.sender_id : peerUserId
+        if (peerId) {
+          try {
+            content = await decrypt(conversationId, peerId, msg.content, msg.iv)
+          } catch {
+            decryptFailed = true
+            content = ''
+          }
+        } else {
+          decryptFailed = true
+          content = ''
+        }
       }
       decrypted.push({
         id: msg.id,
         conversationId: msg.conversation_id,
         senderId: msg.sender_id,
         content,
+        decryptFailed,
         type: msg.type,
         mediaUrl: msg.media_url,
         replyToId: msg.reply_to_id,
@@ -49,7 +69,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
       })
     }
     setReplies(decrypted)
-  }, [rootMessage.id, conversationId, currentUserId, decrypt])
+  }, [rootMessage.id, conversationId, currentUserId, peerUserId, decrypt])
 
   useEffect(() => { void loadReplies() }, [loadReplies])
 
@@ -72,15 +92,13 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
     setSending(true)
     setText('')
 
-    const otherUserId = replies.find(r => r.senderId && r.senderId !== currentUserId)?.senderId
-      ?? (rootMessage.senderId && rootMessage.senderId !== currentUserId ? rootMessage.senderId : null)
-
     setSendError(null)
     try {
       let content = trimmed
       let iv: string | null = null
-      if (otherUserId) {
-        const enc = await encrypt(conversationId, otherUserId, trimmed)
+      // Encrypt only in direct chats — groups use the phase-1 base64 path.
+      if (peerUserId) {
+        const enc = await encrypt(conversationId, peerUserId, trimmed)
         content = enc.content
         iv = enc.iv || null
       } else {
@@ -104,7 +122,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
     }
 
     setSending(false)
-  }, [text, sending, replies, rootMessage, conversationId, currentUserId, encrypt, loadReplies])
+  }, [text, sending, rootMessage, conversationId, currentUserId, peerUserId, encrypt, loadReplies])
 
   const rootName = rootMessage.senderProfile?.display_name ?? rootMessage.senderProfile?.username ?? 'Unknown'
   const rootTime = formatDistanceToNow(new Date(rootMessage.createdAt), { addSuffix: true })
