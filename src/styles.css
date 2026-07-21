@@ -30,27 +30,95 @@ html, body, #app { touch-action: pan-y; }
   ::-webkit-scrollbar { display: none; }
 }
 
+/* Self-hosted Bricolage Grotesque — same variable-weight file the landing
+   and auth pages load, now declared once globally so any app component can
+   reach for `font-display` instead of duplicating the @font-face per page. */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  src: url('/fonts/BricolageGrotesque-var-latin.woff2') format('woff2-variations');
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+/* Design tokens are declared twice on purpose:
+   - `@theme` registers the Tailwind color name (generates bg-background,
+     text-text-muted, etc.) but its value must be static at build time.
+   - Each token's actual value lives in a runtime custom property below,
+     with dark values on :root and light overrides under .light — this is
+     what lets a single `bg-background` utility repaint when the `.light`
+     class is toggled on <html>, instead of baking one theme in forever. */
 @theme {
-  --color-background: #edf1fa;
-  --color-surface: #ffffff;
-  --color-surface-2: #f3f7ff;
-  --color-card: #ffffff;
-  --color-card-hover: #f5f8ff;
-  --color-border: #dce7f8;
-  --color-primary: #5b8def;
-  --color-primary-dark: #4a7de4;
-  --color-primary-darker: #3a6ed9;
-  --color-primary-light: #edf3ff;
+  --color-background: var(--bg);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-tint: var(--tint);
+  --color-tint-strong: var(--tint-strong);
+  --color-primary: var(--primary);
+  --color-primary-dark: var(--primary-dark);
+  --color-primary-tint: var(--primary-tint);
+  --color-primary-tint-strong: var(--primary-tint-strong);
+  --color-primary-text: var(--primary-text);
   --color-primary-foreground: #ffffff;
-  --color-text: #1a2744;
-  --color-text-muted: #6b84ab;
-  --color-text-subtle: #9ab0cc;
-  --color-danger: #ef4444;
-  --color-success: #22c55e;
+  --color-text: var(--ink);
+  --color-text-muted: var(--dim);
+  --color-text-subtle: var(--faint);
+  --color-text-faint: var(--faint-2);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
   --color-online: #22c55e;
-  --color-offline: #b0c0d8;
+  --color-offline: var(--offline);
+  --color-accent-mint: var(--mint);
   --radius: 0.5rem;
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --bg: #070d1a;
+  --surface: #0a1120;
+  --card: #0d1526;
+  --border: rgba(143, 184, 255, 0.14);
+  --border-soft: rgba(143, 184, 255, 0.1);
+  --tint: rgba(143, 184, 255, 0.08);
+  --tint-strong: rgba(143, 184, 255, 0.16);
+  --primary: #5b8def;
+  --primary-dark: #3b6fe0;
+  --primary-tint: rgba(91, 141, 239, 0.12);
+  --primary-tint-strong: rgba(91, 141, 239, 0.16);
+  --primary-text: #8fb8ff;
+  --ink: #e9eefb;
+  --dim: #8ba1c7;
+  --faint: #5c718f;
+  --faint-2: #46587a;
+  --danger: #ff8080;
+  --danger-tint: rgba(255, 99, 99, 0.12);
+  --offline: #46587a;
+  --mint: #6fe0b8;
+}
+
+.light {
+  --bg: #edf1fa;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --border: #dce7f8;
+  --border-soft: #f0f4fc;
+  --tint: #f3f7ff;
+  --tint-strong: #dce7f8;
+  --primary: #5b8def;
+  --primary-dark: #4a7de4;
+  --primary-tint: #edf3ff;
+  --primary-tint-strong: #e5edff;
+  --primary-text: #5b8def;
+  --ink: #1a2744;
+  --dim: #6b84ab;
+  --faint: #9ab0cc;
+  --faint-2: #c5d5e8;
+  --danger: #ef4444;
+  --danger-tint: #fef2f2;
+  --offline: #b0c0d8;
+  --mint: #0b9e74;
 }
 
 *,
@@ -64,8 +132,9 @@ body,
 #app {
   height: 100%;
   margin: 0;
-  background-color: #edf1fa;
-  color: #1a2744;
+  background-color: var(--bg);
+  color: var(--ink);
+  transition: background-color 0.25s, color 0.25s;
 }
 
 ::-webkit-scrollbar {
@@ -77,12 +146,12 @@ body,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c8d9f0;
+  background: var(--border);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #b0c8e8;
+  background: var(--tint-strong);
 }
 
 @keyframes typingBounce {

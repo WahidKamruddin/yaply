@@ -2,47 +2,41 @@ import { useId } from 'react'
 
 interface Props {
   size?: number
-  /** 'mark' = Y icon only | 'horizontal' = Y + wordmark | 'app-icon' = Y on dark rounded square */
+  /** 'mark' = Y icon only | 'horizontal' = Y + wordmark | 'app-icon' = Y icon only (alias of 'mark', kept for call sites representing the literal app/favicon icon) */
   variant?: 'mark' | 'horizontal' | 'app-icon'
   className?: string
 }
 
 /**
- * Y mark: three connected pill arms meeting at a central junction.
- * viewBox 0 0 80 80, junction at (40, 46)
- *
- * Left arm:  translate(25.86 31.86) rotate(-45) → tip (11.72, 17.72)
- * Right arm: translate(54.14 31.86) rotate(45)  → tip (68.28, 17.72)
- * Stem:      rect x=33 y=39 w=14 h=37 rx=7     → bottom y=76
+ * Y mark: single-path rounded-pill glyph, source public/newLogo.svg.
+ * viewBox 0 0 196 218 (non-square — svg default preserveAspectRatio
+ * centers it within whatever square box `size` defines).
  */
-function YMark({ size, gradId }: { size: number; gradId: string }) {
+function YMark({ size, gradId, className }: { size: number; gradId: string; className?: string }) {
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 80 80"
+      viewBox="0 0 196 218"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      className={className}
     >
       <defs>
-        <linearGradient id={gradId} x1="7" y1="13" x2="74" y2="76" gradientUnits="userSpaceOnUse">
+        <linearGradient id={gradId} x1="17" y1="35" x2="181" y2="207" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stopColor="#6BA8FF" />
           <stop offset="100%" stopColor="#3B6FE0" />
         </linearGradient>
       </defs>
 
-      {/* Left arm */}
-      <rect x="-7" y="-20" width="14" height="40" rx="7"
+      <path
+        d="M95.67 82.25C94.85 85.59 92.33 88.74 90.2 91.43C87.02 95.43 84.13 101.23 78.71 102.49C73.8 103.64 70.29 100.85 66.59 98.19C60.21 93.62 53.85 88.91 47.67 84.07C39.57 77.73 25.74 71.83 29.27 58.9C31.65 50.14 41.85 44.56 50.55 47.27C56.17 49.02 61.87 55.08 66.36 58.88C73.69 65.07 81.49 70.77 88.99 76.75C91.17 78.49 93.9 80.1 95.67 82.25ZM157.38 47.21C170.48 44.98 181.89 58.49 174.69 70.43C171.64 75.48 166.18 78.3 161.8 82.04C153.35 89.25 144.32 95.96 135.53 102.77C130.85 106.4 123.62 110.29 121.15 115.86C119.11 120.44 119.79 125.86 119.79 130.75C119.78 139.08 119.78 147.42 119.76 155.75C119.75 159.25 120.32 163.3 119.53 166.72C117.44 175.67 107.24 182.11 98.5 178.71C93.48 176.76 89.61 172.18 88.24 167.09C86.98 162.41 88.17 144.77 88.17 138.75C88.16 130.46 86.91 120.89 89.26 112.92C90.9 107.39 93.7 101.66 97.36 97.11C101.77 91.65 108.08 87.68 113.26 83C119.03 77.8 125.04 72.73 130.97 67.71C137.05 62.57 150.2 48.44 157.38 47.21Z"
         fill={`url(#${gradId})`}
-        transform="translate(25.86 31.86) rotate(-45)" />
-
-      {/* Right arm */}
-      <rect x="-7" y="-20" width="14" height="40" rx="7"
-        fill={`url(#${gradId})`}
-        transform="translate(54.14 31.86) rotate(45)" />
-
-      {/* Stem */}
-      <rect x="33" y="39" width="14" height="37" rx="7" fill={`url(#${gradId})`} />
+        fillRule="evenodd"
+        stroke={`url(#${gradId})`}
+        strokeWidth="0.25"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }
@@ -50,27 +44,6 @@ function YMark({ size, gradId }: { size: number; gradId: string }) {
 export default function YaplyLogo({ size = 40, variant = 'mark', className }: Props) {
   const uid = useId().replace(/:/g, '')
   const gradId = `yg${uid}`
-
-  if (variant === 'app-icon') {
-    const radius = Math.round(size * 0.22)
-    return (
-      <div
-        className={className}
-        style={{
-          width: size,
-          height: size,
-          borderRadius: radius,
-          background: '#1a2744',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-        }}
-      >
-        <YMark size={Math.round(size * 0.68)} gradId={gradId} />
-      </div>
-    )
-  }
 
   if (variant === 'horizontal') {
     return (
@@ -91,5 +64,5 @@ export default function YaplyLogo({ size = 40, variant = 'mark', className }: Pr
     )
   }
 
-  return <YMark size={size} gradId={gradId} />
+  return <YMark size={size} gradId={gradId} className={className} />
 }

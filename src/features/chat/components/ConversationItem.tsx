@@ -26,13 +26,13 @@ function Avatar({ src, name, online }: { src?: string | null; name: string; onli
       {src ? (
         <img src={src} alt={name} className="w-full h-full object-cover" />
       ) : (
-        <div className="w-full h-full bg-[#5b8def] flex items-center justify-center text-white font-semibold text-sm">
+        <div className="w-full h-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white font-semibold text-sm">
           {name.charAt(0).toUpperCase()}
         </div>
       )}
       {online !== undefined && (
         <span
-          className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${online ? 'bg-green-500' : 'bg-[#b0c0d8]'}`}
+          className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-surface ${online ? 'bg-green-500' : 'bg-offline'}`}
         />
       )}
     </div>
@@ -61,7 +61,9 @@ export default function ConversationItem({ conversation, currentUserId, isActive
       ? 'Message deleted'
       : ['image', 'gif', 'sticker', 'file'].includes(conversation.lastMessage.type)
         ? '📷 Image'
-        : conversation.lastMessage.content.slice(0, 60)
+        : conversation.lastMessage.decryptFailed
+          ? '🔒 Encrypted message'
+          : conversation.lastMessage.content.slice(0, 60)
     : 'No messages yet'
 
   const timeAgo = conversation.updatedAt
@@ -152,24 +154,24 @@ export default function ConversationItem({ conversation, currentUserId, isActive
           onPointerLeave={handlePointerUp}
           className={`relative w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left select-none transition-all border-l-2 ${
             isActive
-              ? 'bg-[#edf3ff] border-[#5b8def]'
-              : 'bg-white hover:bg-[#f3f7ff] border-transparent'
+              ? 'bg-primary-tint border-[#5b8def]'
+              : 'bg-transparent hover:bg-tint border-transparent'
           }`}
         >
           <Avatar src={avatarSrc} name={displayName} online={!conversation.isGroup ? isOnline : undefined} />
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-1">
-              <span className={`font-medium text-sm truncate ${isActive ? 'text-[#5b8def]' : 'text-[#1a2744]'}`}>
+              <span className={`font-medium text-sm truncate ${isActive ? 'text-primary-text' : 'text-text'}`}>
                 {displayName}
               </span>
               <div className="flex items-center gap-1 flex-shrink-0">
-                {conversation.isMuted && <BellOff size={12} className="text-[#9ab0cc]" />}
-                <span className="text-xs text-[#9ab0cc]">{timeAgo}</span>
+                {conversation.isMuted && <BellOff size={12} className="text-text-subtle" />}
+                <span className="text-xs text-text-subtle">{timeAgo}</span>
               </div>
             </div>
             <div className="flex items-center justify-between gap-1 mt-0.5">
-              <p className={`text-xs truncate ${!isActive && conversation.unreadCount > 0 ? 'text-[#1a2744] font-semibold' : 'text-[#6b84ab]'}`}>
+              <p className={`text-xs truncate ${!isActive && conversation.unreadCount > 0 ? 'text-text font-semibold' : 'text-text-muted'}`}>
                 {lastContent}
               </p>
               {!isActive && conversation.unreadCount > 0 && (
@@ -186,36 +188,36 @@ export default function ConversationItem({ conversation, currentUserId, isActive
       {menuPos && (
         <div
           ref={menuRef}
-          className="fixed z-50 bg-white rounded-xl shadow-lg shadow-[#1a2744]/12 border border-[#dce7f8] py-1 min-w-[180px]"
+          className="fixed z-50 bg-card rounded-xl shadow-lg shadow-black/40 border border-border py-1 min-w-[180px]"
           style={{ top: menuPos.y, left: menuPos.x }}
         >
           {conversation.isMuted ? (
             <button
               onClick={() => void handleUnmute()}
-              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#1a2744] hover:bg-[#f3f7ff] transition-colors"
+              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-text hover:bg-tint transition-colors"
             >
               <BellRing size={14} className="text-[#5b8def]" />
               Unmute
             </button>
           ) : (
             <>
-              <p className="px-4 pt-2 pb-1 text-[10px] font-semibold text-[#9ab0cc] uppercase tracking-wider">Mute notifications</p>
+              <p className="px-4 pt-2 pb-1 text-[10px] font-semibold text-text-subtle uppercase tracking-wider">Mute notifications</p>
               {MUTE_OPTIONS.map(({ label, hours }) => (
                 <button
                   key={label}
                   onClick={() => void handleMute(hours)}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#1a2744] hover:bg-[#f3f7ff] transition-colors"
+                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-text hover:bg-tint transition-colors"
                 >
-                  <BellOff size={14} className="text-[#9ab0cc]" />
+                  <BellOff size={14} className="text-text-subtle" />
                   {label}
                 </button>
               ))}
             </>
           )}
-          <div className="my-1 border-t border-[#f0f4fc]" />
+          <div className="my-1 border-t border-border-soft" />
           <button
             onClick={() => { closeMenu(); setShowDeleteModal(true) }}
-            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-danger hover:bg-danger-tint transition-colors"
           >
             <Trash2 size={14} />
             Delete conversation
@@ -226,23 +228,23 @@ export default function ConversationItem({ conversation, currentUserId, isActive
       {/* Delete confirmation modal */}
       <Dialog.Root open={showDeleteModal} onOpenChange={setShowDeleteModal}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-[#1a2744]/30 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-white rounded-2xl shadow-xl shadow-[#1a2744]/12 border border-[#dce7f8] p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+          <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-card rounded-2xl shadow-xl shadow-black/50 border border-border p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
             <div className="flex flex-col items-center text-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
-                <Trash2 size={20} className="text-red-400" />
+              <div className="w-12 h-12 rounded-full bg-danger-tint flex items-center justify-center">
+                <Trash2 size={20} className="text-danger" />
               </div>
               <div>
-                <Dialog.Title className="text-base font-semibold text-[#1a2744]">
+                <Dialog.Title className="text-base font-semibold text-text">
                   Delete Conversation
                 </Dialog.Title>
-                <Dialog.Description className="mt-1 text-sm text-[#9ab0cc]">
+                <Dialog.Description className="mt-1 text-sm text-text-muted">
                   This will remove the conversation from your list. If both parties leave, all messages and shared data will be permanently deleted.
                 </Dialog.Description>
               </div>
               <div className="flex gap-3 w-full mt-1">
                 <Dialog.Close asChild>
-                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-[#dce7f8] text-sm font-medium text-[#6b84ab] hover:bg-[#edf1fa] transition-colors">
+                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-tint-strong text-sm font-medium text-text-muted hover:bg-tint transition-colors">
                     Cancel
                   </button>
                 </Dialog.Close>

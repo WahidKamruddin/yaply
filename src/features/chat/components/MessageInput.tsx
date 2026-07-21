@@ -157,15 +157,15 @@ export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyp
   )
 
   return (
-    <div className="border-t border-[#dce7f8] bg-white px-4 pt-3" style={{ paddingBottom: `max(0.75rem, var(--safe-bottom))` }}>
+    <div className="border-t border-border bg-surface px-4 pt-3" style={{ paddingBottom: `max(0.75rem, var(--safe-bottom))` }}>
       {/* Reply strip */}
       {replyMessage && (
-        <div className="flex items-center justify-between mb-2 px-3 py-2 bg-[#edf3ff] rounded-lg border-l-2 border-[#5b8def]">
+        <div className="flex items-center justify-between mb-2 px-3 py-2 bg-primary-tint rounded-lg border-l-2 border-[#5b8def]">
           <div className="min-w-0">
-            <p className="text-xs text-[#5b8def] font-medium">Replying to {replyMessage.senderProfile?.username ?? 'message'}</p>
-            <p className="text-xs text-[#6b84ab] truncate">{replyMessage.content}</p>
+            <p className="text-xs text-primary-text font-medium">Replying to {replyMessage.senderProfile?.username ?? 'message'}</p>
+            <p className="text-xs text-text-muted truncate">{replyMessage.content}</p>
           </div>
-          <button onClick={() => setReplyId(null)} className="text-[#9ab0cc] hover:text-[#6b84ab] ml-2 flex-shrink-0">
+          <button onClick={() => setReplyId(null)} className="text-text-subtle hover:text-text-muted ml-2 flex-shrink-0">
             <X size={14} />
           </button>
         </div>
@@ -173,12 +173,12 @@ export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyp
 
       {/* Command feedback — visible only to you, never sent */}
       {feedback && (
-        <div className="flex items-start justify-between mb-2 px-3 py-2 bg-[#f3f7ff] rounded-lg border border-[#dce7f8]">
+        <div className="flex items-start justify-between mb-2 px-3 py-2 bg-tint rounded-lg border border-border">
           <div className="flex items-start gap-2 min-w-0">
-            <Terminal size={13} className="text-[#9ab0cc] mt-0.5 flex-shrink-0" />
-            <p className="text-xs text-[#6b84ab] whitespace-pre-wrap">{feedback}</p>
+            <Terminal size={13} className="text-text-subtle mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-text-muted whitespace-pre-wrap">{feedback}</p>
           </div>
-          <button onClick={() => setFeedback(null)} className="text-[#c5d5e8] hover:text-[#9ab0cc] ml-2 flex-shrink-0">
+          <button onClick={() => setFeedback(null)} className="text-text-faint hover:text-text-subtle ml-2 flex-shrink-0">
             <X size={13} />
           </button>
         </div>
@@ -186,9 +186,9 @@ export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyp
 
       {/* Command palette */}
       {showPalette && (
-        <div className="mb-2 bg-white border border-[#dce7f8] rounded-xl overflow-hidden shadow-lg shadow-[#dce7f8]/60">
-          <div className="px-3 py-2 border-b border-[#dce7f8]">
-            <span className="text-xs text-[#9ab0cc] font-medium">COMMANDS</span>
+        <div className="mb-2 bg-card border border-border rounded-xl overflow-hidden shadow-lg shadow-black/40">
+          <div className="px-3 py-2 border-b border-border">
+            <span className="text-xs text-text-subtle font-medium">COMMANDS</span>
           </div>
           {filteredCommands.map((cmd, idx) => {
             const argTokens = cmd.usage.split(' ').slice(1)
@@ -198,31 +198,31 @@ export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyp
                 key={cmd.name}
                 className={`w-full flex items-center px-3 py-2.5 transition-colors text-left border-l-2 ${
                   idx === selectedIndex
-                    ? 'bg-[#edf3ff] border-[#5b8def]'
-                    : 'border-transparent hover:bg-[#f3f7ff]'
+                    ? 'bg-primary-tint border-[#5b8def]'
+                    : 'border-transparent hover:bg-tint'
                 }`}
                 onClick={() => selectCommand(cmd.name)}
               >
-                <span className="text-sm text-[#5b8def] font-mono font-medium flex-shrink-0">/{cmd.name}</span>
+                <span className="text-sm text-accent-mint font-mono font-medium flex-shrink-0">/{cmd.name}</span>
                 {argTokens.map((token, i) => (
                   <span
                     key={i}
                     className={`text-sm font-mono ml-1 flex-shrink-0 transition-all rounded px-0.5 ${
                       isTypingArgs && i === activeArgIndex
-                        ? 'text-[#9ab0cc]'
-                        : 'text-[#9ab0cc] opacity-40'
+                        ? 'text-text-subtle'
+                        : 'text-text-subtle opacity-40'
                     }`}
                   >
                     {token}
                   </span>
                 ))}
-                <span className="text-xs text-[#9ab0cc] ml-3 truncate">{cmd.description}</span>
+                <span className="text-xs text-text-subtle ml-3 truncate">{cmd.description}</span>
               </button>
             )
           })}
           {filteredCommands.length > 1 && (
-            <div className="px-3 py-1.5 border-t border-[#f0f4fc]">
-              <span className="text-[10px] text-[#c5d5e8]">Tab to cycle · Enter to select · Esc to close</span>
+            <div className="px-3 py-1.5 border-t border-border-soft">
+              <span className="text-[10px] text-text-faint">Tab to cycle · Enter to select · Esc to close</span>
             </div>
           )}
         </div>
@@ -231,7 +231,7 @@ export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyp
       <div className="flex items-end gap-2">
         <button
           onClick={onAttachment}
-          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-[#9ab0cc] hover:text-[#5b8def] hover:bg-[#edf3ff] transition-colors"
+          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
         >
           <Paperclip size={18} />
         </button>
@@ -244,11 +244,11 @@ export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyp
           placeholder="Message... (/ for commands)"
           disabled={disabled}
           rows={1}
-          className="flex-1 resize-none bg-[#f3f7ff] rounded-2xl px-4 py-2.5 text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40 transition max-h-40 leading-relaxed disabled:opacity-50"
+          className="flex-1 resize-none bg-tint border border-border rounded-2xl px-4 py-2.5 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition max-h-40 leading-relaxed disabled:opacity-50"
         />
 
         <button
-          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-[#9ab0cc] hover:text-[#5b8def] hover:bg-[#edf3ff] transition-colors"
+          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
         >
           <Smile size={18} />
         </button>
@@ -256,7 +256,7 @@ export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyp
         <button
           onClick={submit}
           disabled={!text.trim() || disabled}
-          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[#5b8def] hover:bg-[#4a7de4] text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark hover:brightness-110 text-white shadow-[0_6px_18px_rgba(91,141,239,0.35)] disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed transition-all"
         >
           <Send size={16} />
         </button>

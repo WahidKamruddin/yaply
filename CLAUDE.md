@@ -59,7 +59,7 @@ Routes live in `src/routes/`. The router auto-generates `routeTree.gen.ts` from 
 | File | Path | Purpose |
 |------|------|---------|
 | `__root.tsx` | (layout wrapper) | HTML shell, loads auth state |
-| `index.tsx` | `/` | Redirects to `/chat` |
+| `index.tsx` | `/` | Public marketing landing page (see **Landing Page** below) — not an auth redirect |
 | `auth.tsx` | `/auth` | Sign in / sign up |
 | `chat.tsx` | `/chat` | Main app: conversation list + chat |
 
@@ -123,6 +123,8 @@ The GCM tag is appended to the ciphertext (Web Crypto AES-GCM bundles them). Thi
 
 **Key rotation & cache invalidation (critical):** IndexedDB is per-origin, so a new origin/browser/cleared-storage regenerates the identity keypair and overwrites the user's `devices` row (rotation). To survive this, `getSharedKey` always fetches the peer's current public key and rejects any cached derived key whose fingerprints no longer match — it re-derives instead. On an AES-GCM decrypt failure it retries once against a freshly fetched peer key (handles mid-session rotation). If decryption still fails, the UI shows an explicit "Couldn't decrypt this message" state (`DecryptedMessage.decryptFailed`) — **never** raw ciphertext or `atob()` garbage. Messages encrypted under a rotated-away key are permanently unrecoverable and stay in this state. On upgrade from v1, a legacy unscoped keypair is adopted for the current user only if its fingerprint still matches the published `devices.identity_key`. iOS must mirror this fingerprint-validation behavior.
 
+**In-memory cache must be keyed by userId, not a single mutable slot (critical):** `useEncryption.ts` also keeps an in-JS-memory cache on top of IndexedDB (`identityPairMemCache`) so repeated encrypts/decrypts don't hit IndexedDB every time. An earlier version stored this as one mutable variable plus a "clear everything when a different userId shows up" check (`cacheOwner`) — this had a real race: sign out and back into a *different* account fast enough in the same tab, and a straggling async call still in flight for the old account (e.g. the sidebar's preview decryption, which runs independently of `ChatView`) could resolve *after* the new account's session had already reset the cache, and overwrite it with the old account's keypair while the tracker still said it belonged to the new user. Every decrypt for the new account then silently used the wrong private key — **every message failed**, specifically when testing multiple accounts by signing in/out in one browser tab (the common way to test multi-user flows solo). Fixed by making `identityPairMemCache` a `Map<userId, pair>` instead — concurrent calls for different users touch different map entries and can't collide. `derivedKeyMemCache` was never subject to this because its cache key already embeds `userId` (`<userId>:<conversationId>:<peerUserId>`); `peerKeyMemCache` is intentionally global/unscoped since a peer's public key isn't specific to who's asking. iOS must not replicate the single-slot-plus-owner-check pattern for any per-user in-memory cache.
+
 **Groups are NOT E2E encrypted:** pairwise ECDH cannot key a group. Group conversations always send via the phase-1 base64 path (`iv = NULL`). Encrypted inbound group messages (legacy) are decrypted per-sender pairwise; own legacy group messages render as decrypt-failed. A real group-key scheme (see dormant `key_exchanges` design) is future work.
 
 **Fallback (phase-1):** If either party has no key established yet (or the conversation is a group), the client encodes the plaintext instead of encrypting. **Always use `TextEncoder` / `TextDecoder` for phase-1 encoding — never `btoa()` / `atob()`.** `btoa()` breaks on any non-Latin-1 character (emoji, CJK, etc.). Decryption: messages with `iv = NULL` are decoded via `new TextDecoder().decode(Uint8Array.from(atob(content), c => c.charCodeAt(0)))`; messages **with** an `iv` are AES-GCM only — on failure (after the one fresh-key retry) they surface `decryptFailed`, never a decoded-garbage fallback.
@@ -145,8 +147,25 @@ The project is a pnpm workspace monorepo with two internal packages:
 ### Build & Deploy
 
 - **Vite 8** builds the app. The output goes to `dist/client/` (configured in `netlify.toml`).
-- **Netlify** hosts the app. The `netlify.toml` specifies `vite build` as the build command and `dist/client` as the publish directory.
-- **`@netlify/vite-plugin-tanstack-start`** handles Netlify-specific SSR adapter concerns.
+- **Netlify** hosts the app as a prerendered SPA, not a live SSR function. Build command is `vite build && node scripts/generate-html.mjs`: the first step builds client + SSR bundles, the second (`scripts/generate-html.mjs`) imports the SSR server, renders route `/` once at build time, and writes the result over `dist/client/index.html`. A catch-all redirect (`/* → /index.html`, status 200) then serves that one prerendered shell for every route — the Netlify SSR function is built but not invoked at runtime.
+- Because of this, **route loaders must not depend on request-time data to render correctly on `/`** — `auth.tsx`/`chat.tsx` guard their `beforeLoad` with `if (typeof document === 'undefined') return` so auth/session state is never baked into the static shell; it loads client-side after hydration.
+- **`@netlify/vite-plugin-tanstack-start`** handles Netlify-specific SSR adapter concerns (used for the build step above, not for live routing).
+
+### Landing Page (`src/routes/index.tsx`)
+
+The `/` route is a single-file marketing page (all markup, styles, and interactive demos live in `index.tsx`; CSS is a template-literal string injected via `<style>`, scoped under a `.lp` root class rather than Tailwind). It is intentionally decoupled from the app's design system (`#1a2744` blue-slate) — it uses its own dark-navy/mint palette with a full light-mode override (`.lp-light`), toggled via a nav button and persisted to `localStorage['yaply-theme']`.
+
+**Font:** Bricolage Grotesque, self-hosted at `public/fonts/BricolageGrotesque-var-latin.woff2` (variable weight 200–800) and loaded via `@font-face` inside the page's own `<style>` block. Self-hosted deliberately — the CSP's `font-src 'self'` has no exception for a Google Fonts CDN, so a `<link>` to fonts.googleapis.com would be blocked.
+
+**Progressive enhancement pattern (repeated across every interactive element on the page):** every component server-renders its *final, most legible* state (e.g. `EncryptWire` renders already-sealed ciphertext; `EventFlowDemo` renders the confirmed event; `KothaDemo` renders the completed summary). A `useEffect` then "rewinds" to the initial state and replays the animation once the element scrolls into view via `IntersectionObserver`. This means the prerendered HTML (see Build & Deploy above) is never empty or mid-animation for no-JS/crawler contexts — `npm run build && node scripts/generate-html.mjs` must be re-run and `dist/client/index.html` spot-checked after any change here. All animations respect `prefers-reduced-motion` (checked via `prefersReducedMotion()`) by skipping straight to the final state.
+
+**Interactive demo components** (all decorative — they mimic app behavior with local component state, not real Supabase calls):
+- `ChatMock` — scripted hero conversation that types itself out.
+- `EventFlowDemo` — a clickable when2meet-style availability grid that flips into a confirmed event card; mirrors the real `/plan` → `/event` flow.
+- `GroupCarousel` — autoplaying carousel (Tasks/Notes/Albums/Budgets) with dot nav and arrows, pauses on hover.
+- `KothaDemo` — "chaotic thread → AI summary" demo for the **Kotha AI** feature section. **Kotha does not exist in the app** — per the Feature Map, `ai_conversations` is schema-only with no UI or API integration. This section (and the "built-in translation" card in the small-details bento) are forward-looking marketing copy, not documented features. Do not treat landing-page copy as a source of truth for what's implemented — check the Feature Map below instead.
+- `EncryptWire` — "what you see" → "what we see" demo: real plaintext scrambles into ciphertext on scroll-into-view. Characters lock to their final glyph as the sweep passes (only a small trailing "wavefront" flickers) so the sweep's end state always exactly equals the sealed display — this was a deliberate fix for a visual "pop" when the old version snapped from random scramble to the real ciphertext in one frame.
+- `DecryptText` — reusable glyph-scramble-to-plaintext text reveal, scoped to the "Sealed, end to end." header only (previous versions used it more broadly; kept restrained per product feedback).
 
 ---
 
@@ -501,6 +520,9 @@ yaply/
 │   │   ├── supabase.ts            # Supabase client singleton
 │   │   └── database.types.ts      # Auto-generated Supabase types (may be stale — see discrepancy note)
 │   └── routes/                    # File-based routes (TanStack Router)
+│       └── index.tsx              # `/` — self-contained marketing landing page (see Landing Page above)
+├── public/
+│   └── fonts/                     # Self-hosted webfonts (CSP font-src is 'self' — no external font CDNs)
 ├── packages/
 │   ├── crypto/src/
 │   │   ├── encryption.ts          # generateKeyPair, deriveSharedKey, encryptMessage, decryptMessage

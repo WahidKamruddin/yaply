@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react'
-import { X, LogOut, Mail, User, Pencil, Check, Camera } from 'lucide-react'
+import { X, LogOut, Mail, User, Pencil, Check, Camera, Sun, Moon } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useProfile } from '@/features/chat/hooks/useProfile'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { useTheme } from '@/lib/useTheme'
 
 interface Props {
   userId: string
@@ -21,6 +22,7 @@ function initials(name: string) {
 export default function ProfileModal({ userId, userEmail, open, onClose }: Props) {
   const { data: profile, refetch } = useProfile(userId)
   const queryClient = useQueryClient()
+  const { light, toggleTheme } = useTheme()
   const [isEditing, setIsEditing] = useState(false)
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
@@ -98,16 +100,20 @@ export default function ProfileModal({ userId, userEmail, open, onClose }: Props
   return (
     <Dialog.Root open={open} onOpenChange={(o) => { if (!o) { onClose(); cancelEditing() } }}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-white rounded-2xl shadow-xl shadow-[#1a2744]/10 p-6 outline-none">
-          <Dialog.Close className="absolute top-4 right-4 w-7 h-7 flex items-center justify-center rounded-full text-[#9ab0cc] hover:text-[#1a2744] hover:bg-[#edf1fa] transition-colors">
+        <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-md z-40" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-card rounded-3xl shadow-2xl shadow-black/50 border border-border p-6 pt-7 outline-none overflow-hidden">
+          {/* Brand accent bar */}
+          <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-primary via-primary-text to-accent-mint" />
+
+          <Dialog.Close className="absolute top-4 right-4 w-7 h-7 flex items-center justify-center rounded-full text-text-subtle hover:text-text hover:bg-tint transition-colors">
             <X size={16} />
           </Dialog.Close>
 
           {/* Avatar */}
-          <div className="flex flex-col items-center mb-5">
+          <div className="flex flex-col items-center mb-6">
             <div className="relative mb-3">
-              <div className="w-20 h-20 rounded-full bg-[#5b8def] flex items-center justify-center text-white text-2xl font-semibold overflow-hidden">
+              <div className="absolute inset-0 rounded-full bg-primary/40 blur-xl scale-110 -z-10" aria-hidden="true" />
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-2xl font-semibold overflow-hidden ring-4 ring-tint">
                 {shownAvatar ? (
                   <img src={shownAvatar} alt={name} className="w-full h-full object-cover" />
                 ) : (
@@ -118,7 +124,7 @@ export default function ProfileModal({ userId, userEmail, open, onClose }: Props
                 <>
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="absolute bottom-0 right-0 w-7 h-7 flex items-center justify-center rounded-full bg-[#5b8def] text-white border-2 border-white hover:bg-[#4a7de4] transition-colors"
+                    className="absolute bottom-0 right-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary text-white border-2 border-card hover:bg-primary-dark hover:scale-105 transition-all"
                   >
                     <Camera size={13} />
                   </button>
@@ -138,38 +144,71 @@ export default function ProfileModal({ userId, userEmail, open, onClose }: Props
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Display name"
-                className="text-center text-lg font-bold text-[#1a2744] bg-transparent border-b-2 border-[#5b8def] outline-none w-full pb-1"
+                className="text-center text-lg font-bold text-text bg-transparent border-b-2 border-primary outline-none w-full pb-1"
                 autoFocus
               />
             ) : (
-              <Dialog.Title className="text-lg font-bold text-[#1a2744]">{name}</Dialog.Title>
+              <Dialog.Title className="text-lg font-bold font-display text-text">{name}</Dialog.Title>
             )}
-            {username && <p className="text-sm text-[#9ab0cc] mt-0.5">@{username}</p>}
+            {username && <p className="text-sm text-text-subtle mt-0.5">@{username}</p>}
           </div>
 
-          {/* Info rows */}
-          <div className="space-y-2 mb-5">
-            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-[#f3f7ff]">
-              <Mail size={14} className="text-[#9ab0cc] flex-shrink-0" />
-              <span className="text-sm text-[#6b84ab] truncate">{userEmail}</span>
+          {/* Contact */}
+          <div className="mb-5">
+            <p className="font-mono text-[10px] font-semibold text-text-subtle uppercase tracking-widest px-1 mb-1.5">Contact</p>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-tint">
+                <span className="w-6 h-6 flex items-center justify-center rounded-full bg-primary-tint flex-shrink-0">
+                  <Mail size={12} className="text-primary-text" />
+                </span>
+                <span className="text-sm text-text-muted truncate">{userEmail}</span>
+              </div>
+              {isEditing ? (
+                <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-tint">
+                  <span className="w-6 h-6 flex items-center justify-center rounded-full bg-primary-tint flex-shrink-0 mt-0.5">
+                    <User size={12} className="text-primary-text" />
+                  </span>
+                  <textarea
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    placeholder="Add a bio…"
+                    rows={2}
+                    className="flex-1 text-sm text-text bg-transparent outline-none resize-none placeholder:text-text-subtle"
+                  />
+                </div>
+              ) : profile?.bio ? (
+                <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-tint">
+                  <span className="w-6 h-6 flex items-center justify-center rounded-full bg-primary-tint flex-shrink-0 mt-0.5">
+                    <User size={12} className="text-primary-text" />
+                  </span>
+                  <span className="text-sm text-text-muted">{profile.bio}</span>
+                </div>
+              ) : null}
             </div>
-            {isEditing ? (
-              <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-[#f3f7ff]">
-                <User size={14} className="text-[#9ab0cc] flex-shrink-0 mt-0.5" />
-                <textarea
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  placeholder="Add a bio…"
-                  rows={2}
-                  className="flex-1 text-sm text-[#1a2744] bg-transparent outline-none resize-none placeholder:text-[#9ab0cc]"
+          </div>
+
+          {/* Appearance */}
+          <div className="mb-5">
+            <p className="font-mono text-[10px] font-semibold text-text-subtle uppercase tracking-widest px-1 mb-1.5">Appearance</p>
+            <div className="flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl bg-tint">
+              <span className="flex items-center gap-2.5">
+                <span className="w-6 h-6 flex items-center justify-center rounded-full bg-primary-tint flex-shrink-0">
+                  {light ? <Sun size={12} className="text-primary-text" /> : <Moon size={12} className="text-primary-text" />}
+                </span>
+                <span className="text-sm text-text-muted">{light ? 'Light mode' : 'Dark mode'}</span>
+              </span>
+              <button
+                role="switch"
+                aria-checked={!light}
+                aria-label="Toggle dark mode"
+                onClick={toggleTheme}
+                className={`relative w-10 h-[22px] rounded-full flex-shrink-0 transition-colors duration-300 ${!light ? 'bg-primary' : 'bg-tint-strong'}`}
+              >
+                <span
+                  className={`absolute top-[3px] left-[3px] w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-300 ease-out ${!light ? 'translate-x-[18px]' : 'translate-x-0'}`}
                 />
-              </div>
-            ) : profile?.bio ? (
-              <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-[#f3f7ff]">
-                <User size={14} className="text-[#9ab0cc] flex-shrink-0 mt-0.5" />
-                <span className="text-sm text-[#6b84ab]">{profile.bio}</span>
-              </div>
-            ) : null}
+              </button>
+            </div>
           </div>
 
           {/* Actions */}
@@ -178,14 +217,14 @@ export default function ProfileModal({ userId, userEmail, open, onClose }: Props
               <button
                 onClick={cancelEditing}
                 disabled={isSaving}
-                className="flex-1 py-2.5 rounded-xl border border-[#dce7f8] text-[#6b84ab] text-sm font-medium hover:bg-[#f3f7ff] transition-colors disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-xl border border-border text-text-muted text-sm font-medium hover:bg-tint transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={() => void handleSave()}
                 disabled={isSaving}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[#5b8def] text-white text-sm font-medium hover:bg-[#4a7de4] transition-colors disabled:opacity-50"
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-primary text-white text-sm font-medium hover:bg-primary-dark transition-colors disabled:opacity-50"
               >
                 {isSaving ? (
                   <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
@@ -201,14 +240,14 @@ export default function ProfileModal({ userId, userEmail, open, onClose }: Props
             <div className="flex flex-col gap-2">
               <button
                 onClick={startEditing}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#f3f7ff] text-[#5b8def] hover:bg-[#edf3ff] transition-colors text-sm font-medium"
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-tint text-primary-text hover:bg-primary-tint transition-colors text-sm font-medium"
               >
                 <Pencil size={14} />
                 Edit Profile
               </button>
               <button
                 onClick={() => void supabase.auth.signOut()}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 transition-colors text-sm font-medium"
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-danger-tint text-danger hover:brightness-95 transition-colors text-sm font-medium"
               >
                 <LogOut size={15} />
                 Sign out

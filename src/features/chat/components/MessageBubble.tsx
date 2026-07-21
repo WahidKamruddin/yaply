@@ -73,12 +73,12 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
     const panelTab = getPanelTab(message.content)
     return (
       <div className="flex justify-center my-2">
-        <div className="flex items-center gap-2 text-xs text-[#6b84ab] bg-[#edf1fa] px-3 py-1.5 rounded-full max-w-sm text-center">
+        <div className="flex items-center gap-2 text-xs text-text-muted bg-tint px-3 py-1.5 rounded-full max-w-sm text-center">
           <span>{message.content}</span>
           {panelTab && onOpenPanel && (
             <button
               onClick={() => onOpenPanel(panelTab)}
-              className="flex-shrink-0 text-[#5b8def] hover:text-[#4a7de4] font-medium hover:underline underline-offset-2 transition-colors"
+              className="flex-shrink-0 text-primary-text hover:text-[#5b8def] font-medium hover:underline underline-offset-2 transition-colors"
             >
               Open {TAB_LABELS[panelTab]} →
             </button>
@@ -92,15 +92,15 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
     return (
       <div className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'} mb-1`}>
         {!isOwn && (
-          <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-[#5b8def] flex items-center justify-center text-white text-[11px] font-semibold">
+          <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-[11px] font-semibold">
             {message.senderProfile?.avatar_url
               ? <img src={message.senderProfile.avatar_url} className="w-full h-full object-cover" alt="" />
               : (message.senderProfile?.display_name?.[0] ?? message.senderProfile?.username?.[0] ?? '?').toUpperCase()}
           </div>
         )}
-        <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#f3f7ff] border border-[#dce7f8]">
-          <AlertCircle size={12} className="text-[#9ab0cc]" />
-          <span className="text-xs text-[#9ab0cc] italic">Message deleted</span>
+        <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-tint border border-border">
+          <AlertCircle size={12} className="text-text-subtle" />
+          <span className="text-xs text-text-subtle italic">Message deleted</span>
         </div>
       </div>
     )
@@ -114,7 +114,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
       onMouseLeave={() => { setHovered(false); setShowEmojiPicker(false) }}
     >
       {!isOwn && (
-        <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-[#5b8def] flex items-center justify-center text-white text-[11px] font-semibold">
+        <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-[11px] font-semibold">
           {message.senderProfile?.avatar_url
             ? <img src={message.senderProfile.avatar_url} className="w-full h-full object-cover" alt="" />
             : (message.senderProfile?.display_name?.[0] ?? message.senderProfile?.username?.[0] ?? '?').toUpperCase()}
@@ -122,7 +122,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
       )}
       <div className={`flex flex-col max-w-[65%] ${isOwn ? 'items-end' : 'items-start'}`}>
         {!isOwn && message.senderProfile && (
-          <span className="text-xs text-[#5b8def] font-medium mb-1 px-1">
+          <span className="text-xs text-primary-text font-medium mb-1 px-1">
             {message.senderProfile.display_name ?? message.senderProfile.username}
           </span>
         )}
@@ -134,13 +134,13 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
               <div className="relative">
                 <button
                   onClick={() => setShowEmojiPicker((v) => !v)}
-                  className="w-7 h-7 flex items-center justify-center rounded-full bg-[#edf1fa] hover:bg-[#dce7f8] text-[#6b84ab] hover:text-[#1a2744] transition-colors"
+                  className="w-7 h-7 flex items-center justify-center rounded-full bg-tint hover:bg-tint-strong text-text-muted hover:text-text transition-colors"
                 >
                   <Smile size={13} />
                 </button>
                 {showEmojiPicker && (
                   <div
-                    className={`absolute bottom-9 ${isOwn ? 'right-0' : 'left-0'} flex gap-1 bg-white rounded-full shadow-lg shadow-[#1a2744]/10 border border-[#dce7f8] px-2 py-1.5 z-20`}
+                    className={`absolute bottom-9 ${isOwn ? 'right-0' : 'left-0'} flex gap-1 bg-card rounded-full shadow-lg shadow-black/40 border border-border px-2 py-1.5 z-20`}
                   >
                     {QUICK_EMOJIS.map((emoji) => (
                       <button
@@ -156,14 +156,14 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
               </div>
               <button
                 onClick={() => onReply(message.id)}
-                className="w-7 h-7 flex items-center justify-center rounded-full bg-[#edf1fa] hover:bg-[#dce7f8] text-[#6b84ab] hover:text-[#1a2744] transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-full bg-tint hover:bg-tint-strong text-text-muted hover:text-text transition-colors"
                 title="Reply"
               >
                 <Reply size={13} />
               </button>
               <button
                 onClick={() => onReplyInThread?.(message.id)}
-                className="w-7 h-7 flex items-center justify-center rounded-full bg-[#edf1fa] hover:bg-[#dce7f8] text-[#6b84ab] hover:text-[#1a2744] transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-full bg-tint hover:bg-tint-strong text-text-muted hover:text-text transition-colors"
                 title="Reply in thread"
               >
                 <MessageSquarePlus size={13} />
@@ -171,7 +171,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
               {message.type === 'image' && message.mediaUrl && conversationId && currentUserId && (
                 <button
                   onClick={() => setShowAddToAlbum(true)}
-                  className="w-7 h-7 flex items-center justify-center rounded-full bg-[#edf1fa] hover:bg-[#dce7f8] text-[#6b84ab] hover:text-[#1a2744] transition-colors"
+                  className="w-7 h-7 flex items-center justify-center rounded-full bg-tint hover:bg-tint-strong text-text-muted hover:text-text transition-colors"
                   title="Add to album"
                 >
                   <BookImage size={13} />
@@ -180,7 +180,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
               {isOwn && (
                 <button
                   onClick={() => setShowDeleteModal(true)}
-                  className="w-7 h-7 flex items-center justify-center rounded-full bg-[#edf1fa] hover:bg-red-50 text-[#6b84ab] hover:text-red-400 transition-colors"
+                  className="w-7 h-7 flex items-center justify-center rounded-full bg-tint hover:bg-danger-tint text-text-muted hover:text-danger transition-colors"
                 >
                   <Trash2 size={13} />
                 </button>
@@ -193,14 +193,14 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
             {replyMessage && (
               <button
                 onClick={() => onQuotationClick?.(replyMessage.id)}
-                className="flex items-stretch max-w-[220px] bg-[#f0f4ff] border border-[#dce7f8] rounded-2xl hover:bg-[#e5edff] active:scale-[0.98] transition-all text-left cursor-pointer"
+                className="flex items-stretch max-w-[220px] bg-primary-tint border border-border rounded-2xl hover:bg-primary-tint-strong active:scale-[0.98] transition-all text-left cursor-pointer"
               >
                 <div className="w-0.5 bg-[#5b8def] rounded-full flex-shrink-0 mx-2 my-2" />
                 <div className="py-2 pr-3 min-w-0">
-                  <p className="text-[10px] font-semibold text-[#5b8def] mb-0.5 truncate">
+                  <p className="text-[10px] font-semibold text-primary-text mb-0.5 truncate">
                     {replyMessage.senderProfile?.display_name ?? replyMessage.senderProfile?.username ?? 'Unknown'}
                   </p>
-                  <p className={`text-[11px] truncate ${replyMessage.deletedAt ? 'italic text-[#9ab0cc]' : 'text-[#6b84ab]'}`}>
+                  <p className={`text-[11px] truncate ${replyMessage.deletedAt ? 'italic text-text-subtle' : 'text-text-muted'}`}>
                     {replyMessage.deletedAt
                       ? 'Message deleted'
                       : replyMessage.type === 'image' || replyMessage.type === 'sticker'
@@ -220,8 +220,8 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
               onClick={() => setShowTime((v) => !v)}
               className={`relative rounded-2xl cursor-pointer ${
                 isOwn
-                  ? 'bg-[#5b8def] text-white rounded-br-sm'
-                  : 'bg-white text-[#1a2744] rounded-bl-sm shadow-sm shadow-[#dce7f8]'
+                  ? 'bg-gradient-to-br from-primary to-primary-dark text-white rounded-br-sm'
+                  : 'bg-card text-text rounded-bl-sm border border-border-soft'
               } ${isMedia && message.mediaUrl ? 'p-1' : 'px-3 py-2'}`}
             >
               {isMedia && message.mediaUrl ? (
@@ -236,12 +236,12 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                   href={message.mediaUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`flex items-center gap-2 text-sm underline underline-offset-2 ${isOwn ? 'text-white' : 'text-[#5b8def]'}`}
+                  className={`flex items-center gap-2 text-sm underline underline-offset-2 ${isOwn ? 'text-white' : 'text-primary-text'}`}
                 >
                   📎 Download file
                 </a>
               ) : message.decryptFailed ? (
-                <span className={`flex items-center gap-1.5 text-xs italic ${isOwn ? 'text-white/70' : 'text-[#9ab0cc]'}`}>
+                <span className={`flex items-center gap-1.5 text-xs italic ${isOwn ? 'text-white/70' : 'text-text-subtle'}`}>
                   <Lock size={12} className="flex-shrink-0" />
                   Couldn't decrypt this message
                 </span>
@@ -252,11 +252,11 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
             </div>
             {(showTime || (isOwn && isRead !== undefined)) && (
               <div className={`flex items-center gap-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                {showTime && <span className="text-[10px] text-[#9ab0cc]">{time}</span>}
+                {showTime && <span className="text-[10px] text-text-subtle">{time}</span>}
                 {isOwn && isRead !== undefined && (
                   <CheckCheck
                     size={12}
-                    className={isRead ? 'text-[#5b8def]' : 'text-[#9ab0cc]'}
+                    className={isRead ? 'text-[#5b8def]' : 'text-text-subtle'}
                   />
                 )}
               </div>
@@ -273,8 +273,8 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                 onClick={() => onReact?.(message.id, r.emoji)}
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-colors ${
                   r.reactedByMe
-                    ? 'bg-[#5b8def]/10 border-[#5b8def]/40 text-[#5b8def]'
-                    : 'bg-white border-[#dce7f8] text-[#1a2744] hover:border-[#5b8def]/40'
+                    ? 'bg-[#5b8def]/15 border-[#5b8def]/40 text-primary-text'
+                    : 'bg-tint border-border text-text hover:border-[#5b8def]/40'
                 }`}
               >
                 <span>{r.emoji}</span>
@@ -288,7 +288,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
         {threadCount > 0 && (
           <button
             onClick={() => onOpenThread?.(message.id)}
-            className="flex items-center gap-1.5 mt-1 px-1 text-[11px] text-[#5b8def] hover:text-[#4a7de4] hover:underline transition-colors"
+            className="flex items-center gap-1.5 mt-1 px-1 text-[11px] text-primary-text hover:text-[#5b8def] hover:underline transition-colors"
           >
             <MessageSquare size={11} />
             {threadCount} {threadCount === 1 ? 'reply' : 'replies'} · Open thread
@@ -310,23 +310,23 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
 
     <Dialog.Root open={showDeleteModal} onOpenChange={setShowDeleteModal}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-[#1a2744]/30 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-white rounded-2xl shadow-xl shadow-[#1a2744]/12 border border-[#dce7f8] p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+        <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-card rounded-2xl shadow-xl shadow-black/50 border border-border p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
           <div className="flex flex-col items-center text-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
-              <Trash2 size={20} className="text-red-400" />
+            <div className="w-12 h-12 rounded-full bg-danger-tint flex items-center justify-center">
+              <Trash2 size={20} className="text-danger" />
             </div>
             <div>
-              <Dialog.Title className="text-base font-semibold text-[#1a2744]">
+              <Dialog.Title className="text-base font-semibold text-text">
                 Delete Message
               </Dialog.Title>
-              <Dialog.Description className="mt-1 text-sm text-[#9ab0cc]">
+              <Dialog.Description className="mt-1 text-sm text-text-muted">
                 This will delete the message for everyone.
               </Dialog.Description>
             </div>
             <div className="flex gap-3 w-full mt-1">
               <Dialog.Close asChild>
-                <button className="flex-1 px-4 py-2.5 rounded-xl border border-[#dce7f8] text-sm font-medium text-[#6b84ab] hover:bg-[#edf1fa] transition-colors">
+                <button className="flex-1 px-4 py-2.5 rounded-xl border border-tint-strong text-sm font-medium text-text-muted hover:bg-tint transition-colors">
                   Cancel
                 </button>
               </Dialog.Close>

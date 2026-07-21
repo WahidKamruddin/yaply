@@ -27,7 +27,7 @@ import {
 import { uploadMediaFile } from '@/features/media/api/upload'
 import type { GifResult } from '@/features/media/api/gifs'
 import { supabase } from '@/lib/supabase'
-import type { DecryptedMessage } from '@/features/chat/types'
+import type { DecryptedMessage, ConversationListItem } from '@/features/chat/types'
 import MessageBubble from './MessageBubble'
 import MessageInput from './MessageInput'
 import ProfileModal from './ProfileModal'
@@ -44,9 +44,9 @@ function DateSeparator({ date }: { date: string }) {
   const label = d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
   return (
     <div className="flex items-center gap-3 my-4">
-      <div className="flex-1 h-px bg-[#dce7f8]" />
-      <span className="text-xs text-[#9ab0cc] font-medium px-2">{label}</span>
-      <div className="flex-1 h-px bg-[#dce7f8]" />
+      <div className="flex-1 h-px bg-border" />
+      <span className="text-xs text-text-subtle font-medium px-2">{label}</span>
+      <div className="flex-1 h-px bg-border" />
     </div>
   )
 }
@@ -271,13 +271,28 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
     return () => { void supabase.removeChannel(channel) }
   }, [activeId, currentUserId])
 
-  // Mark as read when conversation opens, then clear the unread badge in the sidebar.
+  // Mark as read when the conversation opens, and again whenever a new
+  // message arrives while it's still the active one — otherwise last_read_at
+  // only advances at the moment you opened it, so anything that arrived
+  // while you were actively looking at the conversation would count as
+  // unread again the instant you switched away. The badge is cleared
+  // immediately via an optimistic cache update — waiting on the server
+  // round-trip (and a 30s-stale-time refetch) made the sidebar badge look
+  // stuck even when the read state was fine. Errors are now surfaced
+  // instead of silently swallowed by an unhandled rejection.
   useEffect(() => {
     if (!activeId) return
-    void markConversationRead(activeId, currentUserId).then(() => {
-      void queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] })
-    })
-  }, [activeId, currentUserId, queryClient])
+    queryClient.setQueryData<ConversationListItem[]>(['conversations', currentUserId], (prev) =>
+      prev?.map((c) => (c.id === activeId ? { ...c, unreadCount: 0 } : c)),
+    )
+    markConversationRead(activeId, currentUserId)
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] })
+      })
+      .catch((err: unknown) => {
+        console.error('[yaply] failed to mark conversation read', err)
+      })
+  }, [activeId, currentUserId, queryClient, allDbMessages.length])
 
   // Scroll to show typing indicator when it appears and user is near bottom
   useEffect(() => {
@@ -454,11 +469,11 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
 
   if (!activeId || !conversation) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-[#edf1fa] text-[#9ab0cc]">
-        <div className="w-16 h-16 rounded-full bg-white shadow-sm shadow-[#dce7f8] flex items-center justify-center mb-4">
-          <Info size={28} strokeWidth={1.5} className="text-[#5b8def]/50" />
+      <div className="flex-1 flex flex-col items-center justify-center bg-background text-text-subtle">
+        <div className="w-16 h-16 rounded-full bg-tint border border-border flex items-center justify-center mb-4">
+          <Info size={28} strokeWidth={1.5} className="text-[#5b8def]/60" />
         </div>
-        <p className="text-sm font-medium text-[#6b84ab]">Select a conversation</p>
+        <p className="text-sm font-medium text-text-muted">Select a conversation</p>
         <p className="text-xs mt-1 hidden md:block">Choose from the list on the left</p>
       </div>
     )
@@ -475,60 +490,60 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
 
   return (
     <div className="flex-1 flex flex-row h-full overflow-hidden">
-    <div className="flex-1 flex flex-col h-full bg-[#edf1fa] overflow-hidden relative">
+    <div className="flex-1 flex flex-col h-full bg-background overflow-hidden relative">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#dce7f8] bg-white" style={{ paddingTop: `max(0.75rem, var(--safe-top))` }}>
-        <button onClick={() => setActiveId(null)} className="md:hidden -ml-1 w-10 h-10 flex items-center justify-center rounded-full text-[#9ab0cc] active:bg-[#edf1fa] transition-colors">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-surface" style={{ paddingTop: `max(0.75rem, var(--safe-top))` }}>
+        <button onClick={() => setActiveId(null)} className="md:hidden -ml-1 w-10 h-10 flex items-center justify-center rounded-full text-text-subtle active:bg-tint transition-colors">
           <ArrowLeft size={22} />
         </button>
         <div className="relative flex-shrink-0 w-9 h-9">
           {avatarSrc ? (
             <img src={avatarSrc} alt={displayName} className="w-full h-full rounded-full object-cover" />
           ) : (
-            <div className="w-full h-full rounded-full bg-[#5b8def] flex items-center justify-center text-white font-semibold text-sm">
+            <div className="w-full h-full rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white font-semibold text-sm">
               {displayName.charAt(0).toUpperCase()}
             </div>
           )}
           {!conversation.isGroup && (
-            <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${isOnline ? 'bg-green-500' : 'bg-[#b0c0d8]'}`} />
+            <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-surface ${isOnline ? 'bg-green-500' : 'bg-offline'}`} />
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-[#1a2744] truncate">{displayName}</p>
-          <p className="text-xs text-[#9ab0cc]">{isOnline ? 'Online' : conversation.isGroup ? `${conversation.members.length} members` : 'Offline'}</p>
+          <p className="text-sm font-semibold font-display text-text truncate">{displayName}</p>
+          <p className="text-xs text-text-subtle">{isOnline ? 'Online' : conversation.isGroup ? `${conversation.members.length} members` : 'Offline'}</p>
         </div>
         <div className="flex items-center gap-1">
-          <button className="w-8 h-8 flex items-center justify-center rounded-full text-[#9ab0cc] hover:text-[#5b8def] hover:bg-[#edf3ff] transition-colors">
+          <button className="w-8 h-8 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors">
             <Phone size={16} />
           </button>
-          <button className="w-8 h-8 flex items-center justify-center rounded-full text-[#9ab0cc] hover:text-[#5b8def] hover:bg-[#edf3ff] transition-colors">
+          <button className="w-8 h-8 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors">
             <Video size={16} />
           </button>
           <button
             onClick={() => { setSearchOpen((v) => !v); setSearchQuery('') }}
-            className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${searchOpen ? 'bg-[#5b8def] text-white' : 'text-[#9ab0cc] hover:text-[#5b8def] hover:bg-[#edf3ff]'}`}
+            className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${searchOpen ? 'bg-[#5b8def] text-white' : 'text-text-subtle hover:text-primary-text hover:bg-primary-tint'}`}
           >
             <Search size={16} />
           </button>
           {conversation.isGroup && (
             <button
               onClick={() => setShowGroupInfo(true)}
-              className="w-8 h-8 flex items-center justify-center rounded-full text-[#9ab0cc] hover:text-[#5b8def] hover:bg-[#edf3ff] transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
             >
               <Info size={16} />
             </button>
           )}
           <button
             onClick={() => setPanelOpen((v) => !v)}
-            className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${panelOpen ? 'bg-[#5b8def] text-white' : 'text-[#9ab0cc] hover:text-[#5b8def] hover:bg-[#edf3ff]'}`}
+            className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${panelOpen ? 'bg-[#5b8def] text-white' : 'text-text-subtle hover:text-primary-text hover:bg-primary-tint'}`}
             title="Conversation details"
           >
             <PanelRight size={16} />
           </button>
-          <div className="w-px h-4 bg-[#dce7f8] mx-1" />
+          <div className="w-px h-4 bg-border mx-1" />
           <button
             onClick={() => setShowProfile(true)}
-            className="w-8 h-8 rounded-full bg-[#5b8def] flex items-center justify-center text-white text-xs font-semibold overflow-hidden hover:ring-2 hover:ring-[#5b8def]/40 transition-all flex-shrink-0"
+            className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-xs font-semibold overflow-hidden hover:ring-2 hover:ring-[#5b8def]/40 transition-all flex-shrink-0"
           >
             {currentUserProfile?.avatar_url ? (
               <img src={currentUserProfile.avatar_url} alt="You" className="w-full h-full object-cover" />
@@ -541,23 +556,23 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
 
       {/* Search bar */}
       {searchOpen && (
-        <div className="px-4 py-2 bg-white border-b border-[#dce7f8] flex items-center gap-2">
-          <Search size={14} className="text-[#9ab0cc] flex-shrink-0" />
+        <div className="px-4 py-2 bg-surface border-b border-border flex items-center gap-2">
+          <Search size={14} className="text-text-subtle flex-shrink-0" />
           <input
             autoFocus
             type="text"
             placeholder="Search messages…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none bg-transparent"
+            className="flex-1 text-sm text-text placeholder:text-text-subtle outline-none bg-transparent"
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="text-[#9ab0cc] hover:text-[#1a2744]">
+            <button onClick={() => setSearchQuery('')} className="text-text-subtle hover:text-text">
               <X size={14} />
             </button>
           )}
           {searchQuery && (
-            <span className="text-xs text-[#9ab0cc] flex-shrink-0">
+            <span className="text-xs text-text-subtle flex-shrink-0">
               {displayMessages.length} result{displayMessages.length !== 1 ? 's' : ''}
             </span>
           )}
@@ -571,10 +586,10 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
         className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5"
       >
         {isFetchingNextPage && (
-          <div className="text-center text-xs text-[#9ab0cc] py-2">Loading older messages...</div>
+          <div className="text-center text-xs text-text-subtle py-2">Loading older messages...</div>
         )}
         {isLoading && (
-          <div className="flex items-center justify-center h-24 text-[#9ab0cc] text-sm">Loading messages...</div>
+          <div className="flex items-center justify-center h-24 text-text-subtle text-sm">Loading messages...</div>
         )}
 
         {displayMessages.map((msg) => {
@@ -585,7 +600,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
             <div
               key={msg.id}
               id={`msg-${msg.id}`}
-              className={`transition-opacity duration-300 rounded-lg ${highlightedMessageId === msg.id ? 'bg-[#5b8def]/10' : ''} ${pendingIdSet.has(msg.id) && !preAnimIds.has(msg.id) && !animatingIds.has(msg.id) ? 'opacity-60' : ''}`}
+              className={`transition-opacity duration-300 rounded-lg ${highlightedMessageId === msg.id ? 'bg-[#5b8def]/15' : ''} ${pendingIdSet.has(msg.id) && !preAnimIds.has(msg.id) && !animatingIds.has(msg.id) ? 'opacity-60' : ''}`}
               style={
                 preAnimIds.has(msg.id) ? { opacity: 0 }
                 : animatingIds.has(msg.id) ? { animation: 'msgSlideIn 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both' }
@@ -620,7 +635,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
       {showScrollBtn && (
         <button
           onClick={() => { setNewMsgCount(0); bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }}
-          className="absolute bottom-24 right-6 w-9 h-9 flex items-center justify-center rounded-full bg-[#5b8def] text-white shadow-lg hover:bg-[#4a7de4] transition-colors z-10"
+          className="absolute bottom-24 right-6 w-9 h-9 flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-white shadow-[0_8px_24px_rgba(91,141,239,0.4)] hover:brightness-110 transition-all z-10"
         >
           <ChevronDown size={18} />
           {newMsgCount > 0 && (
@@ -634,16 +649,16 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
       {/* Typing indicator — iMessage style, only visible at bottom */}
       {typingUsers.length > 0 && !showScrollBtn && (
         <div className="px-4 py-1.5 flex items-end gap-2">
-          <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-[#5b8def] flex items-center justify-center text-white text-[11px] font-semibold">
+          <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-[11px] font-semibold">
             {typingProfile?.avatar_url
               ? <img src={typingProfile.avatar_url} className="w-full h-full object-cover" alt="" />
               : (typingUsers[0]?.[0]?.toUpperCase() ?? '?')}
           </div>
-          <div className="bg-white rounded-2xl rounded-bl-[4px] shadow-sm shadow-[#dce7f8] border border-[#dce7f8] px-3 py-2.5 flex items-center gap-1.5">
+          <div className="bg-card rounded-2xl rounded-bl-[4px] shadow-sm shadow-black/30 border border-border px-3 py-2.5 flex items-center gap-1.5">
             {[0, 1, 2].map((i) => (
               <span
                 key={i}
-                className="w-2 h-2 rounded-full bg-[#9ab0cc]"
+                className="w-2 h-2 rounded-full bg-text-subtle"
                 style={{ animation: `typingBounce 1.2s ease-in-out ${i * 0.2}s infinite` }}
               />
             ))}
@@ -655,7 +670,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
       {mediaUploading && (
         <div className="px-4 py-1.5 flex items-center gap-2">
           <div className="w-3 h-3 rounded-full border-2 border-[#5b8def] border-t-transparent animate-spin" />
-          <span className="text-xs text-[#9ab0cc]">Uploading…</span>
+          <span className="text-xs text-text-subtle">Uploading…</span>
         </div>
       )}
 
