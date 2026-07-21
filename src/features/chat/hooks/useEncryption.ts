@@ -26,27 +26,30 @@ export class DecryptionFailedError extends Error {
   }
 }
 
-// Module-level in-memory caches — survive re-renders, cleared on page reload
-// or when a different user signs in (cacheOwner check). Avoids repeated
-// IndexedDB reads and peer-key fetches for the same key within a session.
-let cacheOwner: string | null = null
+// Module-level in-memory caches — survive re-renders, cleared on page reload.
+// Avoids repeated IndexedDB reads and peer-key fetches for the same key
+// within a session.
+//
+// identityPairMemCache is keyed by userId (a Map), not a single mutable slot
+// guarded by a "clear when the owner changes" check. The single-slot version
+// had a real race: sign out and back in as a different account fast enough,
+// and a straggling async call still in flight for the OLD account (e.g. the
+// sidebar's preview decryption) could resolve *after* the new account's
+// session had already reset the cache, and overwrite it with the old
+// account's keypair — while everything else still believed the cache
+// belonged to the new user. Every decrypt for the new account would then
+// silently use the wrong private key and fail. Keying by userId makes that
+// structurally impossible: concurrent calls for different users touch
+// different map entries and can never collide.
 const derivedKeyMemCache = new Map<string, StoredDerivedKey>()
 const peerKeyMemCache = new Map<string, { jwk: JsonWebKey; fetchedAt: number }>()
-let identityPairMemCache: { pub: JsonWebKey; priv: JsonWebKey } | null | undefined = undefined
-
-function resetCachesFor(userId: string) {
-  if (cacheOwner === userId) return
-  cacheOwner = userId
-  derivedKeyMemCache.clear()
-  peerKeyMemCache.clear()
-  identityPairMemCache = undefined
-}
+const identityPairMemCache = new Map<string, { pub: JsonWebKey; priv: JsonWebKey } | null>()
 
 async function getIdentityPair(userId: string): Promise<{ pub: JsonWebKey; priv: JsonWebKey } | null> {
-  resetCachesFor(userId)
-  if (identityPairMemCache !== undefined) return identityPairMemCache
-  identityPairMemCache = await loadIdentityKeyPair(userId)
-  return identityPairMemCache
+  if (identityPairMemCache.has(userId)) return identityPairMemCache.get(userId) ?? null
+  const pair = await loadIdentityKeyPair(userId)
+  identityPairMemCache.set(userId, pair)
+  return pair
 }
 
 function parseJwk(raw: unknown): JsonWebKey | null {
@@ -92,7 +95,6 @@ async function getSharedKey(
   peerId: string,
   forceRefreshPeer = false,
 ): Promise<CryptoKey | null> {
-  resetCachesFor(userId)
   const peerJwk = await getPeerKey(peerId, forceRefreshPeer)
   if (!peerJwk) return null
   const myPair = await getIdentityPair(userId)
@@ -121,6 +123,50 @@ async function getSharedKey(
   return key
 }
 
+// iv=null means phase-1 fallback (content is plain base64).
+// Throws DecryptionFailedError when an encrypted message can't be decrypted —
+// callers must render an explicit failure state, not the raw content.
+// Standalone (not a hook) so non-component callers — e.g. fetchConversations,
+// building sidebar previews — can decrypt without needing to be inside a
+// component tree. Shares the same module-level key caches as useEncryption.
+export async function decryptForUser(
+  userId: string,
+  convId: string,
+  otherUserId: string,
+  content: string,
+  iv: string | null,
+): Promise<string> {
+  if (!iv) {
+    try {
+      const bytes = Uint8Array.from(atob(content), (c) => c.charCodeAt(0))
+      return new TextDecoder().decode(bytes)
+    } catch {
+      return content
+    }
+  }
+
+  const key = await getSharedKey(userId, convId, otherUserId)
+  if (key) {
+    try {
+      return await decryptMessage(key, content, iv)
+    } catch { /* possibly stale key — retry below */ }
+  }
+
+  // Retry once against a freshly fetched peer key (peer may have rotated
+  // mid-session) — but skip when the key we just used was already fresh.
+  const cached = peerKeyMemCache.get(otherUserId)
+  const peerIsFresh = cached && Date.now() - cached.fetchedAt < 10_000
+  if (!peerIsFresh) {
+    const retryKey = await getSharedKey(userId, convId, otherUserId, true)
+    if (retryKey && retryKey !== key) {
+      try {
+        return await decryptMessage(retryKey, content, iv)
+      } catch { /* fall through */ }
+    }
+  }
+  throw new DecryptionFailedError(key ? 'key mismatch' : 'no shared key')
+}
+
 async function publishIdentityKey(userId: string, pub: JsonWebKey): Promise<void> {
   const { error } = await supabase.from('devices').upsert(
     { user_id: userId, device_id: 1, identity_key: JSON.stringify(pub) },
@@ -136,10 +182,9 @@ export function useEncryption(userId: string | undefined) {
     if (!userId) return
 
     async function initKeys(uid: string) {
-      resetCachesFor(uid)
       const existing = await loadIdentityKeyPair(uid)
       if (existing) {
-        identityPairMemCache = existing
+        identityPairMemCache.set(uid, existing)
         await publishIdentityKey(uid, existing.pub)
         return
       }
@@ -152,14 +197,14 @@ export function useEncryption(userId: string | undefined) {
         if (serverJwk && publicKeyFingerprint(serverJwk) === publicKeyFingerprint(legacy.pub)) {
           await storeIdentityKeyPair(uid, legacy.pub, legacy.priv)
           await clearLegacyIdentityKeyPair()
-          identityPairMemCache = legacy
+          identityPairMemCache.set(uid, legacy)
           return
         }
       }
 
       const { publicKeyJwk, privateKeyJwk } = await generateKeyPair()
       await storeIdentityKeyPair(uid, publicKeyJwk, privateKeyJwk)
-      identityPairMemCache = { pub: publicKeyJwk, priv: privateKeyJwk }
+      identityPairMemCache.set(uid, { pub: publicKeyJwk, priv: privateKeyJwk })
       await publishIdentityKey(uid, publicKeyJwk)
     }
 
@@ -186,36 +231,11 @@ export function useEncryption(userId: string | undefined) {
   // callers must render an explicit failure state, not the raw content.
   const decrypt = useCallback(
     async (convId: string, otherUserId: string, content: string, iv: string | null): Promise<string> => {
-      if (!iv) {
-        try {
-          const bytes = Uint8Array.from(atob(content), (c) => c.charCodeAt(0))
-          return new TextDecoder().decode(bytes)
-        } catch {
-          return content
-        }
+      if (!userId) {
+        if (!iv) return decryptForUser('', convId, otherUserId, content, iv)
+        throw new DecryptionFailedError('no signed-in user')
       }
-      if (!userId) throw new DecryptionFailedError('no signed-in user')
-
-      const key = await getSharedKey(userId, convId, otherUserId)
-      if (key) {
-        try {
-          return await decryptMessage(key, content, iv)
-        } catch { /* possibly stale key — retry below */ }
-      }
-
-      // Retry once against a freshly fetched peer key (peer may have rotated
-      // mid-session) — but skip when the key we just used was already fresh.
-      const cached = peerKeyMemCache.get(otherUserId)
-      const peerIsFresh = cached && Date.now() - cached.fetchedAt < 10_000
-      if (!peerIsFresh) {
-        const retryKey = await getSharedKey(userId, convId, otherUserId, true)
-        if (retryKey && retryKey !== key) {
-          try {
-            return await decryptMessage(retryKey, content, iv)
-          } catch { /* fall through */ }
-        }
-      }
-      throw new DecryptionFailedError(key ? 'key mismatch' : 'no shared key')
+      return decryptForUser(userId, convId, otherUserId, content, iv)
     },
     [userId],
   )

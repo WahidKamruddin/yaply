@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { decryptForUser } from '@/features/chat/hooks/useEncryption'
 import type { ConversationListItem, DecryptedMessage, MemberSummary, Profile } from '../types'
 
 export async function fetchConversations(userId: string): Promise<ConversationListItem[]> {
@@ -41,13 +42,31 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
 
   // Map convId → my last_read_at so we can count unread messages below.
   const myLastReadAt: Record<string, string | null> = {}
+  // Map convId → the DM partner's user id, used as the ECDH peer for
+  // decrypting the last-message preview. Groups have no pairwise key.
+  const convPeerId: Record<string, string | null> = {}
+  const convIsGroup: Record<string, boolean> = {}
   for (const row of memberRows) {
-    const convId = (row.conversations as unknown as { id: string } | null)?.id
-    if (convId) myLastReadAt[convId] = row.last_read_at
+    const conv = row.conversations as unknown as {
+      id: string
+      type: string
+      conversation_members: Array<{ user_id: string }>
+    } | null
+    if (!conv) continue
+    myLastReadAt[conv.id] = row.last_read_at
+    convIsGroup[conv.id] = conv.type === 'group'
+    if (conv.type !== 'group') {
+      const other = conv.conversation_members.find((cm) => cm.user_id !== userId)
+      convPeerId[conv.id] = other?.user_id ?? null
+    }
   }
 
   let lastMessages: Record<string, DecryptedMessage> = {}
   const unreadCounts: Record<string, number> = {}
+  // Decryption is async; previews are filled in via these tasks and awaited
+  // once before returning, so every conversation resolves before this
+  // function's promise does (no flash of ciphertext followed by a re-render).
+  const decryptTasks: Promise<void>[] = []
 
   if (convIds.length > 0) {
     const { data: msgs } = await supabase
@@ -75,19 +94,48 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
       }>) {
         if (!seen.has(m.conversation_id)) {
           seen.add(m.conversation_id)
-          // Last message preview uses legacy base64 decode (no shared key available here)
+
           let preview = m.content
+          let decryptFailed = false
+
           if (!m.iv) {
+            // Phase-1 fallback: plain base64, no key needed.
             try {
               const bytes = Uint8Array.from(atob(m.content), (c) => c.charCodeAt(0))
               preview = new TextDecoder().decode(bytes)
             } catch { /* keep raw */ }
+          } else if (convIsGroup[m.conversation_id]) {
+            // Groups have no pairwise E2E key — an iv here is a legacy/
+            // own-sender artifact with no peer to decrypt against.
+            preview = ''
+            decryptFailed = true
+          } else {
+            const peerId = convPeerId[m.conversation_id]
+            if (peerId) {
+              const convId = m.conversation_id
+              decryptTasks.push(
+                decryptForUser(userId, convId, peerId, m.content, m.iv)
+                  .then((text) => {
+                    lastMessages[convId].content = text
+                  })
+                  .catch(() => {
+                    lastMessages[convId].content = ''
+                    lastMessages[convId].decryptFailed = true
+                  }),
+              )
+              preview = '' // placeholder — filled in once decryptTasks resolves below
+            } else {
+              preview = ''
+              decryptFailed = true
+            }
           }
+
           lastMessages[m.conversation_id] = {
             id: m.id,
             conversationId: m.conversation_id,
             senderId: m.sender_id,
             content: preview,
+            decryptFailed,
             type: m.type,
             mediaUrl: null,
             replyToId: null,
@@ -108,6 +156,8 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
       }
     }
   }
+
+  if (decryptTasks.length > 0) await Promise.all(decryptTasks)
 
   return memberRows
     .map((row) => {
@@ -265,11 +315,19 @@ export async function markConversationRead(
   conversationId: string,
   userId: string,
 ): Promise<void> {
-  const { error } = await supabase
+  // .select('user_id') forces the response to include the touched row(s) —
+  // without it a silently-mismatched WHERE clause (e.g. a stale userId)
+  // "succeeds" while updating zero rows, and last_read_at never advances
+  // with nothing in the client to indicate why.
+  const { data, error } = await supabase
     .from('conversation_members')
     .update({ last_read_at: new Date().toISOString() })
     .eq('conversation_id', conversationId)
     .eq('user_id', userId)
+    .select('user_id')
 
   if (error) throw error
+  if (data.length === 0) {
+    console.error('[yaply] markConversationRead touched 0 rows', { conversationId, userId })
+  }
 }
