@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Send } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { useEncryption } from '@/features/chat/hooks/useEncryption'
-import { fetchThreadMessages, sendMessage } from '@/features/chat/api/messages'
+import { useEncryption, getMyFingerprint, decodePhase1 } from '@/features/chat/hooks/useEncryption'
+import { fetchThreadMessages, fetchEnvelopesForMessages, sendMessage } from '@/features/chat/api/messages'
 import { supabase } from '@/lib/supabase'
+import type { DbEnvelope } from '@/features/chat/hooks/useEncryption'
 import type { DecryptedMessage } from '@/features/chat/types'
 import MessageBubble from './MessageBubble'
 
@@ -11,46 +12,53 @@ interface Props {
   rootMessage: DecryptedMessage
   currentUserId: string
   conversationId: string
-  // The other member of a direct chat; null for groups (no pairwise E2E).
-  peerUserId: string | null
+  // Every member of the conversation — thread replies are envelope-encrypted
+  // for all member devices, same as main messages.
+  memberUserIds: string[]
   onClose: () => void
 }
 
-export default function ThreadView({ rootMessage, currentUserId, conversationId, peerUserId, onClose }: Props) {
+export default function ThreadView({ rootMessage, currentUserId, conversationId, memberUserIds, onClose }: Props) {
   const [replies, setReplies] = useState<DecryptedMessage[]>([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const { encrypt, decrypt } = useEncryption(currentUserId)
+  const { encrypt, decryptV2 } = useEncryption(currentUserId)
 
   const loadReplies = useCallback(async () => {
     const raw = await fetchThreadMessages(rootMessage.id)
+
+    // One batched envelope lookup for this device across all v2 replies.
+    let envelopes: Map<string, DbEnvelope> = new Map()
+    const v2Ids = raw.filter((m) => m.enc_v === 2).map((m) => m.id)
+    if (v2Ids.length > 0) {
+      try {
+        const myFp = await getMyFingerprint(currentUserId)
+        if (myFp) envelopes = await fetchEnvelopesForMessages(v2Ids, myFp)
+      } catch (err) {
+        console.error('[yaply:crypto] ThreadView envelope batch FAILED', { err })
+      }
+    }
+
     const decrypted: DecryptedMessage[] = []
     for (const msg of raw) {
       let content = msg.content
       let decryptFailed = false
-      if (!msg.iv) {
-        // Phase-1 fallback: plain base64.
+      if (msg.enc_v === 2) {
         try {
-          const bytes = Uint8Array.from(atob(msg.content), (c) => c.charCodeAt(0))
-          content = new TextDecoder().decode(bytes)
-        } catch { /* keep raw */ }
-      } else {
-        // Encrypted: peer is the sender for inbound, the DM partner for own
-        // messages (ECDH symmetry). No peer in groups → explicit failure.
-        const peerId = msg.sender_id && msg.sender_id !== currentUserId ? msg.sender_id : peerUserId
-        if (peerId) {
-          try {
-            content = await decrypt(conversationId, peerId, msg.content, msg.iv)
-          } catch {
-            decryptFailed = true
-            content = ''
-          }
-        } else {
+          content = await decryptV2(envelopes.get(msg.id), msg.content, msg.iv)
+        } catch {
           decryptFailed = true
           content = ''
         }
+      } else if (!msg.iv) {
+        // Phase-1 fallback / system messages: plain base64.
+        content = decodePhase1(msg.content)
+      } else {
+        // Legacy pairwise ciphertext (pre-envelope-migration) — unreadable.
+        decryptFailed = true
+        content = ''
       }
       decrypted.push({
         id: msg.id,
@@ -69,7 +77,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
       })
     }
     setReplies(decrypted)
-  }, [rootMessage.id, conversationId, currentUserId, peerUserId, decrypt])
+  }, [rootMessage.id, conversationId, currentUserId, decryptV2])
 
   useEffect(() => { void loadReplies() }, [loadReplies])
 
@@ -94,23 +102,15 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
 
     setSendError(null)
     try {
-      let content = trimmed
-      let iv: string | null = null
-      // Encrypt only in direct chats — groups use the phase-1 base64 path.
-      if (peerUserId) {
-        const enc = await encrypt(conversationId, peerUserId, trimmed)
-        content = enc.content
-        iv = enc.iv || null
-      } else {
-        // Use TextEncoder + base64 so non-ASCII (emoji, etc.) don't crash btoa
-        content = btoa(String.fromCharCode(...new TextEncoder().encode(trimmed)))
-      }
-
+      // Envelope-encrypt for all member devices; encrypt() falls back to
+      // phase-1 (enc_v = NULL, iv = NULL) when a member has no device yet.
+      const result = await encrypt(memberUserIds, trimmed)
       await sendMessage({
         conversationId,
         senderId: currentUserId,
-        content,
-        iv,
+        content: result.content,
+        iv: result.mode === 'v2' ? result.iv : null,
+        envelopes: result.mode === 'v2' ? result.envelopes : undefined,
         type: 'text',
         replyToId: rootMessage.id,
         threadId: rootMessage.id,
@@ -122,7 +122,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
     }
 
     setSending(false)
-  }, [text, sending, rootMessage, conversationId, currentUserId, peerUserId, encrypt, loadReplies])
+  }, [text, sending, rootMessage, conversationId, currentUserId, memberUserIds, encrypt, loadReplies])
 
   const rootName = rootMessage.senderProfile?.display_name ?? rootMessage.senderProfile?.username ?? 'Unknown'
   const rootTime = formatDistanceToNow(new Date(rootMessage.createdAt), { addSuffix: true })

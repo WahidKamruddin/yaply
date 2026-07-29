@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { DbMessage, SendMessageParams } from '../types'
+import type { DbEnvelope } from '../hooks/useEncryption'
 
 const PAGE_SIZE = 50
 
@@ -15,6 +16,7 @@ export async function fetchMessages(
       sender_id,
       content,
       iv,
+      enc_v,
       type,
       media_url,
       media_mime,
@@ -61,6 +63,33 @@ export async function fetchMessages(
 }
 
 export async function sendMessage(params: SendMessageParams): Promise<DbMessage> {
+  // Envelope-encrypted sends go through the RPC so the message row (enc_v = 2)
+  // and its envelopes commit in one transaction — a v2 message must never
+  // exist without envelopes (that state is reserved for "sealed before this
+  // device existed").
+  if (params.envelopes && params.envelopes.length > 0) {
+    if (!params.iv) throw new Error('[yaply] envelope send requires an iv (enc_v = 2 invariant)')
+    const { data, error } = await supabase.rpc('send_message_with_envelopes', {
+      p_conversation_id: params.conversationId,
+      p_content: params.content,
+      p_iv: params.iv,
+      p_envelopes: params.envelopes.map((e) => ({
+        recipient_user_id: e.recipientUserId,
+        recipient_fp: e.recipientFp,
+        eph_pub: e.ephPub,
+        key_iv: e.keyIv,
+        wrapped_key: e.wrappedKey,
+      })),
+      p_type: params.type ?? 'text',
+      p_reply_to_id: params.replyToId ?? null,
+      p_thread_id: params.threadId ?? null,
+      p_media_url: params.mediaUrl ?? null,
+      p_media_mime: params.mediaMime ?? null,
+    })
+    if (error) throw error
+    return data as unknown as DbMessage
+  }
+
   const { data, error } = await supabase
     .from('messages')
     .insert({
@@ -81,6 +110,7 @@ export async function sendMessage(params: SendMessageParams): Promise<DbMessage>
       sender_id,
       content,
       iv,
+      enc_v,
       type,
       media_url,
       media_mime,
@@ -96,6 +126,27 @@ export async function sendMessage(params: SendMessageParams): Promise<DbMessage>
   return data as unknown as DbMessage
 }
 
+// This device's envelopes for the given enc_v = 2 messages, in one query.
+// Returns a map messageId → envelope; a v2 message with no entry has no
+// envelope sealed to this device (sent before the device existed).
+export async function fetchEnvelopesForMessages(
+  messageIds: string[],
+  myFp: string,
+): Promise<Map<string, DbEnvelope>> {
+  const map = new Map<string, DbEnvelope>()
+  if (messageIds.length === 0) return map
+  const { data, error } = await supabase
+    .from('message_envelopes')
+    .select('message_id, recipient_fp, eph_pub, key_iv, wrapped_key')
+    .in('message_id', messageIds)
+    .eq('recipient_fp', myFp)
+  if (error) throw error
+  for (const row of (data ?? []) as DbEnvelope[]) {
+    map.set(row.message_id, row)
+  }
+  return map
+}
+
 export async function fetchThreadMessages(threadRootId: string): Promise<DbMessage[]> {
   const { data, error } = await supabase
     .from('messages')
@@ -105,6 +156,7 @@ export async function fetchThreadMessages(threadRootId: string): Promise<DbMessa
       sender_id,
       content,
       iv,
+      enc_v,
       type,
       media_url,
       media_mime,

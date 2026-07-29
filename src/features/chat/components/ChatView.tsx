@@ -9,10 +9,11 @@ import { useMessages } from '@/features/chat/hooks/useMessages'
 import { useSendMessage } from '@/features/chat/hooks/useSendMessage'
 import { useRealtimeMessages } from '@/features/chat/hooks/useRealtimeMessages'
 import { useTypingIndicator } from '@/features/chat/hooks/useTypingIndicator'
-import { useEncryption } from '@/features/chat/hooks/useEncryption'
+import { useEncryption, getMyFingerprint, decodePhase1 } from '@/features/chat/hooks/useEncryption'
+import type { DbEnvelope } from '@/features/chat/hooks/useEncryption'
 import { useProfile } from '@/features/chat/hooks/useProfile'
 import { markConversationRead } from '@/features/chat/api/conversations'
-import { deleteMessage, fetchThreadCounts } from '@/features/chat/api/messages'
+import { deleteMessage, fetchThreadCounts, fetchEnvelopesForMessages } from '@/features/chat/api/messages'
 import { useReadReceipts } from '@/features/chat/hooks/useReadReceipts'
 import GroupInfoModal from './GroupInfoModal'
 import ConversationPanel from './ConversationPanel'
@@ -94,7 +95,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useMessages(activeId)
   const { mutate: send } = useSendMessage(activeId ?? '')
-  const { encrypt, decrypt, preDeriveKey } = useEncryption(currentUserId)
+  const { encrypt, decryptV2 } = useEncryption(currentUserId)
 
   useRealtimeMessages(activeId)
 
@@ -124,13 +125,6 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
     isNearBottomRef.current = true
     setNewMsgCount(0)
   }, [activeId])
-
-  // Eagerly derive the shared key when a direct conversation opens so the first send is instant
-  useEffect(() => {
-    if (activeId && otherMember?.userId && !conversation?.isGroup) {
-      void preDeriveKey(activeId, otherMember.userId)
-    }
-  }, [activeId, otherMember?.userId, conversation?.isGroup, preDeriveKey])
 
   const allMessages = useMemo(() => [...decrypted, ...pendingMessages], [decrypted, pendingMessages])
 
@@ -166,12 +160,30 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
     const isAborted = () => abort.current
 
     async function run() {
-      const isGroup = conversation?.isGroup ?? false
       const results: DecryptedMessage[] = []
+
+      // Batch-fetch this device's envelopes for every not-yet-decrypted
+      // enc_v = 2 message on the page (one query, keyed by fingerprint).
+      const cacheKeyFor = (m: typeof allDbMessages[number]) => `${m.id}:${m.edited_at ?? ''}`
+      const v2Ids = allDbMessages
+        .filter((m) => m.enc_v === 2 && decryptCacheRef.current.get(cacheKeyFor(m)) === undefined)
+        .map((m) => m.id)
+      let envelopes: Map<string, DbEnvelope> = new Map()
+      if (v2Ids.length > 0) {
+        try {
+          const myFp = await getMyFingerprint(currentUserId)
+          if (myFp) envelopes = await fetchEnvelopesForMessages(v2Ids, myFp)
+          console.debug('[yaply:crypto] ChatView envelope batch', { requested: v2Ids.length, found: envelopes.size })
+        } catch (err) {
+          console.error('[yaply:crypto] ChatView envelope batch FAILED', { err })
+        }
+      }
+      if (isAborted()) return
+
       for (const msg of allDbMessages) {
         let content = msg.content
         let decryptFailed = false
-        const cacheKey = `${msg.id}:${msg.edited_at ?? ''}`
+        const cacheKey = cacheKeyFor(msg)
         const cachedPlain = decryptCacheRef.current.get(cacheKey)
 
         if (cachedPlain !== undefined) {
@@ -181,39 +193,30 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
           } else {
             content = cachedPlain
           }
-        } else if (!msg.iv) {
-          // Phase-1 fallback / system messages: content is plain base64.
+        } else if (msg.enc_v === 2) {
+          // Envelope-encrypted (v2) — identical for groups and DMs. A missing
+          // envelope means the message was sealed before this device existed.
           try {
-            const bytes = Uint8Array.from(atob(msg.content), (c) => c.charCodeAt(0))
-            content = new TextDecoder().decode(bytes)
-          } catch { /* keep raw */ }
-          decryptCacheRef.current.set(cacheKey, content)
-        } else {
-          // Encrypted message. Pairwise ECDH peer: the sender for inbound
-          // messages; for own messages the other member (direct chats only —
-          // ECDH symmetry yields the same shared key on both sides).
-          const senderId = msg.sender_id
-          const peerId = senderId && senderId !== currentUserId
-            ? senderId
-            : (!isGroup ? otherMember?.userId ?? null : null)
-          if (peerId) {
-            try {
-              content = await decrypt(activeId!, peerId, msg.content, msg.iv)
-              decryptCacheRef.current.set(cacheKey, content)
-              console.debug('[yaply:crypto] ChatView decrypt ok', { msgId: msg.id, senderId, peerId })
-            } catch (err) {
-              console.error('[yaply:crypto] ChatView decrypt FAILED', { msgId: msg.id, senderId, peerId, err })
-              decryptFailed = true
-              content = ''
-              decryptCacheRef.current.set(cacheKey, null)
-            }
-          } else {
-            // No peer to derive against (e.g. own message in a group from the
-            // legacy encrypt path). Don't cache — the peer may still load.
-            console.debug('[yaply:crypto] ChatView decrypt skipped: no peer resolved', { msgId: msg.id, senderId, isGroup, otherMemberId: otherMember?.userId })
+            content = await decryptV2(envelopes.get(msg.id), msg.content, msg.iv)
+            decryptCacheRef.current.set(cacheKey, content)
+            console.debug('[yaply:crypto] ChatView v2 decrypt ok', { msgId: msg.id })
+          } catch (err) {
+            console.error('[yaply:crypto] ChatView v2 decrypt FAILED', { msgId: msg.id, hadEnvelope: envelopes.has(msg.id), err })
             decryptFailed = true
             content = ''
+            decryptCacheRef.current.set(cacheKey, null)
           }
+        } else if (!msg.iv) {
+          // Phase-1 / system messages: content is plain base64.
+          content = decodePhase1(msg.content)
+          decryptCacheRef.current.set(cacheKey, content)
+        } else {
+          // iv set but not v2: legacy pairwise ciphertext from before the
+          // envelope migration — unreadable by design (history was wiped).
+          console.debug('[yaply:crypto] ChatView: legacy pairwise ciphertext, rendering decryptFailed', { msgId: msg.id })
+          decryptFailed = true
+          content = ''
+          decryptCacheRef.current.set(cacheKey, null)
         }
         results.push({
           id: msg.id,
@@ -257,7 +260,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
 
     void run()
     return () => { abort.current = true }
-  }, [allDbMessages, activeId, currentUserId, otherMember?.userId, conversation?.isGroup, decrypt])
+  }, [allDbMessages, activeId, currentUserId, decryptV2])
 
   // Realtime reactions subscription
   useEffect(() => {
@@ -379,27 +382,21 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
       }, 500)
     })
 
-    // Pairwise ECDH only works for direct chats — group messages use the
-    // phase-1 base64 path until a real group-key scheme exists.
-    const targetUserId = conversation?.isGroup ? undefined : otherMember?.userId
-    const textBytes = new TextEncoder().encode(text)
-    let content = btoa(Array.from(textBytes, (b) => String.fromCharCode(b)).join(''))
-    let iv: string | null = null
-    if (targetUserId) {
-      try {
-        const result = await encrypt(activeId, targetUserId, text)
-        content = result.content
-        iv = result.iv || null
-      } catch { /* fallback to base64 */ }
-    }
+    // Envelope-encrypt for every member device (groups and DMs alike).
+    // encrypt() falls back to mode 'phase1' (enc_v = NULL, iv = NULL) when a
+    // member has no registered device yet — never a mislabeled v2.
+    const memberIds = conversation?.members.map((m) => m.userId) ?? []
+    const result = await encrypt(memberIds, text)
     send(
-      { conversationId: activeId, senderId: currentUserId, content, iv, type: 'text', replyToId: capturedReplyId, threadId: capturedThreadId },
+      result.mode === 'v2'
+        ? { conversationId: activeId, senderId: currentUserId, content: result.content, iv: result.iv, envelopes: result.envelopes, type: 'text', replyToId: capturedReplyId, threadId: capturedThreadId }
+        : { conversationId: activeId, senderId: currentUserId, content: result.content, iv: null, type: 'text', replyToId: capturedReplyId, threadId: capturedThreadId },
       {
         onSuccess: (data) => { pendingConfirmedRef.current.set(tempId, data.id) },
         onError: () => setPendingMessages((prev) => prev.filter((m) => m.id !== tempId)),
       },
     )
-  }, [activeId, currentUserId, currentUserProfile, encrypt, otherMember?.userId, conversation?.isGroup, replyId, replyMessage?.threadId, send, setReplyId])
+  }, [activeId, currentUserId, currentUserProfile, encrypt, conversation, replyId, replyMessage?.threadId, send, setReplyId])
 
   const handleDelete = useCallback(async (messageId: string) => {
     await deleteMessage(messageId)
@@ -711,7 +708,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
           rootMessage={threadViewRoot}
           currentUserId={currentUserId}
           conversationId={activeId}
-          peerUserId={conversation.isGroup ? null : otherMember?.userId ?? null}
+          memberUserIds={conversation.members.map((m) => m.userId)}
           onClose={() => setThreadViewRoot(null)}
         />
       )}

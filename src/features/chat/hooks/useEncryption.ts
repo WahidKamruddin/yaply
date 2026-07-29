@@ -2,21 +2,18 @@ import { useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import {
   generateKeyPair,
-  deriveSharedKey,
-  encryptMessage,
-  decryptMessage,
+  encryptWithEnvelopes,
+  unwrapAndDecrypt,
   publicKeyFingerprint,
   storeIdentityKeyPair,
   loadIdentityKeyPair,
-  loadLegacyIdentityKeyPair,
-  clearLegacyIdentityKeyPair,
-  storeDerivedKey,
-  loadDerivedKey,
+  storeLocalDeviceId,
+  loadLocalDeviceId,
 } from '@yaply/crypto'
-import type { StoredDerivedKey } from '@yaply/crypto'
+import type { EnvelopeRecipient, MessageEnvelope } from '@yaply/crypto'
 
-// Thrown when a message has an IV but no valid key can decrypt it (missing
-// identity, missing peer key, or AES-GCM auth failure after a fresh re-derive).
+// Thrown when an encrypted (enc_v = 2) message can't be decrypted: no envelope
+// sealed to this device's key, missing identity, or AES-GCM auth failure.
 // The UI renders these as an explicit "couldn't decrypt" state — never as
 // raw ciphertext or atob() garbage.
 export class DecryptionFailedError extends Error {
@@ -26,9 +23,24 @@ export class DecryptionFailedError extends Error {
   }
 }
 
+// An envelope row as fetched from message_envelopes (snake_case DB columns).
+export interface DbEnvelope {
+  message_id: string
+  recipient_fp: string
+  eph_pub: string
+  key_iv: string
+  wrapped_key: string
+}
+
+// Discriminated union so callers can never mix the two modes up:
+// 'v2'      → store with enc_v = 2 via the send_message_with_envelopes RPC.
+// 'phase1'  → store with enc_v = NULL and iv = NULL (plain base64 fallback,
+//             used when any member has no registered device yet).
+export type EncryptResult =
+  | { mode: 'v2'; content: string; iv: string; envelopes: MessageEnvelope[] }
+  | { mode: 'phase1'; content: string }
+
 // Module-level in-memory caches — survive re-renders, cleared on page reload.
-// Avoids repeated IndexedDB reads and peer-key fetches for the same key
-// within a session.
 //
 // identityPairMemCache is keyed by userId (a Map), not a single mutable slot
 // guarded by a "clear when the owner changes" check. The single-slot version
@@ -36,14 +48,29 @@ export class DecryptionFailedError extends Error {
 // and a straggling async call still in flight for the OLD account (e.g. the
 // sidebar's preview decryption) could resolve *after* the new account's
 // session had already reset the cache, and overwrite it with the old
-// account's keypair — while everything else still believed the cache
-// belonged to the new user. Every decrypt for the new account would then
-// silently use the wrong private key and fail. Keying by userId makes that
-// structurally impossible: concurrent calls for different users touch
-// different map entries and can never collide.
-const derivedKeyMemCache = new Map<string, StoredDerivedKey>()
-const peerKeyMemCache = new Map<string, { jwk: JsonWebKey; fetchedAt: number }>()
+// account's keypair. Keying by userId makes that structurally impossible.
 const identityPairMemCache = new Map<string, { pub: JsonWebKey; priv: JsonWebKey } | null>()
+
+// In-flight device registration per user. useEncryption is mounted by more
+// than one component (ChatView and ThreadView), so registerDevice can be
+// invoked concurrently for the same user; without this guard two calls on a
+// fresh install would each generate a *different* keypair and race to publish,
+// leaving the local key out of sync with the published one. Senders also await
+// this before encrypting, so a message sent immediately after login is never
+// silently downgraded to the unencrypted phase-1 path just because
+// registration hadn't finished yet.
+const registrationInFlight = new Map<string, Promise<void>>()
+
+// Devices per user (all installs), refreshed after a short TTL so newly
+// registered devices start receiving envelopes promptly. Global/unscoped by
+// requesting user on purpose — a user's public device list is the same no
+// matter who is asking.
+const devicesMemCache = new Map<string, { devices: EnvelopeRecipient[]; fetchedAt: number }>()
+const DEVICES_TTL_MS = 60_000
+
+// Only devices active in the last 90 days receive envelopes — bounds fan-out
+// against abandoned installs (every cleared-storage browser leaves a row).
+const DEVICE_ACTIVE_WINDOW_MS = 90 * 24 * 60 * 60 * 1000
 
 const trace = (...args: unknown[]) => console.debug('[yaply:crypto]', ...args)
 
@@ -59,6 +86,13 @@ async function getIdentityPair(userId: string): Promise<{ pub: JsonWebKey; priv:
   return pair
 }
 
+// Fingerprint of this install's device key for `userId` — used to pick this
+// device's envelope out of message_envelopes. Null before keys initialize.
+export async function getMyFingerprint(userId: string): Promise<string | null> {
+  const pair = await getIdentityPair(userId)
+  return pair ? publicKeyFingerprint(pair.pub) : null
+}
+
 function parseJwk(raw: unknown): JsonWebKey | null {
   if (!raw) return null
   try {
@@ -71,244 +105,231 @@ function parseJwk(raw: unknown): JsonWebKey | null {
   }
 }
 
-async function fetchDeviceKey(userId: string): Promise<JsonWebKey | null> {
-  const { data, error } = await supabase
-    .from('devices')
-    .select('identity_key')
-    .eq('user_id', userId)
-    .eq('device_id', 1)
-    .maybeSingle()
-  if (error) {
-    console.error('[yaply] failed to fetch identity key for', userId, error)
-    trace('fetchDeviceKey FAILED', { userId, error })
-    return null
-  }
-  const jwk = parseJwk(data?.identity_key)
-  trace('fetchDeviceKey', { userId, found: !!jwk })
-  return jwk
-}
-
-// force=true bypasses the session cache — used by the decrypt retry path to
-// pick up a peer who rotated keys mid-session.
-async function getPeerKey(peerId: string, force = false): Promise<JsonWebKey | null> {
-  const cached = peerKeyMemCache.get(peerId)
-  if (cached && !force) {
-    trace('getPeerKey mem-hit', { peerId })
-    return cached.jwk
-  }
-  trace('getPeerKey fetching', { peerId, force })
-  const jwk = await fetchDeviceKey(peerId)
-  if (!jwk) {
-    trace('getPeerKey fetch returned nothing, falling back to stale cache', { peerId, hadStale: !!cached })
-    return cached?.jwk ?? null
-  }
-  peerKeyMemCache.set(peerId, { jwk, fetchedAt: Date.now() })
-  return jwk
-}
-
-async function getSharedKey(
-  userId: string,
-  convId: string,
-  peerId: string,
-  forceRefreshPeer = false,
-): Promise<CryptoKey | null> {
-  const peerJwk = await getPeerKey(peerId, forceRefreshPeer)
-  if (!peerJwk) {
-    trace('getSharedKey aborted: no peer public key', { userId, convId, peerId })
-    return null
-  }
-  const myPair = await getIdentityPair(userId)
-  if (!myPair) {
-    trace('getSharedKey aborted: no own identity pair', { userId, convId, peerId })
-    return null
-  }
-
-  const myFp = publicKeyFingerprint(myPair.pub)
-  const theirFp = publicKeyFingerprint(peerJwk)
-  const cacheKey = `${userId}:${convId}:${peerId}`
-  const short = (fp: string) => fp.slice(0, 12)
-
-  // A cached key is only valid while BOTH identity keys still match the
-  // fingerprints it was derived from — otherwise someone rotated and we
-  // must re-derive.
-  const mem = derivedKeyMemCache.get(cacheKey)
-  if (mem) {
-    const match = mem.myFp === myFp && mem.theirFp === theirFp
-    trace('getSharedKey mem-cache', { cacheKey, match, cachedMyFp: short(mem.myFp), myFp: short(myFp), cachedTheirFp: short(mem.theirFp), theirFp: short(theirFp) })
-    if (match) return mem.key
-  }
-
-  const stored = await loadDerivedKey(cacheKey)
-  if (stored) {
-    const match = stored.myFp === myFp && stored.theirFp === theirFp
-    trace('getSharedKey idb-cache', { cacheKey, match, storedMyFp: short(stored.myFp), myFp: short(myFp), storedTheirFp: short(stored.theirFp), theirFp: short(theirFp) })
-    if (match) {
-      derivedKeyMemCache.set(cacheKey, stored)
-      return stored.key
+// Fetches every active device for the given users (one query), with a short
+// mem-cache per user. Returns a map userId → devices (possibly empty array).
+async function getDevicesFor(userIds: string[]): Promise<Map<string, EnvelopeRecipient[]>> {
+  const result = new Map<string, EnvelopeRecipient[]>()
+  const toFetch: string[] = []
+  const now = Date.now()
+  for (const id of userIds) {
+    const cached = devicesMemCache.get(id)
+    if (cached && now - cached.fetchedAt < DEVICES_TTL_MS) {
+      result.set(id, cached.devices)
+    } else {
+      toFetch.push(id)
     }
   }
-
-  trace('getSharedKey deriving fresh key', { cacheKey, myFp: short(myFp), theirFp: short(theirFp) })
-  const key = await deriveSharedKey(myPair.priv, peerJwk)
-  const entry: StoredDerivedKey = { key, myFp, theirFp }
-  derivedKeyMemCache.set(cacheKey, entry)
-  await storeDerivedKey(cacheKey, entry)
-  return key
+  if (toFetch.length > 0) {
+    const cutoff = new Date(now - DEVICE_ACTIVE_WINDOW_MS).toISOString()
+    const { data, error } = await supabase
+      .from('devices')
+      .select('user_id, identity_key, key_fingerprint, last_active_at')
+      .in('user_id', toFetch)
+      .gte('last_active_at', cutoff)
+    if (error) {
+      console.error('[yaply:crypto] getDevicesFor FAILED', { toFetch, error })
+      throw error
+    }
+    for (const id of toFetch) result.set(id, [])
+    for (const row of data ?? []) {
+      const jwk = parseJwk(row.identity_key)
+      if (!jwk) {
+        console.error('[yaply:crypto] getDevicesFor: unparseable identity_key, skipping device', { userId: row.user_id })
+        continue
+      }
+      const fp = row.key_fingerprint ?? publicKeyFingerprint(jwk)
+      result.get(row.user_id)!.push({ userId: row.user_id, fp, pubJwk: jwk })
+    }
+    for (const id of toFetch) {
+      devicesMemCache.set(id, { devices: result.get(id)!, fetchedAt: now })
+    }
+    trace('getDevicesFor fetched', Object.fromEntries(toFetch.map((id) => [id, result.get(id)!.length])))
+  }
+  return result
 }
 
-// iv=null means phase-1 fallback (content is plain base64).
-// Throws DecryptionFailedError when an encrypted message can't be decrypted —
-// callers must render an explicit failure state, not the raw content.
-// Standalone (not a hook) so non-component callers — e.g. fetchConversations,
-// building sidebar previews — can decrypt without needing to be inside a
-// component tree. Shares the same module-level key caches as useEncryption.
-export async function decryptForUser(
+function encodePhase1(plaintext: string): string {
+  const bytes = new TextEncoder().encode(plaintext)
+  return btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''))
+}
+
+// Decode a phase-1 (iv = NULL, enc_v = NULL) message: plain base64 UTF-8.
+export function decodePhase1(content: string): string {
+  try {
+    const bytes = Uint8Array.from(atob(content), (c) => c.charCodeAt(0))
+    return new TextDecoder().decode(bytes)
+  } catch {
+    return content
+  }
+}
+
+// Envelope-encrypt `plaintext` for every active device of every conversation
+// member. Standalone so non-component callers can use it too.
+//
+// Invariants enforced here:
+// - The sender's own user id is ALWAYS unioned into the member set, and the
+//   local device key is added even if the DB read raced device registration —
+//   the sender must be able to read their own message after a reload.
+// - If ANY member has zero registered devices, falls back to phase-1
+//   (mode: 'phase1' → enc_v = NULL, iv = NULL). A member who could never read
+//   an encrypted message must not silently receive undecryptable ciphertext.
+export async function encryptForMembers(
   userId: string,
-  convId: string,
-  otherUserId: string,
+  memberUserIds: string[],
+  plaintext: string,
+): Promise<EncryptResult> {
+  try {
+    // Don't encrypt against a half-registered device: if this install is still
+    // publishing its key, wait for it rather than falling back to phase-1.
+    await registrationInFlight.get(userId)
+
+    const ids = [...new Set([...memberUserIds, userId])]
+    const devicesByUser = await getDevicesFor(ids)
+
+    const myPair = await getIdentityPair(userId)
+    if (myPair) {
+      const myFp = publicKeyFingerprint(myPair.pub)
+      const mine = devicesByUser.get(userId) ?? []
+      if (!mine.some((d) => d.fp === myFp)) {
+        trace('encryptForMembers: adding local device not yet visible in DB', { userId })
+        devicesByUser.set(userId, [...mine, { userId, fp: myFp, pubJwk: myPair.pub }])
+      }
+    }
+
+    const memberWithoutDevice = ids.find((id) => (devicesByUser.get(id) ?? []).length === 0)
+    if (memberWithoutDevice) {
+      trace('encryptForMembers: phase-1 fallback, member has no devices', { memberWithoutDevice })
+      return { mode: 'phase1', content: encodePhase1(plaintext) }
+    }
+
+    const recipients = ids.flatMap((id) => devicesByUser.get(id)!)
+    const { content, iv, envelopes } = await encryptWithEnvelopes(plaintext, recipients)
+    trace('encryptForMembers ok', { members: ids.length, envelopes: envelopes.length })
+    return { mode: 'v2', content, iv, envelopes }
+  } catch (err) {
+    console.error('[yaply:crypto] encryptForMembers FAILED, falling back to phase-1', { err })
+    return { mode: 'phase1', content: encodePhase1(plaintext) }
+  }
+}
+
+// Decrypt an enc_v = 2 message given this device's envelope (or undefined when
+// no envelope is sealed to this device — a legitimate, permanent state for
+// messages sent before the device existed).
+// Standalone (not a hook) so the sidebar-preview builder can call it.
+export async function decryptV2ForUser(
+  userId: string,
+  envelope: DbEnvelope | undefined,
   content: string,
   iv: string | null,
 ): Promise<string> {
-  trace('decryptForUser start', { userId, convId, otherUserId, phase: iv ? 'encrypted' : 'phase-1' })
+  if (!envelope) {
+    trace('decryptV2ForUser: no envelope for this device', { userId })
+    throw new DecryptionFailedError('no envelope for this device')
+  }
   if (!iv) {
-    try {
-      const bytes = Uint8Array.from(atob(content), (c) => c.charCodeAt(0))
-      return new TextDecoder().decode(bytes)
-    } catch {
-      return content
-    }
+    // enc_v = 2 guarantees an iv; a missing one means corrupt data.
+    throw new DecryptionFailedError('v2 message missing iv')
   }
-
-  const key = await getSharedKey(userId, convId, otherUserId)
-  if (key) {
-    try {
-      const plain = await decryptMessage(key, content, iv)
-      trace('decryptForUser succeeded on first attempt', { userId, convId, otherUserId })
-      return plain
-    } catch (err) {
-      trace('decryptForUser first attempt failed, will consider retry', { userId, convId, otherUserId, err })
-    }
-  } else {
-    trace('decryptForUser: no shared key on first attempt', { userId, convId, otherUserId })
+  // Same reasoning as the send path: a decrypt racing first-login registration
+  // should wait for the keypair rather than report a false failure.
+  await registrationInFlight.get(userId)
+  const pair = await getIdentityPair(userId)
+  if (!pair) {
+    trace('decryptV2ForUser: no identity pair', { userId })
+    throw new DecryptionFailedError('no identity keypair on this device')
   }
-
-  // Retry once against a freshly fetched peer key (peer may have rotated
-  // mid-session) — but skip when the key we just used was already fresh.
-  const cached = peerKeyMemCache.get(otherUserId)
-  const peerIsFresh = cached && Date.now() - cached.fetchedAt < 10_000
-  trace('decryptForUser retry decision', { userId, convId, otherUserId, peerIsFresh: !!peerIsFresh })
-  if (!peerIsFresh) {
-    const retryKey = await getSharedKey(userId, convId, otherUserId, true)
-    if (retryKey && retryKey !== key) {
-      try {
-        const plain = await decryptMessage(retryKey, content, iv)
-        trace('decryptForUser succeeded on retry', { userId, convId, otherUserId })
-        return plain
-      } catch (err) {
-        trace('decryptForUser retry attempt also failed', { userId, convId, otherUserId, err })
-      }
-    } else {
-      trace('decryptForUser retry produced no new key', { userId, convId, otherUserId, gotRetryKey: !!retryKey, sameAsFirst: retryKey === key })
-    }
+  try {
+    const plain = await unwrapAndDecrypt(pair.priv, {
+      ephPub: envelope.eph_pub,
+      keyIv: envelope.key_iv,
+      wrappedKey: envelope.wrapped_key,
+    }, content, iv)
+    trace('decryptV2ForUser ok', { userId, messageId: envelope.message_id })
+    return plain
+  } catch (err) {
+    console.error('[yaply:crypto] decryptV2ForUser FAILED', { userId, messageId: envelope.message_id, err })
+    throw new DecryptionFailedError('envelope unwrap or content decrypt failed')
   }
-  const reason = key ? 'key mismatch' : 'no shared key'
-  trace('decryptForUser FAILED, giving up', { userId, convId, otherUserId, reason })
-  throw new DecryptionFailedError(reason)
 }
 
-async function publishIdentityKey(userId: string, pub: JsonWebKey): Promise<void> {
-  const fp = publicKeyFingerprint(pub).slice(0, 12)
+// Registers this install as a device for `uid`: one keypair + one random
+// device_id per (user, install), stored locally. The upsert conflicts only on
+// (user_id, device_id) — this install's own row — so no login can ever
+// overwrite another install's published key (the root cause of the old
+// single-slot data loss).
+function registerDevice(uid: string): Promise<void> {
+  const existing = registrationInFlight.get(uid)
+  if (existing) {
+    trace('registerDevice already in flight, joining', { uid })
+    return existing
+  }
+  const run = doRegisterDevice(uid).finally(() => registrationInFlight.delete(uid))
+  registrationInFlight.set(uid, run)
+  return run
+}
+
+async function doRegisterDevice(uid: string): Promise<void> {
+  trace('registerDevice start', { uid })
+  let pair = await loadIdentityKeyPair(uid)
+  if (!pair) {
+    const { publicKeyJwk, privateKeyJwk } = await generateKeyPair()
+    pair = { pub: publicKeyJwk, priv: privateKeyJwk }
+    await storeIdentityKeyPair(uid, pair.pub, pair.priv)
+    trace('registerDevice: generated new keypair', { uid, fp: publicKeyFingerprint(pair.pub).slice(0, 12) })
+  }
+  identityPairMemCache.set(uid, pair)
+
+  let deviceId = await loadLocalDeviceId(uid)
+  if (deviceId == null) {
+    // Random 31-bit id; collision odds across one user's installs are ~2^-31.
+    deviceId = 1 + Math.floor(Math.random() * 0x7ffffffe)
+    await storeLocalDeviceId(uid, deviceId)
+    trace('registerDevice: assigned new local device_id', { uid, deviceId })
+  }
+
+  const fp = publicKeyFingerprint(pair.pub)
   const { error } = await supabase.from('devices').upsert(
-    { user_id: userId, device_id: 1, identity_key: JSON.stringify(pub) },
+    {
+      user_id: uid,
+      device_id: deviceId,
+      identity_key: JSON.stringify(pair.pub),
+      key_fingerprint: fp,
+      last_active_at: new Date().toISOString(),
+    },
     { onConflict: 'user_id,device_id' },
   )
   if (error) {
-    console.error('[yaply] failed to publish identity key — peers cannot encrypt to this device', error)
-    trace('publishIdentityKey FAILED', { userId, fp, error })
+    console.error('[yaply] failed to register device — peers cannot encrypt to this device', error)
+    trace('registerDevice FAILED', { uid, deviceId, fp: fp.slice(0, 12), error })
   } else {
-    trace('publishIdentityKey ok', { userId, fp })
+    trace('registerDevice ok', { uid, deviceId, fp: fp.slice(0, 12) })
+    // Own device list changed — drop the cached copy so the next encrypt
+    // sees this device without waiting out the TTL.
+    devicesMemCache.delete(uid)
   }
 }
 
 export function useEncryption(userId: string | undefined) {
   useEffect(() => {
     if (!userId) return
-
-    async function initKeys(uid: string) {
-      trace('initKeys start', { uid })
-      const existing = await loadIdentityKeyPair(uid)
-      if (existing) {
-        trace('initKeys: found existing v2 keypair', { uid, fp: publicKeyFingerprint(existing.pub).slice(0, 12) })
-        identityPairMemCache.set(uid, existing)
-        await publishIdentityKey(uid, existing.pub)
-        return
-      }
-
-      // Adopt a pre-v2 unscoped keypair if it still matches the key published
-      // in `devices` — avoids rotating (and orphaning history) on upgrade.
-      const legacy = await loadLegacyIdentityKeyPair()
-      if (legacy) {
-        const serverJwk = await fetchDeviceKey(uid)
-        const legacyFp = publicKeyFingerprint(legacy.pub).slice(0, 12)
-        const serverFp = serverJwk ? publicKeyFingerprint(serverJwk).slice(0, 12) : null
-        trace('initKeys: found legacy unscoped keypair', { uid, legacyFp, serverFp, matches: serverFp === legacyFp })
-        if (serverJwk && publicKeyFingerprint(serverJwk) === publicKeyFingerprint(legacy.pub)) {
-          await storeIdentityKeyPair(uid, legacy.pub, legacy.priv)
-          await clearLegacyIdentityKeyPair()
-          identityPairMemCache.set(uid, legacy)
-          trace('initKeys: adopted legacy keypair for this user', { uid, fp: legacyFp })
-          return
-        }
-      }
-
-      const { publicKeyJwk, privateKeyJwk } = await generateKeyPair()
-      trace('initKeys: generating brand-new keypair', { uid, fp: publicKeyFingerprint(publicKeyJwk).slice(0, 12) })
-      await storeIdentityKeyPair(uid, publicKeyJwk, privateKeyJwk)
-      identityPairMemCache.set(uid, { pub: publicKeyJwk, priv: privateKeyJwk })
-      await publishIdentityKey(uid, publicKeyJwk)
-    }
-
-    void initKeys(userId)
+    void registerDevice(userId)
   }, [userId])
 
-  // Returns { content, iv } for storage in the messages table.
-  // iv='' means the phase-1 fallback was used (content is plain base64).
   const encrypt = useCallback(
-    async (convId: string, otherUserId: string, plaintext: string): Promise<{ content: string; iv: string }> => {
-      const sharedKey = userId ? await getSharedKey(userId, convId, otherUserId) : null
-      trace('encrypt', { userId, convId, otherUserId, path: sharedKey ? 'aes-gcm' : 'phase-1-fallback' })
-      if (!sharedKey) {
-        const bytes = new TextEncoder().encode(plaintext)
-        const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join('')
-        return { content: btoa(binary), iv: '' }
-      }
-      return encryptMessage(sharedKey, plaintext)
+    async (memberUserIds: string[], plaintext: string): Promise<EncryptResult> => {
+      if (!userId) return { mode: 'phase1', content: encodePhase1(plaintext) }
+      return encryptForMembers(userId, memberUserIds, plaintext)
     },
     [userId],
   )
 
-  // iv=null means phase-1 fallback (content is plain base64).
-  // Throws DecryptionFailedError when an encrypted message can't be decrypted —
-  // callers must render an explicit failure state, not the raw content.
-  const decrypt = useCallback(
-    async (convId: string, otherUserId: string, content: string, iv: string | null): Promise<string> => {
-      if (!userId) {
-        if (!iv) return decryptForUser('', convId, otherUserId, content, iv)
-        throw new DecryptionFailedError('no signed-in user')
-      }
-      return decryptForUser(userId, convId, otherUserId, content, iv)
+  const decryptV2 = useCallback(
+    async (envelope: DbEnvelope | undefined, content: string, iv: string | null): Promise<string> => {
+      if (!userId) throw new DecryptionFailedError('no signed-in user')
+      return decryptV2ForUser(userId, envelope, content, iv)
     },
     [userId],
   )
 
-  // Pre-derive the shared key for a conversation so the first send is instant.
-  const preDeriveKey = useCallback(
-    async (convId: string, otherUserId: string): Promise<void> => {
-      if (!userId) return
-      await getSharedKey(userId, convId, otherUserId).catch(() => { /* silent */ })
-    },
-    [userId],
-  )
-
-  return { encrypt, decrypt, preDeriveKey }
+  return { encrypt, decryptV2 }
 }

@@ -92,36 +92,63 @@ export interface Database {
           id: string
           conversation_id: string
           sender_id: string | null
-          encrypted_content: string
-          message_type: number
-          sender_device_id: number
-          content_hint: string | null
-          encrypted_attachment_ref: string | null
-          parent_message_id: string | null
-          thread_name: string | null
+          content: string
+          iv: string | null
+          enc_v: number | null
+          type: string
+          media_url: string | null
+          media_mime: string | null
+          reply_to_id: string | null
+          thread_id: string | null
+          edited_at: string | null
           deleted_at: string | null
-          server_timestamp: string
           created_at: string
         }
         Insert: {
           id?: string
           conversation_id: string
           sender_id: string
-          encrypted_content: string
-          message_type?: number
-          sender_device_id?: number
-          content_hint?: string | null
-          encrypted_attachment_ref?: string | null
-          parent_message_id?: string | null
-          thread_name?: string | null
+          content: string
+          iv?: string | null
+          enc_v?: number | null
+          type?: string
+          media_url?: string | null
+          media_mime?: string | null
+          reply_to_id?: string | null
+          thread_id?: string | null
+          edited_at?: string | null
           deleted_at?: string | null
-          server_timestamp?: string
           created_at?: string
         }
         Update: {
           deleted_at?: string | null
-          encrypted_content?: string
+          edited_at?: string | null
+          content?: string
         }
+        Relationships: []
+      }
+      message_envelopes: {
+        Row: {
+          id: string
+          message_id: string
+          recipient_user_id: string
+          recipient_fp: string
+          eph_pub: string
+          key_iv: string
+          wrapped_key: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          message_id: string
+          recipient_user_id: string
+          recipient_fp: string
+          eph_pub: string
+          key_iv: string
+          wrapped_key: string
+          created_at?: string
+        }
+        Update: Record<string, never>
         Relationships: []
       }
       devices: {
@@ -129,18 +156,30 @@ export interface Database {
           id: string
           user_id: string
           device_id: number
-          identity_key: Json | null
+          identity_key: string | null
+          key_fingerprint: string | null
+          signed_prekey: Json | null
+          device_name: string | null
+          push_subscription: Json | null
+          last_active_at: string | null
           created_at: string
         }
         Insert: {
           id?: string
           user_id: string
           device_id?: number
-          identity_key?: Json | null
+          identity_key?: string | null
+          key_fingerprint?: string | null
+          signed_prekey?: Json | null
+          device_name?: string | null
+          push_subscription?: Json | null
+          last_active_at?: string | null
           created_at?: string
         }
         Update: {
-          identity_key?: Json | null
+          identity_key?: string | null
+          key_fingerprint?: string | null
+          last_active_at?: string | null
         }
         Relationships: []
       }
@@ -325,6 +364,28 @@ export interface Database {
       find_direct_conversation: {
         Args: { user_a: string; user_b: string }
         Returns: string | null
+      }
+      find_or_create_direct_conversation: {
+        Args: { target_user_id: string }
+        Returns: string
+      }
+      create_group_conversation: {
+        Args: { p_name: string; p_member_ids: string[] }
+        Returns: string
+      }
+      send_message_with_envelopes: {
+        Args: {
+          p_conversation_id: string
+          p_content: string
+          p_iv: string
+          p_envelopes: Json
+          p_type?: string
+          p_reply_to_id?: string | null
+          p_thread_id?: string | null
+          p_media_url?: string | null
+          p_media_mime?: string | null
+        }
+        Returns: Database['public']['Tables']['messages']['Row']
       }
     }
     Enums: Record<string, never>

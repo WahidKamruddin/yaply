@@ -42,15 +42,7 @@ yaply is a web-based E2E encrypted messaging application. It is a Progressive We
 
 ### Frontend Framework: TanStack Start + React 19
 
-**What it is:** TanStack Start is a full-stack meta-framework built on top of Vite, TanStack Router, and React. It is similar to Next.js or Remix but from the TanStack ecosystem.
-
-**Why it was chosen over Next.js or Remix:**
-- **TanStack Router** is type-safe at the route level — params, search params, and loader data are all fully typed. Next.js's router is not type-safe by default.
-- **TanStack Query** (react-query) integration is first-class — the same team builds both, so SSR + client hydration of server-fetched data works without glue code.
-- **Vite-based** — faster dev server cold starts than Webpack-based setups.
-- The project does not rely on server-side rendering in a meaningful way (Supabase handles all data), so the "meta-framework" features of Next.js were not necessary.
-
-**Why not a plain Vite + React SPA:** TanStack Start was chosen for future flexibility — it can do SSR or server functions if needed later without a full migration. For now it runs as a client-side app deployed to Netlify.
+TanStack Start = a Vite-based full-stack meta-framework (like Next/Remix, TanStack ecosystem). Chosen for route-level type safety (TanStack Router), first-class TanStack Query SSR/hydration, Vite speed, and future flexibility (can add SSR/server functions later without migrating). Currently runs as a client-side SPA on Netlify; SSR features are not relied on (Supabase handles all data).
 
 ### Routing: TanStack Router (file-based)
 
@@ -67,13 +59,9 @@ Routes live in `src/routes/`. The router auto-generates `routeTree.gen.ts` from 
 
 Two separate state layers are used intentionally:
 
-**TanStack Query** (`@tanstack/react-query`) manages **server state** — data that comes from Supabase and needs caching, pagination, and background refetch. Examples: conversation list, message pages.
+**TanStack Query** (`@tanstack/react-query`) manages **server state** — Supabase data needing caching, pagination, background refetch (conversation list, message pages).
 
-**Jotai** manages **UI state** — ephemeral client-side state that doesn't belong in a query cache. Examples: which conversation is currently active, which message is being replied to.
-
-**Why not Redux or Zustand for UI state:** Jotai's atom model requires zero boilerplate for simple state like `activeConversationIdAtom`. Redux and Zustand are better fits for complex state machines; Jotai is better for isolated pieces of UI state.
-
-**Why not useState everywhere:** The active conversation ID needs to be shared across `ConversationListView` (which sets it) and `ChatView` (which reads it). Lifting that state up to a common parent works, but Jotai atoms let both components reach it without prop drilling through the page-level component.
+**Jotai** manages **UI state** — ephemeral client state not belonging in a query cache (active conversation id, reply target). Chosen over Redux/Zustand for zero-boilerplate atoms shared across components (e.g. `activeConversationIdAtom` set by the list, read by `ChatView`) without prop drilling.
 
 ### Styling: Tailwind CSS v4 + Radix UI
 
@@ -92,46 +80,76 @@ Supabase serves as the entire backend. No custom server is needed. It provides:
 - **Realtime** — WebSocket-based Postgres change subscriptions
 - **Storage** — S3-compatible file storage for media, avatars, stickers
 
-**Why Supabase over Firebase:** PostgreSQL's relational model fits the schema well (foreign keys, JOINs, complex queries). Firestore's document model would require significant denormalization to handle the conversation + member + message relationships.
+**Why Supabase (over Firebase / custom API):** Postgres's relational model fits the conversation/member/message schema (FKs, JOINs) better than Firestore's document model; RLS enforces authorization at the DB level, so the client talks directly to Supabase with no middleware layer to maintain.
 
-**Why not a custom Node.js API:** RLS policies in Postgres enforce authorization at the database level, so there is no need for a middleware layer. The client talks directly to Supabase. This removes an entire layer of infrastructure to maintain.
+### Encryption: Web Crypto API (envelope encryption, wire format v2)
 
-### Encryption: Web Crypto API (ECDH + AES-GCM)
+Messages are encrypted end-to-end with **per-message envelope encryption**. The primitives live in `packages/crypto/src/`; the protocol glue lives in `src/features/chat/hooks/useEncryption.ts`. This replaced the original pairwise-ECDH scheme in migration `00029_multi_device_envelopes.sql` (all pre-v2 messages, conversations, and device rows were wiped by explicit decision — there is no legacy data to support; any stray `iv`-set/`enc_v`-NULL row renders as `decryptFailed`).
 
-Messages are encrypted end-to-end. The encryption lives in `packages/crypto/src/`.
+**Why v2 exists (the single-slot bug):** the old scheme stored ONE identity key per user (`devices.device_id` hard-coded to 1) and every login upserted the local browser's key into that slot. Any second browser/device/cleared-storage overwrote the published key, permanently orphaning all messages sealed under the previous key — including the user's own sent history. Messages also recorded nothing about which key they were sealed to.
 
 **Algorithm:**
-- **Key exchange:** ECDH (Elliptic Curve Diffie-Hellman) with P-256 curve
-- **Message cipher:** AES-GCM with 256-bit key, 12-byte random nonce per message
+- **Message cipher:** AES-GCM, random 256-bit *message key* (mk) per message, 12-byte random nonce
+- **Key wrap:** one ephemeral P-256 keypair per message; per recipient device, `KEK = ECDH(eph_priv, device_pub)` and `AES-GCM(KEK, raw mk)` with its own 12-byte nonce
 
-**How it works:**
-1. On first login, each client generates a P-256 key pair (public + private).
-2. The public key (in JWK format) is uploaded to the `devices` table (`identity_key` column).
-3. When sending a message, the sender fetches the recipient's public key from `devices`, runs ECDH with their own private key to derive a 32-byte shared secret, and uses that raw 32 bytes directly as an AES-256 key.
-4. The message is encrypted as: `AES-GCM(key, plaintext)` → `base64(nonce[12] + ciphertext + gcm_tag[16])`.
-5. That base64 string is stored as `encrypted_content` in the `messages` table.
+**How a send works:**
+1. On login, each install registers its own `devices` row: a P-256 identity keypair + a random 31-bit `device_id`, both stored locally (IndexedDB). The upsert conflicts only on `(user_id, device_id)` — an install can only ever touch its own row, never another install's.
+2. To send, the client fetches **every active device of every conversation member** (including all of the sender's own devices — mandatory, or the sender's other installs can't read the message), generates mk, encrypts the plaintext once, and wraps mk for each device.
+3. The message row gets `content`, `iv`, `enc_v = 2`; one `message_envelopes` row per recipient device records `(recipient_user_id, recipient_fp, eph_pub, key_iv, wrapped_key)`. Both are inserted atomically by the `send_message_with_envelopes` RPC (security definer), which **rejects an empty envelope set**.
+4. To decrypt, a device looks up the envelope whose `recipient_fp` equals its own key fingerprint (JWK `x.y`), unwraps mk with its identity private key + the envelope's ephemeral public key, and decrypts the content. **No envelope for my fingerprint on an `enc_v = 2` message is a legitimate, permanent state** — the message was sealed before this device existed — and renders as an explicit "couldn't decrypt" (`DecryptedMessage.decryptFailed`), never raw ciphertext or `atob()` garbage.
 
-**Wire format (critical for cross-platform compatibility):**
+**Wire format v2 (critical for cross-platform compatibility):**
 ```
-stored in DB: base64( nonce[12 bytes] + ciphertext + GCM tag[16 bytes] )
+messages.content       = base64( ciphertext + GCM tag[16] )   — AES-GCM(mk, plaintext)
+messages.iv            = base64( nonce[12] )
+messages.enc_v         = 2   (NULL = unencrypted phase-1; iv must then also be NULL)
+envelope.eph_pub       = JSON-stringified JWK of the per-message ephemeral P-256 public key
+envelope.key_iv        = base64( nonce[12] ) for the key wrap
+envelope.wrapped_key   = base64( AES-GCM(KEK, raw 32-byte mk) + GCM tag[16] )
+envelope.recipient_fp  = JWK x + '.' + y of the recipient device's identity key
 ```
-The GCM tag is appended to the ciphertext (Web Crypto AES-GCM bundles them). This must be reproduced identically on iOS/Android or cross-platform decryption breaks.
+**Key derivation:** the KEK is the raw 32-byte ECDH shared secret (x-coordinate of the shared point) used directly as an AES-256-GCM key — **no HKDF**. iOS/Android must mirror this exactly (CryptoKit: `P256.KeyAgreement`, raw shared secret bytes as the AES key).
 
-**Key derivation:** Web Crypto's `deriveKey(ECDH)` for AES-GCM-256 uses the raw 32-byte ECDH shared secret (x-coordinate of the shared EC point) directly as the AES key — no HKDF is applied. iOS/Android must mirror this exactly.
+**Invariants (each one guards a real regression):**
+- `enc_v = 2` ⟺ envelopes exist ⟺ `iv` non-NULL. The phase-1 fallback is always written as `enc_v = NULL` **and** `iv = NULL` — never `enc_v = 2` without envelopes (the RPC enforces this server-side).
+- Decrypt branches on `enc_v` **first**, then `iv = NULL` (phase-1), and anything else is `decryptFailed`. Applied identically at all three decrypt sites: `ChatView`'s effect, `ThreadView.loadReplies`, and the sidebar previews in `api/conversations.ts`.
+- The sender's own devices are always in the recipient set (`encryptForMembers` unions the sender's id and adds the local device key even if the DB read races device registration).
+- Media/sticker/gif/system messages never enter v2 — they send `content: '', iv: null` and stay `enc_v = NULL`.
+- Sender-side fan-out bound: only devices with `last_active_at` within 90 days receive envelopes.
 
-**Key storage:** Private key and derived shared keys are stored in **IndexedDB** via the `idb` library (browser equivalent of a local database), DB `yaply-keys` version 2. Store `identity` holds the keypair JWKs **scoped per user** (`pub:<userId>` / `priv:<userId>` — v1 stored one unscoped pair, which leaked across account switches). Store `derived` holds cached AES keys keyed by `<userId>:<conversationId>:<peerUserId>`, each stored **with the fingerprints (JWK x.y) of both public keys it was derived from**.
+**Groups ARE E2E encrypted (since v2):** the envelope scheme keys groups and DMs identically — one mk wrapped for every member device. There is no group/DM split anywhere in the crypto path anymore.
 
-**Key rotation & cache invalidation (critical):** IndexedDB is per-origin, so a new origin/browser/cleared-storage regenerates the identity keypair and overwrites the user's `devices` row (rotation). To survive this, `getSharedKey` always fetches the peer's current public key and rejects any cached derived key whose fingerprints no longer match — it re-derives instead. On an AES-GCM decrypt failure it retries once against a freshly fetched peer key (handles mid-session rotation). If decryption still fails, the UI shows an explicit "Couldn't decrypt this message" state (`DecryptedMessage.decryptFailed`) — **never** raw ciphertext or `atob()` garbage. Messages encrypted under a rotated-away key are permanently unrecoverable and stay in this state. On upgrade from v1, a legacy unscoped keypair is adopted for the current user only if its fingerprint still matches the published `devices.identity_key`. iOS must mirror this fingerprint-validation behavior.
+**Fallback (phase-1):** if **any** member has zero registered devices (brand-new account that never logged in), the client sends plain base64 (`enc_v = NULL`, `iv = NULL`) so that member isn't handed permanently undecryptable ciphertext. **Always `TextEncoder`/`TextDecoder` for phase-1 — never `btoa()`/`atob()` on raw text** (`btoa()` breaks on non-Latin-1). Decode via `decodePhase1` in `useEncryption.ts`.
 
-**In-memory cache must be keyed by userId, not a single mutable slot (critical):** `useEncryption.ts` also keeps an in-JS-memory cache on top of IndexedDB (`identityPairMemCache`) so repeated encrypts/decrypts don't hit IndexedDB every time. An earlier version stored this as one mutable variable plus a "clear everything when a different userId shows up" check (`cacheOwner`) — this had a real race: sign out and back into a *different* account fast enough in the same tab, and a straggling async call still in flight for the old account (e.g. the sidebar's preview decryption, which runs independently of `ChatView`) could resolve *after* the new account's session had already reset the cache, and overwrite it with the old account's keypair while the tracker still said it belonged to the new user. Every decrypt for the new account then silently used the wrong private key — **every message failed**, specifically when testing multiple accounts by signing in/out in one browser tab (the common way to test multi-user flows solo). Fixed by making `identityPairMemCache` a `Map<userId, pair>` instead — concurrent calls for different users touch different map entries and can't collide. `derivedKeyMemCache` was never subject to this because its cache key already embeds `userId` (`<userId>:<conversationId>:<peerUserId>`); `peerKeyMemCache` is intentionally global/unscoped since a peer's public key isn't specific to who's asking. iOS must not replicate the single-slot-plus-owner-check pattern for any per-user in-memory cache.
+**Message editing (contract only — no edit UI exists):** an edit of a v2 message is a **re-seal**: generate a fresh mk, new `content`/`iv`, and replace ALL envelope rows in one transaction (a future `edit_message_with_envelopes` RPC). Never reuse the old mk. Side effect: edits become readable by devices added after the original send.
 
-**Groups are NOT E2E encrypted:** pairwise ECDH cannot key a group. Group conversations always send via the phase-1 base64 path (`iv = NULL`). Encrypted inbound group messages (legacy) are decrypted per-sender pairwise; own legacy group messages render as decrypt-failed. A real group-key scheme (see dormant `key_exchanges` design) is future work.
+**Device registration must be single-flight (critical):** `useEncryption` is mounted by more than one component (`ChatView` and `ThreadView`), so `registerDevice` can run concurrently for the same user. Without a guard, two calls on a fresh install each generate a *different* keypair and race to publish — leaving the locally stored private key out of sync with the published public key, which breaks every message sealed to the losing key. `registrationInFlight: Map<userId, Promise>` makes concurrent calls share one registration. Both `encryptForMembers` and `decryptV2ForUser` **await** that promise, so a message sent or read immediately after login is never silently downgraded to unencrypted phase-1 (or reported as a false decrypt failure) merely because registration hadn't finished. iOS must apply the same single-flight rule.
 
-**Fallback (phase-1):** If either party has no key established yet (or the conversation is a group), the client encodes the plaintext instead of encrypting. **Always use `TextEncoder` / `TextDecoder` for phase-1 encoding — never `btoa()` / `atob()`.** `btoa()` breaks on any non-Latin-1 character (emoji, CJK, etc.). Decryption: messages with `iv = NULL` are decoded via `new TextDecoder().decode(Uint8Array.from(atob(content), c => c.charCodeAt(0)))`; messages **with** an `iv` are AES-GCM only — on failure (after the one fresh-key retry) they surface `decryptFailed`, never a decoded-garbage fallback.
+**Key storage:** IndexedDB via `idb`, DB `yaply-keys` **version 3** (v3 dropped the pairwise `derived` store and legacy unscoped keypair entries). Store `identity` holds, **scoped per user**: `pub:<userId>` / `priv:<userId>` (identity JWKs) and `deviceId:<userId>` (this install's `devices.device_id`).
 
-**Why Web Crypto and not a JS crypto library (e.g. TweetNaCl, forge):**
-- Web Crypto is built into every modern browser — no bundle size cost.
-- It runs in a secure context and the private key can be marked non-extractable in theory (though the current implementation exports to JWK for IndexedDB storage, a trade-off for now).
+**In-memory cache must be keyed by userId, not a single mutable slot (critical):** `useEncryption.ts` keeps an in-JS-memory cache on top of IndexedDB (`identityPairMemCache`) so repeated encrypts/decrypts don't hit IndexedDB every time. An earlier version stored this as one mutable variable plus a "clear everything when a different userId shows up" check (`cacheOwner`) — this had a real race: sign out and back into a *different* account fast enough in the same tab, and a straggling async call still in flight for the old account (e.g. the sidebar's preview decryption, which runs independently of `ChatView`) could resolve *after* the new account's session had already reset the cache, and overwrite it with the old account's keypair while the tracker still said it belonged to the new user. Every decrypt for the new account then silently used the wrong private key — **every message failed**, specifically when testing multiple accounts by signing in/out in one browser tab (the common way to test multi-user flows solo). Fixed by making `identityPairMemCache` a `Map<userId, pair>`. `devicesMemCache` (60s TTL) is intentionally global/unscoped by requester since a user's public device list is the same no matter who is asking. iOS must not replicate the single-slot-plus-owner-check pattern for any per-user in-memory cache.
+
+**Why Web Crypto and not a JS crypto library (e.g. TweetNaCl, forge):** built into every browser (no bundle cost), runs in a secure context; keys *could* be non-extractable (current impl exports to JWK for IndexedDB — a trade-off).
+
+**What we build vs. what's provided:** the crypto *algorithms* are the browser's Web Crypto (`crypto.subtle`) — not hand-rolled. Supabase does *zero* crypto; it only stores ciphertext + public keys and never sees a private key. The *protocol* tying primitives together (key gen/storage, public-key exchange via `devices`, wire format, envelope scheme, rotation handling) is custom yaply code — this middle layer is where the risk lives (the historical single-slot bug was a protocol flaw, not an algorithm flaw). A future hardening path is adopting a vetted protocol lib (libsignal) instead of the custom ECDH+AES scheme.
+
+### Security Model — Known Gaps & Limitations
+
+E2E here means **text message content is encrypted between a user's active devices** — not "everything is private from everyone." Do not overstate it. Known gaps (treat as documented limitations, not bugs):
+
+- **Explicitly out of scope (future work):** reading pre-device history on a *new* device (needs key backup/escrow — cryptographically impossible otherwise); server-side pruning of stale device rows; recovering already-orphaned legacy messages (permanent `decryptFailed`); message-editing implementation (no UI; contract only).
+- **No key verification (MITM):** the server distributes public keys and there is no safety-number/fingerprint verification UI, so an *active* or compromised server could substitute keys. Protects against a *passive* server, not an active one.
+- **No forward secrecy / no ratchet:** a device's identity key never rotates; the per-message ephemeral key wraps to a *static* recipient key, so compromise of a device's private key exposes all past **and** future messages sent to it. No Double-Ratchet-style evolution.
+- **Metadata is unprotected:** who talks to whom, timing, frequency, reply chains, conversation membership, and message sizes are all plaintext in the DB.
+- **Private keys stored extractable** in IndexedDB (JWK) → exfiltratable via XSS or malicious code. Non-extractable keys would harden this.
+- **Media is NOT encrypted:** images, files, and stickers live at public Storage URLs. Encryption covers text content only.
+- **No device management / revocation:** users can't list, name, or revoke devices or "log out everywhere"; a lost/stolen device keeps receiving envelopes, and the `devices` table only grows.
+- **Group membership changes unhandled:** new members can't read pre-join history; removed members aren't cryptographically cut off (no group re-keying).
+- **Push previews / reactions leak:** notification content routes through a push provider outside E2E; reactions are stored in plaintext.
+- **Search:** no server-side search over ciphertext; client-side search only covers already-decrypted, loaded messages.
+- **Fan-out scaling:** envelope rows = messages × recipients × devices, bounded only by the 90-day `last_active_at` filter; large groups are heavy on writes/storage.
+- **Cross-platform interop window:** until yaply-ios implements the v2 envelope format, mixed web/iOS conversations can't read each other's v2 messages.
+- **Browser-E2E trust:** the app *ships the JavaScript that does the crypto*, so whoever controls delivery could exfiltrate keys/plaintext via a malicious update. This is an *active* attack (detectable via open-source/audits) and can't retroactively recover messages sealed to a key that was never captured — but it means "the server can't read it" is not the same as "the operator physically cannot read it."
 
 ### Packages (Monorepo)
 
@@ -139,7 +157,7 @@ The project is a pnpm workspace monorepo with two internal packages:
 
 | Package | Path | Contents |
 |---------|------|---------|
-| `@yaply/crypto` | `packages/crypto/` | `generateKeyPair`, `deriveSharedKey`, `encryptMessage`, `decryptMessage`, `publicKeyFingerprint`, `storeIdentityKeyPair(userId, …)`, `loadIdentityKeyPair(userId)`, `loadLegacyIdentityKeyPair`, `clearLegacyIdentityKeyPair`, `storeDerivedKey(cacheKey, {key,myFp,theirFp})`, `loadDerivedKey(cacheKey)`, `clearDerivedKeys`, `clearAllKeys` |
+| `@yaply/crypto` | `packages/crypto/` | `generateKeyPair`, `deriveSharedKey`, `publicKeyFingerprint`, `generateMessageKey`, `encryptWithEnvelopes(plaintext, recipients)`, `unwrapAndDecrypt(myPriv, envelope, content, iv)`, `encryptMessage`, `decryptMessage`, `storeIdentityKeyPair(userId, …)`, `loadIdentityKeyPair(userId)`, `storeLocalDeviceId(userId, id)`, `loadLocalDeviceId(userId)`, `clearAllKeys` |
 | `@yaply/shared` | `packages/shared/` | TypeScript type definitions, constants, validators |
 
 **Why a monorepo:** The iOS and Android apps will need to understand the same data shapes. `packages/shared/types.ts` is the canonical type reference. The `packages/crypto` package documents the encryption contract that all platforms must implement (even though iOS and Android use different crypto libraries, the same wire format and key derivation logic applies).
@@ -200,8 +218,9 @@ id              uuid
 conversation_id uuid
 sender_id       uuid
 type            text   ('text' | 'image' | 'gif' | 'sticker' | 'file' | 'system' | 'ai')
-content         text   — base64(AES-GCM ciphertext+tag) or plaintext
-iv              text   — base64(nonce[12]); NULL = phase-1 fallback (plain base64 content)
+content         text   — base64(AES-GCM ciphertext+tag) or plain base64 (phase-1)
+iv              text   — base64(nonce[12]); NULL = phase-1 fallback
+enc_v           smallint — 2 = envelope-encrypted (see message_envelopes); NULL = phase-1
 media_url       text
 media_mime      text
 reply_to_id     uuid
@@ -211,11 +230,13 @@ deleted_at      timestamptz
 created_at      timestamptz
 ```
 
-**Encryption wire format:** `content = base64(ciphertext + GCM tag[16])`, `iv = base64(nonce[12])` stored as separate columns. If `iv` is NULL, content is plain base64 plaintext (phase-1 fallback).
+**Encryption wire format (v2):** `content = base64(AES-GCM(message key, plaintext) + tag[16])`, `iv = base64(nonce[12])`, `enc_v = 2`, with one `message_envelopes` row per recipient device. `enc_v = NULL` means phase-1 (and `iv` must also be NULL — content is plain base64). See the Encryption section above; these three columns move together and the invariant is enforced by the `send_message_with_envelopes` RPC.
+
+**`message_envelopes` table:** `id, message_id (FK → messages ON DELETE CASCADE), recipient_user_id (FK → profiles), recipient_fp (text — JWK x.y of the recipient device key), eph_pub (text — JSON-stringified JWK of the per-message ephemeral public key), key_iv (text — base64 nonce[12]), wrapped_key (text — base64(AES-GCM(KEK, raw 32-byte message key) + tag)), created_at`. UNIQUE(message_id, recipient_user_id, recipient_fp); index (recipient_user_id, message_id). RLS: SELECT for the recipient or the message's sender; INSERT/DELETE for the message's sender only. Migration `00029_multi_device_envelopes.sql`.
 
 **`profiles` table:** id, username, display_name, avatar_url, bio, public_key, is_online, last_seen_at, created_at, updated_at.
 
-**`devices` table:** user_id, device_id (int), identity_key (text — JSON-stringified JWK public key), signed_prekey, device_name, push_subscription, last_active_at, created_at. UNIQUE(user_id, device_id); the client always upserts `device_id = 1`. RLS: owner can manage own rows; any authenticated user can read (needed for ECDH). Codified in migration `00027_create_devices.sql` (the live DB created it as its own remote-side migration `00002` — do not re-apply).
+**`devices` table:** user_id, device_id (int), identity_key (text — JSON-stringified JWK public key), key_fingerprint (text — JWK `x.y`, matches `message_envelopes.recipient_fp`), signed_prekey, device_name, push_subscription, last_active_at, created_at. UNIQUE(user_id, device_id); index (user_id, key_fingerprint). **One row per install** — each browser/device generates its own random `device_id` (stored locally as `deviceId:<userId>` in IndexedDB) and upserts only that row. Never hard-code `device_id = 1`: that was the single-slot bug where every login overwrote the one published key and orphaned history. RLS: owner can manage own rows; any authenticated user can read (needed to encrypt to a peer's devices). Codified in `00027_create_devices.sql`; `key_fingerprint` added in `00029_multi_device_envelopes.sql`.
 
 **`notes` table:** `id, user_id, conversation_id, title, content, created_at, updated_at` — RLS: `user_id = auth.uid()` (owner only).
 
@@ -241,6 +262,7 @@ created_at      timestamptz
 
 **Key RPCs:**
 - `find_or_create_direct_conversation(target_user_id uuid)` — finds or creates a direct DM, inserts both members correctly. Security definer. Always use this instead of manual inserts for direct chats.
+- `send_message_with_envelopes(p_conversation_id, p_content, p_iv, p_envelopes jsonb, p_type, p_reply_to_id, p_thread_id, p_media_url, p_media_mime)` — inserts an `enc_v = 2` message **and** all its `message_envelopes` rows in one transaction. Security definer; validates conversation membership and **rejects an empty envelope array or a NULL iv**, so a v2 message can never exist without envelopes. Always use this for encrypted sends; the plain `messages` insert is only for phase-1/system/media rows.
 
 **Postgres trigger — orphan conversation cleanup:**
 `trg_delete_empty_conversation` (AFTER DELETE on `conversation_members`, FOR EACH ROW) — calls `delete_conversation_if_empty()` which deletes the `conversations` row if no members remain. This means deleting your membership from a DM where the other user already left cascades to deleting all messages and the conversation itself. Migration: `delete_conversation_if_empty`.
@@ -259,7 +281,8 @@ created_at      timestamptz
 | Group conversations | `createGroupConversation` in `src/features/chat/api/conversations.ts` |
 | Message pagination (50/page) | `src/features/chat/hooks/useMessages.ts` |
 | Real-time messages | `src/features/chat/hooks/useRealtimeMessages.ts` |
-| E2E encryption | `packages/crypto/`, `src/features/chat/hooks/useEncryption.ts` |
+| E2E encryption (envelope, v2 — DMs **and** groups) | `packages/crypto/`, `src/features/chat/hooks/useEncryption.ts`, `message_envelopes` + `send_message_with_envelopes` (migration 00029) |
+| Multi-device support | One `devices` row per install (random `device_id`); every message sealed to all member devices incl. the sender's own |
 | Soft delete messages (own messages only) | `deleteMessage` in `src/features/chat/api/messages.ts`; deletes update `deleted_at` column |
 | Delete message confirmation modal | Radix UI Dialog in `MessageBubble.tsx` |
 | Reply quotation with deleted-message handling | Reply block in `MessageBubble.tsx` |
@@ -295,202 +318,58 @@ created_at      timestamptz
 
 ---
 
-## Tier 3 — iOS Implementation Reference
+## Cross-Platform Implementation Reference (iOS / Android)
 
-This section documents everything iOS needs to replicate the tier 3 features. Web is the reference implementation. All features share the same Supabase database.
+Web is the reference implementation; all platforms share one Supabase project and
+the same schema (see **Database Schema** and **Feature Map** above). Per-feature
+iOS how-to lives in `yaply-ios/CLAUDE.md` — do not duplicate it here. Only
+cross-platform **contracts** that must match byte-for-byte or behave identically
+belong in this repo:
 
----
-
-### Threads
-
-**How it works on web:**
-- Main message list query adds `.is('thread_id', null)` — thread replies are excluded from the main view.
-- A thread is a set of messages where `thread_id = <parent_message_id>`.
-- The `/thread` command shows usage instructions locally (not sent as a message).
-
-**iOS implementation:**
-- In the message list query, filter `WHERE thread_id IS NULL`.
-- Thread view: query `WHERE thread_id = '<parentId>'` ordered by `created_at ASC`.
-- Show a "thread" indicator on messages that have replies (count rows WHERE `thread_id = msg.id`).
-- Tapping the thread indicator opens the thread view sheet.
-- The same E2E encryption applies to thread replies — they are regular messages with a `thread_id` set.
-
----
-
-### Stickers
-
-**Schema:** `stickers (id uuid, user_id uuid, storage_path text, name text, created_at timestamptz)`
-
-**How it works on web:**
-- User uploads an image to Supabase Storage bucket `stickers/`.
-- Row inserted into `stickers` with the `storage_path`.
-- Sending a sticker creates a message with `type = 'sticker'` and `media_url` pointing to the public URL.
-
-**iOS implementation:**
-- `PHPickerViewController` or image picker → upload to Supabase Storage `stickers/` bucket.
-- Insert sticker row. Show sticker picker in keyboard accessory or toolbar.
-- Sending: insert message row with `type = 'sticker'`, `media_url = <storage public URL>`, content = empty or sticker name.
-- Receiving: render sticker messages as images (no decryption — stickers are not encrypted).
-
----
-
-### Tasks
-
-**Schema:** `tasks (id, conversation_id, created_by, assigned_to, title, description, status, priority, due_at, completed_at, created_at, updated_at)`
-- `status`: `'todo' | 'in_progress' | 'done'`
-- `priority`: `'low' | 'medium' | 'high'`
-
-**RLS:** Conversation members can SELECT; creator/assignee can UPDATE; creator can DELETE.
-
-**How it works on web:**
-- Created via `/task [title]` → opens a modal for description/priority/due date → inserts row.
-- A creation system message is sent to the conversation (visible to all members): "Task created: [title]".
-- Shown in ConversationPanel > Tasks tab: checkbox toggles `todo ↔ done`, priority badge, due date.
-
-**iOS implementation:**
-- Task creation: command `/task` or a dedicated "+" button in the conversation detail sheet.
-- Task list: fetch `WHERE conversation_id = ? ORDER BY created_at DESC`.
-- Toggle status: `UPDATE tasks SET status = 'done', completed_at = now() WHERE id = ?` (or back to `todo`).
-- Show priority with color: low = grey, medium = amber, high = red.
-- Show `due_at` with a clock icon; highlight overdue tasks in amber/red.
-
----
-
-### Notes
-
-**Schema:** `notes (id, user_id, conversation_id, title, content, created_at, updated_at)`
-
-**RLS:** "owner only" — a user can only see and delete their own notes.
-
-**How it works on web:**
-- Created via `/note [title]` → opens a modal for content → inserts row.
-- Shown in ConversationPanel > Notes tab: expandable cards with title + content preview.
-- Only the creating user sees their notes (RLS enforces this).
-
-**iOS implementation:**
-- Notes are private — only the authenticated user's notes are returned by Supabase.
-- Note creation: `/note` command or tapping "+" in the notes section of the conversation sheet.
-- Show expandable cells or a detail view with `content` as a text view.
-- Allow deletion (swipe-to-delete): `DELETE FROM notes WHERE id = ? AND user_id = ?`.
-
----
-
-### Reminders
-
-**Schema:** `reminders (id, user_id, conversation_id, message, remind_at, status, created_at)`
-- `status`: `'pending' | 'sent' | 'dismissed'`
-
-**RLS:** After migration 00022 — all conversation members can SELECT/UPDATE/DELETE reminders. `user_id` identifies the creator. iOS queries without a `user_id` filter; RLS returns all reminders in the conversation.
-
-**How it works on web:**
-- Created via `/remind [time] [message]` (e.g. `/remind 30m Take out the trash`).
-- `remind_at` is computed from the time argument relative to `now()`.
-- Background polling every 60s: query `WHERE user_id = ? AND status = 'pending' AND remind_at <= now()` → fire Web Notifications API → batch-update `status = 'sent'` in one query (`.in('id', ids)`).
-- Dismissed via the dismiss button in the Reminders tab → `UPDATE status = 'dismissed'`.
-
-**iOS implementation (key difference from web):**
-- On reminder creation, schedule a `UNNotificationRequest` immediately using `UNCalendarNotificationTrigger` with the `remind_at` date — **do not poll**.
-- In `UNUserNotificationCenterDelegate.userNotificationCenter(_:didReceive:)`, update `status = 'sent'` in Supabase after delivery.
-- Dismissal: update `status = 'dismissed'` and cancel the pending `UNNotificationRequest` by identifier.
-- Show the same Reminders list in the conversation detail sheet; filter `neq('status', 'dismissed')` and `eq('user_id', currentUserId)`.
-- Parse the time argument the same way as web: e.g. `30m` = 30 minutes, `2h` = 2 hours, `tomorrow` = next day at 9am.
-
----
-
-### Albums
-
-**Schema:**
-- `albums (id, conversation_id, name, created_by, created_at)`
-- `album_media (id, album_id, message_id, media_url, media_mime, created_at)`
-
-**RLS:** Conversation members can SELECT and INSERT; creator can DELETE album.
-
-**How it works on web:**
-- Created via `/album [name]` → inserts album row.
-- Images from chat can be added to an album → inserts `album_media` row with `media_url` and `media_mime`.
-- Shown in ConversationPanel > Albums tab as a 2-col grid; tapping an album opens a 3-col media gallery.
-
-**iOS implementation:**
-- Album creation: `/album` command or "+" in conversation detail sheet.
-- Gallery view: `LazyVGrid` with 3 columns; tap to open full-screen viewer (`UIImageView` / `AsyncImage`).
-- Long-press on an image message in chat → "Add to Album" → sheet to pick or create an album → insert `album_media` row.
-- `media_url` is a direct Supabase Storage public URL — render with `AsyncImage`.
-
----
-
-### Budgets + Splitwise
-
-**Schema:**
-- `budgets (id, conversation_id, name, total_amount, currency, created_by, created_at, splitwise_group_id text | null)`
-- `expenses (id, budget_id, paid_by, description, amount, category, split_between, created_at)`
-
-**RLS:** Conversation members can SELECT and INSERT; creator can DELETE.
-
-**Splitwise integration:**
-- If `splitwise_group_id` is non-null, the budget is linked to a Splitwise group.
-- Linked budgets display expenses from the Splitwise API instead of the local `expenses` table.
-- Splitwise API base: `https://secure.splitwise.com/api/v3.0/`
-- Auth: OAuth2 client credentials grant (POST `/oauth/token` with `grant_type=client_credentials`).
-- Endpoints used:
-  - `GET /get_groups` → list groups for the link picker
-  - `GET /get_expenses?group_id=X&limit=50` → expense list (filter out "Settle" settlement expenses)
-  - `POST /create_expense` → add expense with equal split; `users[0][user_id]`, `users[0][paid_share]`, `users[0][owed_share]` fields; payer identified by `paidBySplitwiseUserId` (match by index in `splitAmong` array, not always index 0)
-
-**How it works on web:**
-- Created via `/budget [name]` → modal for total amount + currency.
-- Budget list in ConversationPanel > Budgets tab.
-- Unlinked budget: shows local expenses from `expenses` table + "Link to Splitwise" button.
-- Linked budget: shows Splitwise expenses + simplified debt balances; "Add expense" writes directly to Splitwise API.
-- `splitwise_group_id` updated via `UPDATE budgets SET splitwise_group_id = ? WHERE id = ?`.
-
-**iOS implementation:**
-- Budget creation: `/budget` command or "+" in conversation detail sheet.
-- Use the Splitwise REST API directly (no SDK available for Swift — call with `URLSession`).
-- Store the OAuth2 access token in Keychain; refresh when expired.
-- Linking: show a sheet with group picker (from `GET /get_groups`); on selection, update `splitwise_group_id` in Supabase.
-- Linked budget view: fetch expenses from Splitwise API, show `simplified_debts` for who owes whom (note: `simplified_debts` may be null if the group has "simplify debts" disabled — handle gracefully).
-- Add expense: POST to Splitwise with equal split; assign `paid_share` to the correct `user_id` (not always index 0 — find the payer's index in the members array).
-
----
-
-### Events + Availability Calendar
-
-**Schema:**
-- `events (id, conversation_id, created_by, name, description, location, status, starts_at, ends_at, created_at, updated_at)`
-- `event_availability (id, event_id, user_id, slots jsonb, updated_at)` — UNIQUE(event_id, user_id)
-- `event_rsvp (id, event_id, user_id, response, updated_at)` — UNIQUE(event_id, user_id)
-
-**RLS:** Conversation members can SELECT all event rows; only creator can UPDATE/DELETE the event; users can INSERT/UPDATE their own availability and RSVP rows.
-
-**How it works on web:**
-- `/plan [name]` → inserts `events` row with `status='planning'` (no `starts_at`). EventModal shows the `AvailabilityCalendar` component.
-- `/event [name]` → inserts `events` row with `status='confirmed'` and a required `starts_at`. EventModal shows RSVP + linked Notes/Albums/Budgets tabs.
-- Availability grid: 7 days × 28 rows (8am–10pm, 30-min slots). Each cell's slot key is the UTC ISO string of the slot start time (e.g. `"2025-06-10T14:00:00.000Z"`). Slots stored in `event_availability.slots` as a jsonb array.
-- Heatmap: cell color scales from transparent (no one) to accent blue (everyone). Creator can long-press a multi-person slot to confirm the event, which sets `status='confirmed'` and `starts_at`.
-
-**iOS implementation — fully implemented:**
-- `EventListView` shows two sections: Confirmed and Planning. Create sheet has a Planning/Event type picker.
-- `EventDetailSheet` drives the planning/confirmed split:
-  - **Planning:** compact header + `AvailabilityCalendarView` (full when2meet grid with heatmap, tap-to-toggle, member chips, Save button, creator long-press confirm).
-  - **Confirmed:** full header + RSVP buttons (Going/Maybe/Can't Go) + member response list.
-- Slot keys must match the web exactly: use `Calendar.current` to build local-time `Date` values for 8am–10pm in 30-min increments, then format with `ISO8601DateFormatter` with `timeZone = UTC` and `.withFractionalSeconds` option.
-- After confirming a slot, post `.yaplyItemCreated` notification so `EventListView` refetches.
-
----
-
-### Command Feedback (local only)
-
-**Critical behavior:** Command outputs — help text, error messages, usage prompts, and confirmations like "Reminder set" — are **never written to the database**. They are shown only to the user who typed the command as an ephemeral in-app message.
-
-**The only things written to the conversation (visible to all members):**
-- A system message when a task, note, album, or budget is successfully created (e.g. "Task created: Fix login bug"). This is inserted with `type = 'system'`, `iv = NULL`, `content = base64(TextEncoder(text))`.
-
-**iOS implementation:**
-- Show command feedback as a transient banner or inline note above the message input — auto-dismiss after ~6 seconds.
-- Never send command output as a message to the conversation.
-- System messages (`type = 'system'`) from creation events should be rendered differently in the message list (centered grey text, no bubble, no sender name).
-
----
+- **Encryption wire format v2 & key handling** — see the Encryption section
+  above. Every platform must reproduce it exactly:
+  - Content: `AES-GCM(message key, plaintext)` → `content = base64(ct+tag[16])`,
+    `iv = base64(nonce[12])`, `enc_v = 2`. Fresh random 256-bit message key per
+    message.
+  - Key wrap: one ephemeral P-256 keypair per message; per recipient device
+    `KEK = ECDH(eph_priv, device_pub)` with the **raw 32-byte shared secret used
+    directly as the AES-256 key — no HKDF**; `wrapped_key = base64(AES-GCM(KEK,
+    raw message key) + tag)`, `key_iv = base64(nonce[12])`. iOS: CryptoKit
+    `P256.KeyAgreement`, take the shared secret's raw bytes (do **not** use
+    `hkdfDerivedSymmetricKey`).
+  - Recipients: **every active device (90-day `last_active_at`) of every member,
+    including all of the sender's own devices.** Omitting the sender's devices
+    breaks reading your own sent messages — the original bug.
+  - Device registration: one `devices` row per install with its own random
+    `device_id` persisted locally; upsert only that row. Never write
+    `device_id = 1` unconditionally.
+  - Decrypt: pick the envelope whose `recipient_fp` equals this device's
+    fingerprint (JWK `x.y`); no envelope ⇒ permanent, honest "couldn't decrypt".
+    Branch on `enc_v` **before** looking at `iv`.
+  - Editing (when built): re-seal with a new message key and replace all
+    envelopes in one transaction; never reuse the old key.
+  - Per-user in-memory caches only — never a single-slot-plus-owner-check.
+- **Events availability slot keys** — each slot key is the **UTC ISO string** of
+  the slot start (e.g. `"2025-06-10T14:00:00.000Z"`), 8am–10pm local in 30-min
+  increments, 7 days × 28 rows. iOS must build local-time `Date`s then format with
+  `ISO8601DateFormatter`, `timeZone = UTC`, `.withFractionalSeconds`. Any drift
+  breaks heatmap overlap across platforms.
+- **Reminders** — creator is `user_id`; RLS lets all conversation members
+  view/dismiss (migration 00022). Web polls every 60s; iOS should instead schedule
+  a local `UNNotificationRequest` and mark `status='sent'` on delivery. Same time
+  parsing (`30m`, `2h`, `tomorrow`=next 9am).
+- **Command feedback is local-only (critical)** — command output (help, errors,
+  "Reminder set") is **never** written to the DB; shown only to the typing user as
+  an ephemeral banner. The **only** thing written to a conversation is a
+  `type='system'` message on task/note/album/budget creation (`iv = NULL`,
+  `content = base64(TextEncoder(text))`), rendered as centered grey text (no
+  bubble, no sender). System messages auto-destruct after 1 week
+  (`deleted_at = now + 7d`); expired ones are hidden silently.
+- **Stickers / media are not encrypted** — `media_url` is a public Storage URL;
+  render directly, no decryption.
+- **Splitwise** — REST API `https://secure.splitwise.com/api/v3.0/`, OAuth2 client
+  credentials; when adding an expense the payer's `paid_share` maps by index in the
+  members array (not always index 0); `simplified_debts` may be null.
 
 ## Project Structure
 

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
-import { decryptForUser } from '@/features/chat/hooks/useEncryption'
+import { decryptV2ForUser, getMyFingerprint, decodePhase1 } from '@/features/chat/hooks/useEncryption'
+import { fetchEnvelopesForMessages } from './messages'
 import type { ConversationListItem, DecryptedMessage, MemberSummary, Profile } from '../types'
 
 export async function fetchConversations(userId: string): Promise<ConversationListItem[]> {
@@ -42,31 +43,17 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
 
   // Map convId → my last_read_at so we can count unread messages below.
   const myLastReadAt: Record<string, string | null> = {}
-  // Map convId → the DM partner's user id, used as the ECDH peer for
-  // decrypting the last-message preview. Groups have no pairwise key.
-  const convPeerId: Record<string, string | null> = {}
-  const convIsGroup: Record<string, boolean> = {}
   for (const row of memberRows) {
-    const conv = row.conversations as unknown as {
-      id: string
-      type: string
-      conversation_members: Array<{ user_id: string }>
-    } | null
+    const conv = row.conversations as unknown as { id: string } | null
     if (!conv) continue
     myLastReadAt[conv.id] = row.last_read_at
-    convIsGroup[conv.id] = conv.type === 'group'
-    if (conv.type !== 'group') {
-      const other = conv.conversation_members.find((cm) => cm.user_id !== userId)
-      convPeerId[conv.id] = other?.user_id ?? null
-    }
   }
 
   const lastMessages: Record<string, DecryptedMessage> = {}
   const unreadCounts: Record<string, number> = {}
-  // Decryption is async; previews are filled in via these tasks and awaited
-  // once before returning, so every conversation resolves before this
-  // function's promise does (no flash of ciphertext followed by a re-render).
-  const decryptTasks: Promise<void>[] = []
+  // enc_v = 2 previews are decrypted after the loop via one batched envelope
+  // fetch, and awaited before returning — no flash of ciphertext.
+  const v2Previews: Array<{ convId: string; messageId: string; content: string; iv: string | null }> = []
 
   if (convIds.length > 0) {
     const { data: msgs } = await supabase
@@ -77,6 +64,7 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
         sender_id,
         content,
         iv,
+        enc_v,
         type,
         deleted_at,
         created_at
@@ -89,7 +77,7 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
       const seen = new Set<string>()
       for (const m of msgs as unknown as Array<{
         id: string; conversation_id: string; sender_id: string | null
-        content: string; iv: string | null; type: string
+        content: string; iv: string | null; enc_v: number | null; type: string
         deleted_at: string | null; created_at: string
       }>) {
         if (!seen.has(m.conversation_id)) {
@@ -98,39 +86,19 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
           let preview = m.content
           let decryptFailed = false
 
-          if (!m.iv) {
-            // Phase-1 fallback: plain base64, no key needed.
-            try {
-              const bytes = Uint8Array.from(atob(m.content), (c) => c.charCodeAt(0))
-              preview = new TextDecoder().decode(bytes)
-            } catch { /* keep raw */ }
-          } else if (convIsGroup[m.conversation_id]) {
-            // Groups have no pairwise E2E key — an iv here is a legacy/
-            // own-sender artifact with no peer to decrypt against.
+          if (m.enc_v === 2) {
+            // Envelope-encrypted — same for groups and DMs. Decrypted in one
+            // batched pass below; placeholder until then.
+            v2Previews.push({ convId: m.conversation_id, messageId: m.id, content: m.content, iv: m.iv })
+            preview = ''
+          } else if (!m.iv) {
+            // Phase-1 fallback / system messages: plain base64, no key needed.
+            preview = decodePhase1(m.content)
+          } else {
+            // Legacy pairwise ciphertext (pre-envelope migration) — unreadable.
+            console.debug('[yaply:crypto] sidebar preview: legacy pairwise ciphertext', { convId: m.conversation_id })
             preview = ''
             decryptFailed = true
-          } else {
-            const peerId = convPeerId[m.conversation_id]
-            if (peerId) {
-              const convId = m.conversation_id
-              decryptTasks.push(
-                decryptForUser(userId, convId, peerId, m.content, m.iv)
-                  .then((text) => {
-                    lastMessages[convId].content = text
-                    console.debug('[yaply:crypto] sidebar preview decrypt ok', { convId, peerId })
-                  })
-                  .catch((err: unknown) => {
-                    console.error('[yaply:crypto] sidebar preview decrypt FAILED', { convId, peerId, err })
-                    lastMessages[convId].content = ''
-                    lastMessages[convId].decryptFailed = true
-                  }),
-              )
-              preview = '' // placeholder — filled in once decryptTasks resolves below
-            } else {
-              console.debug('[yaply:crypto] sidebar preview skipped: no peer resolved', { convId: m.conversation_id })
-              preview = ''
-              decryptFailed = true
-            }
           }
 
           lastMessages[m.conversation_id] = {
@@ -160,7 +128,33 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
     }
   }
 
-  if (decryptTasks.length > 0) await Promise.all(decryptTasks)
+  if (v2Previews.length > 0) {
+    try {
+      const myFp = await getMyFingerprint(userId)
+      const envelopes = myFp
+        ? await fetchEnvelopesForMessages(v2Previews.map((p) => p.messageId), myFp)
+        : new Map<string, never>()
+      console.debug('[yaply:crypto] sidebar preview envelope batch', { requested: v2Previews.length, found: envelopes.size })
+      await Promise.all(
+        v2Previews.map(async (p) => {
+          try {
+            lastMessages[p.convId].content = await decryptV2ForUser(userId, envelopes.get(p.messageId), p.content, p.iv)
+            console.debug('[yaply:crypto] sidebar preview v2 decrypt ok', { convId: p.convId })
+          } catch (err: unknown) {
+            console.error('[yaply:crypto] sidebar preview v2 decrypt FAILED', { convId: p.convId, err })
+            lastMessages[p.convId].content = ''
+            lastMessages[p.convId].decryptFailed = true
+          }
+        }),
+      )
+    } catch (err: unknown) {
+      console.error('[yaply:crypto] sidebar preview envelope batch FAILED', { err })
+      for (const p of v2Previews) {
+        lastMessages[p.convId].content = ''
+        lastMessages[p.convId].decryptFailed = true
+      }
+    }
+  }
 
   return memberRows
     .map((row) => {

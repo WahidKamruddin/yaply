@@ -82,6 +82,107 @@ export async function encryptMessage(
   }
 }
 
+// ─── Wire format v2: envelope encryption ─────────────────────────────────────
+// A message is encrypted once with a random AES-256 "message key" (mk). The mk
+// is then wrapped for every recipient device: one ephemeral P-256 keypair per
+// message, KEK = ECDH(eph_priv, device_pub) (raw 32-byte secret used directly
+// as an AES-256-GCM key — same no-HKDF convention as deriveSharedKey), and
+// wrapped_key = base64(AES-GCM(KEK, raw mk) + tag) with its own 12-byte nonce
+// (key_iv). Decryption never depends on the SENDER's identity key — only on
+// the per-message ephemeral public key stored in the envelope — so identity
+// rotation can never orphan history again.
+
+export interface EnvelopeRecipient {
+  userId: string
+  fp: string          // publicKeyFingerprint(pubJwk)
+  pubJwk: JsonWebKey  // the device's identity public key
+}
+
+// Matches the message_envelopes table columns (camelCased).
+export interface MessageEnvelope {
+  recipientUserId: string
+  recipientFp: string
+  ephPub: string      // JSON-stringified JWK of the per-message ephemeral public key
+  keyIv: string       // base64(nonce[12]) for the key wrap
+  wrappedKey: string  // base64(AES-GCM(KEK, raw 32-byte mk) + tag)
+}
+
+const toB64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes))
+const fromB64 = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+
+export async function generateMessageKey(): Promise<{ key: CryptoKey; raw: Uint8Array }> {
+  const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
+    'encrypt',
+    'decrypt',
+  ])
+  const raw = new Uint8Array(await crypto.subtle.exportKey('raw', key))
+  return { key, raw }
+}
+
+// Encrypts plaintext once and wraps the message key for every recipient
+// device. `recipients` must include ALL devices of ALL conversation members —
+// including every one of the sender's own devices, or the sender's other
+// installs (and this one after a reload) cannot read the message.
+export async function encryptWithEnvelopes(
+  plaintext: string,
+  recipients: EnvelopeRecipient[],
+): Promise<{ content: string; iv: string; envelopes: MessageEnvelope[] }> {
+  if (recipients.length === 0) {
+    throw new Error('[yaply-crypto] encryptWithEnvelopes requires at least one recipient device')
+  }
+  console.debug('[yaply:crypto] encryptWithEnvelopes start', { recipients: recipients.length })
+
+  const { key: mk, raw: mkRaw } = await generateMessageKey()
+  const { content, iv } = await encryptMessage(mk, plaintext)
+
+  // One ephemeral keypair per message, shared across all envelopes.
+  const eph = await generateKeyPair()
+  const ephPub = JSON.stringify(eph.publicKeyJwk)
+
+  const envelopes: MessageEnvelope[] = []
+  for (const r of recipients) {
+    const kek = await deriveSharedKey(eph.privateKeyJwk, r.pubJwk)
+    const keyIvBytes = crypto.getRandomValues(new Uint8Array(12))
+    const wrapped = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: keyIvBytes }, kek, mkRaw as BufferSource)
+    envelopes.push({
+      recipientUserId: r.userId,
+      recipientFp: r.fp,
+      ephPub,
+      keyIv: toB64(keyIvBytes),
+      wrappedKey: toB64(new Uint8Array(wrapped)),
+    })
+  }
+  console.debug('[yaply:crypto] encryptWithEnvelopes ok', { envelopes: envelopes.length })
+  return { content, iv, envelopes }
+}
+
+// Unwraps the message key from an envelope sealed to `myPrivJwk`'s device and
+// decrypts the message content. Throws on any mismatch — callers surface an
+// explicit decryptFailed state, never garbage.
+export async function unwrapAndDecrypt(
+  myPrivJwk: JsonWebKey,
+  envelope: Pick<MessageEnvelope, 'ephPub' | 'keyIv' | 'wrappedKey'>,
+  content: string,
+  iv: string,
+): Promise<string> {
+  console.debug('[yaply:crypto] unwrapAndDecrypt start')
+  try {
+    const kek = await deriveSharedKey(myPrivJwk, JSON.parse(envelope.ephPub) as JsonWebKey)
+    const mkRaw = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: fromB64(envelope.keyIv) as BufferSource },
+      kek,
+      fromB64(envelope.wrappedKey) as BufferSource,
+    )
+    const mk = await crypto.subtle.importKey('raw', mkRaw, { name: 'AES-GCM' }, false, ['decrypt'])
+    const plain = await decryptMessage(mk, content, iv)
+    console.debug('[yaply:crypto] unwrapAndDecrypt ok')
+    return plain
+  } catch (err) {
+    console.error('[yaply:crypto] unwrapAndDecrypt FAILED', { err })
+    throw err
+  }
+}
+
 // iv=null means phase-1 fallback (content is plain base64 plaintext).
 export async function decryptMessage(
   key: CryptoKey,

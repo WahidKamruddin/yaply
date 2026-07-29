@@ -749,7 +749,7 @@ const STEPS = [
 
 function LandingPage() {
   const rootRef = useRef<HTMLDivElement>(null)
-  const [light, setLight] = useState(false)
+  const [light, setLight] = useState(true)
   // Flips true once the "Sealed, end to end." header finishes decrypting —
   // gates EncryptWire so its plaintext→ciphertext sweep starts after, not
   // concurrently with, the header reveal.
@@ -761,16 +761,12 @@ function LandingPage() {
     rootRef.current?.classList.add('lp-js')
   }, [])
 
-  // Theme: saved preference, else system.
+  // Theme: saved preference, else light by default.
   useEffect(() => {
     const saved = localStorage.getItem('yaply-theme')
     if (saved === 'light') setLight(true)
     else if (saved === 'dark') setLight(false)
-    else setLight(window.matchMedia('(prefers-color-scheme: light)').matches)
   }, [])
-  useEffect(() => {
-    rootRef.current?.classList.toggle('lp-light', light)
-  }, [light])
   // Match html/body to the page background so elastic overscroll (rubber-band
   // bounce past the top/bottom on trackpads and iOS) reveals the same color
   // instead of the default white behind the .lp div. Reset on unmount so
@@ -846,7 +842,7 @@ function LandingPage() {
   }, [])
 
   return (
-    <div ref={rootRef} className="lp">
+    <div ref={rootRef} className={`lp${light ? ' lp-light' : ''}`}>
       <style>{LP_CSS}</style>
 
       {/* scroll progress hairline */}

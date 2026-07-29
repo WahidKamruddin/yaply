@@ -33,8 +33,9 @@ export interface DbMessage {
   id: string
   conversation_id: string
   sender_id: string | null
-  content: string         // base64(AES-GCM ciphertext+tag) or plaintext for system messages
+  content: string         // base64(AES-GCM ciphertext+tag) or plain base64 for phase-1
   iv: string | null       // base64(nonce[12]); null = phase-1 fallback (plain base64)
+  enc_v: number | null    // 2 = envelope-encrypted (message_envelopes); null = phase-1
   type: string            // 'text' | 'image' | 'gif' | 'sticker' | 'file' | 'system' | 'ai'
   media_url: string | null
   media_mime: string | null
@@ -71,6 +72,10 @@ export interface SendMessageParams {
   senderId: string
   content: string
   iv: string | null
+  // Present only for envelope-encrypted (enc_v = 2) sends — routes through the
+  // send_message_with_envelopes RPC so message + envelopes commit atomically.
+  // Absent ⇒ plain insert with enc_v = NULL (phase-1 / system / media).
+  envelopes?: import('@yaply/crypto').MessageEnvelope[]
   type?: string
   replyToId?: string | null
   threadId?: string | null
