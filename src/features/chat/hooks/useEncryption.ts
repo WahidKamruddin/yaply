@@ -45,9 +45,16 @@ const derivedKeyMemCache = new Map<string, StoredDerivedKey>()
 const peerKeyMemCache = new Map<string, { jwk: JsonWebKey; fetchedAt: number }>()
 const identityPairMemCache = new Map<string, { pub: JsonWebKey; priv: JsonWebKey } | null>()
 
+const trace = (...args: unknown[]) => console.debug('[yaply:crypto]', ...args)
+
 async function getIdentityPair(userId: string): Promise<{ pub: JsonWebKey; priv: JsonWebKey } | null> {
-  if (identityPairMemCache.has(userId)) return identityPairMemCache.get(userId) ?? null
+  if (identityPairMemCache.has(userId)) {
+    const cached = identityPairMemCache.get(userId) ?? null
+    trace('getIdentityPair mem-hit', { userId, found: !!cached })
+    return cached
+  }
   const pair = await loadIdentityKeyPair(userId)
+  trace('getIdentityPair idb-load', { userId, found: !!pair })
   identityPairMemCache.set(userId, pair)
   return pair
 }
@@ -73,18 +80,28 @@ async function fetchDeviceKey(userId: string): Promise<JsonWebKey | null> {
     .maybeSingle()
   if (error) {
     console.error('[yaply] failed to fetch identity key for', userId, error)
+    trace('fetchDeviceKey FAILED', { userId, error })
     return null
   }
-  return parseJwk(data?.identity_key)
+  const jwk = parseJwk(data?.identity_key)
+  trace('fetchDeviceKey', { userId, found: !!jwk })
+  return jwk
 }
 
 // force=true bypasses the session cache — used by the decrypt retry path to
 // pick up a peer who rotated keys mid-session.
 async function getPeerKey(peerId: string, force = false): Promise<JsonWebKey | null> {
   const cached = peerKeyMemCache.get(peerId)
-  if (cached && !force) return cached.jwk
+  if (cached && !force) {
+    trace('getPeerKey mem-hit', { peerId })
+    return cached.jwk
+  }
+  trace('getPeerKey fetching', { peerId, force })
   const jwk = await fetchDeviceKey(peerId)
-  if (!jwk) return cached?.jwk ?? null
+  if (!jwk) {
+    trace('getPeerKey fetch returned nothing, falling back to stale cache', { peerId, hadStale: !!cached })
+    return cached?.jwk ?? null
+  }
   peerKeyMemCache.set(peerId, { jwk, fetchedAt: Date.now() })
   return jwk
 }
@@ -96,26 +113,42 @@ async function getSharedKey(
   forceRefreshPeer = false,
 ): Promise<CryptoKey | null> {
   const peerJwk = await getPeerKey(peerId, forceRefreshPeer)
-  if (!peerJwk) return null
+  if (!peerJwk) {
+    trace('getSharedKey aborted: no peer public key', { userId, convId, peerId })
+    return null
+  }
   const myPair = await getIdentityPair(userId)
-  if (!myPair) return null
+  if (!myPair) {
+    trace('getSharedKey aborted: no own identity pair', { userId, convId, peerId })
+    return null
+  }
 
   const myFp = publicKeyFingerprint(myPair.pub)
   const theirFp = publicKeyFingerprint(peerJwk)
   const cacheKey = `${userId}:${convId}:${peerId}`
+  const short = (fp: string) => fp.slice(0, 12)
 
   // A cached key is only valid while BOTH identity keys still match the
   // fingerprints it was derived from — otherwise someone rotated and we
   // must re-derive.
   const mem = derivedKeyMemCache.get(cacheKey)
-  if (mem && mem.myFp === myFp && mem.theirFp === theirFp) return mem.key
-
-  const stored = await loadDerivedKey(cacheKey)
-  if (stored && stored.myFp === myFp && stored.theirFp === theirFp) {
-    derivedKeyMemCache.set(cacheKey, stored)
-    return stored.key
+  if (mem) {
+    const match = mem.myFp === myFp && mem.theirFp === theirFp
+    trace('getSharedKey mem-cache', { cacheKey, match, cachedMyFp: short(mem.myFp), myFp: short(myFp), cachedTheirFp: short(mem.theirFp), theirFp: short(theirFp) })
+    if (match) return mem.key
   }
 
+  const stored = await loadDerivedKey(cacheKey)
+  if (stored) {
+    const match = stored.myFp === myFp && stored.theirFp === theirFp
+    trace('getSharedKey idb-cache', { cacheKey, match, storedMyFp: short(stored.myFp), myFp: short(myFp), storedTheirFp: short(stored.theirFp), theirFp: short(theirFp) })
+    if (match) {
+      derivedKeyMemCache.set(cacheKey, stored)
+      return stored.key
+    }
+  }
+
+  trace('getSharedKey deriving fresh key', { cacheKey, myFp: short(myFp), theirFp: short(theirFp) })
   const key = await deriveSharedKey(myPair.priv, peerJwk)
   const entry: StoredDerivedKey = { key, myFp, theirFp }
   derivedKeyMemCache.set(cacheKey, entry)
@@ -136,6 +169,7 @@ export async function decryptForUser(
   content: string,
   iv: string | null,
 ): Promise<string> {
+  trace('decryptForUser start', { userId, convId, otherUserId, phase: iv ? 'encrypted' : 'phase-1' })
   if (!iv) {
     try {
       const bytes = Uint8Array.from(atob(content), (c) => c.charCodeAt(0))
@@ -148,32 +182,51 @@ export async function decryptForUser(
   const key = await getSharedKey(userId, convId, otherUserId)
   if (key) {
     try {
-      return await decryptMessage(key, content, iv)
-    } catch { /* possibly stale key — retry below */ }
+      const plain = await decryptMessage(key, content, iv)
+      trace('decryptForUser succeeded on first attempt', { userId, convId, otherUserId })
+      return plain
+    } catch (err) {
+      trace('decryptForUser first attempt failed, will consider retry', { userId, convId, otherUserId, err })
+    }
+  } else {
+    trace('decryptForUser: no shared key on first attempt', { userId, convId, otherUserId })
   }
 
   // Retry once against a freshly fetched peer key (peer may have rotated
   // mid-session) — but skip when the key we just used was already fresh.
   const cached = peerKeyMemCache.get(otherUserId)
   const peerIsFresh = cached && Date.now() - cached.fetchedAt < 10_000
+  trace('decryptForUser retry decision', { userId, convId, otherUserId, peerIsFresh: !!peerIsFresh })
   if (!peerIsFresh) {
     const retryKey = await getSharedKey(userId, convId, otherUserId, true)
     if (retryKey && retryKey !== key) {
       try {
-        return await decryptMessage(retryKey, content, iv)
-      } catch { /* fall through */ }
+        const plain = await decryptMessage(retryKey, content, iv)
+        trace('decryptForUser succeeded on retry', { userId, convId, otherUserId })
+        return plain
+      } catch (err) {
+        trace('decryptForUser retry attempt also failed', { userId, convId, otherUserId, err })
+      }
+    } else {
+      trace('decryptForUser retry produced no new key', { userId, convId, otherUserId, gotRetryKey: !!retryKey, sameAsFirst: retryKey === key })
     }
   }
-  throw new DecryptionFailedError(key ? 'key mismatch' : 'no shared key')
+  const reason = key ? 'key mismatch' : 'no shared key'
+  trace('decryptForUser FAILED, giving up', { userId, convId, otherUserId, reason })
+  throw new DecryptionFailedError(reason)
 }
 
 async function publishIdentityKey(userId: string, pub: JsonWebKey): Promise<void> {
+  const fp = publicKeyFingerprint(pub).slice(0, 12)
   const { error } = await supabase.from('devices').upsert(
     { user_id: userId, device_id: 1, identity_key: JSON.stringify(pub) },
     { onConflict: 'user_id,device_id' },
   )
   if (error) {
     console.error('[yaply] failed to publish identity key — peers cannot encrypt to this device', error)
+    trace('publishIdentityKey FAILED', { userId, fp, error })
+  } else {
+    trace('publishIdentityKey ok', { userId, fp })
   }
 }
 
@@ -182,8 +235,10 @@ export function useEncryption(userId: string | undefined) {
     if (!userId) return
 
     async function initKeys(uid: string) {
+      trace('initKeys start', { uid })
       const existing = await loadIdentityKeyPair(uid)
       if (existing) {
+        trace('initKeys: found existing v2 keypair', { uid, fp: publicKeyFingerprint(existing.pub).slice(0, 12) })
         identityPairMemCache.set(uid, existing)
         await publishIdentityKey(uid, existing.pub)
         return
@@ -194,15 +249,20 @@ export function useEncryption(userId: string | undefined) {
       const legacy = await loadLegacyIdentityKeyPair()
       if (legacy) {
         const serverJwk = await fetchDeviceKey(uid)
+        const legacyFp = publicKeyFingerprint(legacy.pub).slice(0, 12)
+        const serverFp = serverJwk ? publicKeyFingerprint(serverJwk).slice(0, 12) : null
+        trace('initKeys: found legacy unscoped keypair', { uid, legacyFp, serverFp, matches: serverFp === legacyFp })
         if (serverJwk && publicKeyFingerprint(serverJwk) === publicKeyFingerprint(legacy.pub)) {
           await storeIdentityKeyPair(uid, legacy.pub, legacy.priv)
           await clearLegacyIdentityKeyPair()
           identityPairMemCache.set(uid, legacy)
+          trace('initKeys: adopted legacy keypair for this user', { uid, fp: legacyFp })
           return
         }
       }
 
       const { publicKeyJwk, privateKeyJwk } = await generateKeyPair()
+      trace('initKeys: generating brand-new keypair', { uid, fp: publicKeyFingerprint(publicKeyJwk).slice(0, 12) })
       await storeIdentityKeyPair(uid, publicKeyJwk, privateKeyJwk)
       identityPairMemCache.set(uid, { pub: publicKeyJwk, priv: privateKeyJwk })
       await publishIdentityKey(uid, publicKeyJwk)
@@ -216,6 +276,7 @@ export function useEncryption(userId: string | undefined) {
   const encrypt = useCallback(
     async (convId: string, otherUserId: string, plaintext: string): Promise<{ content: string; iv: string }> => {
       const sharedKey = userId ? await getSharedKey(userId, convId, otherUserId) : null
+      trace('encrypt', { userId, convId, otherUserId, path: sharedKey ? 'aes-gcm' : 'phase-1-fallback' })
       if (!sharedKey) {
         const bytes = new TextEncoder().encode(plaintext)
         const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join('')

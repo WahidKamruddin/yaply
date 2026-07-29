@@ -61,7 +61,7 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
     }
   }
 
-  let lastMessages: Record<string, DecryptedMessage> = {}
+  const lastMessages: Record<string, DecryptedMessage> = {}
   const unreadCounts: Record<string, number> = {}
   // Decryption is async; previews are filled in via these tasks and awaited
   // once before returning, so every conversation resolves before this
@@ -117,14 +117,17 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
                 decryptForUser(userId, convId, peerId, m.content, m.iv)
                   .then((text) => {
                     lastMessages[convId].content = text
+                    console.debug('[yaply:crypto] sidebar preview decrypt ok', { convId, peerId })
                   })
-                  .catch(() => {
+                  .catch((err: unknown) => {
+                    console.error('[yaply:crypto] sidebar preview decrypt FAILED', { convId, peerId, err })
                     lastMessages[convId].content = ''
                     lastMessages[convId].decryptFailed = true
                   }),
               )
               preview = '' // placeholder — filled in once decryptTasks resolves below
             } else {
+              console.debug('[yaply:crypto] sidebar preview skipped: no peer resolved', { convId: m.conversation_id })
               preview = ''
               decryptFailed = true
             }

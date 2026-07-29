@@ -35,31 +35,36 @@ export async function deriveSharedKey(
 ): Promise<CryptoKey> {
   const myPrivNorm = asJwk(myPrivJwk)
   const theirPubNorm = asJwk(theirPubJwk)
-  // eslint-disable-next-line no-console
-  console.debug('[yaply-crypto] deriveSharedKey myPriv type=%s keys=%s', typeof myPrivNorm, Object.keys(myPrivNorm ?? {}).join(','))
-  // eslint-disable-next-line no-console
-  console.debug('[yaply-crypto] deriveSharedKey theirPub type=%s keys=%s', typeof theirPubNorm, Object.keys(theirPubNorm ?? {}).join(','))
-  const myPrivKey = await crypto.subtle.importKey(
-    'jwk',
-    myPrivNorm,
-    { name: 'ECDH', namedCurve: 'P-256' },
-    false,
-    ['deriveKey'],
-  )
-  const theirPubKey = await crypto.subtle.importKey(
-    'jwk',
-    theirPubNorm,
-    { name: 'ECDH', namedCurve: 'P-256' },
-    false,
-    [],
-  )
-  return crypto.subtle.deriveKey(
-    { name: 'ECDH', public: theirPubKey },
-    myPrivKey,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
-  )
+  const theirFp = theirPubNorm.x && theirPubNorm.y ? `${theirPubNorm.x}.${theirPubNorm.y}` : '(invalid)'
+  console.debug('[yaply:crypto] deriveSharedKey start', { theirFp: theirFp.slice(0, 16) })
+  try {
+    const myPrivKey = await crypto.subtle.importKey(
+      'jwk',
+      myPrivNorm,
+      { name: 'ECDH', namedCurve: 'P-256' },
+      false,
+      ['deriveKey'],
+    )
+    const theirPubKey = await crypto.subtle.importKey(
+      'jwk',
+      theirPubNorm,
+      { name: 'ECDH', namedCurve: 'P-256' },
+      false,
+      [],
+    )
+    const key = await crypto.subtle.deriveKey(
+      { name: 'ECDH', public: theirPubKey },
+      myPrivKey,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt'],
+    )
+    console.debug('[yaply:crypto] deriveSharedKey ok', { theirFp: theirFp.slice(0, 16) })
+    return key
+  } catch (err) {
+    console.error('[yaply:crypto] deriveSharedKey FAILED', { theirFp: theirFp.slice(0, 16), err })
+    throw err
+  }
 }
 
 // Returns { content: base64(ciphertext+tag), iv: base64(nonce[12]) }
@@ -96,6 +101,14 @@ export async function decryptMessage(
   }
   const ivBytes = Uint8Array.from(atob(iv), (c) => c.charCodeAt(0))
   const ciphertextBytes = Uint8Array.from(atob(content), (c) => c.charCodeAt(0))
-  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivBytes }, key, ciphertextBytes)
-  return new TextDecoder().decode(decrypted)
+  console.debug('[yaply:crypto] decryptMessage start', { ivBytes: ivBytes.length, ciphertextBytes: ciphertextBytes.length })
+  try {
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivBytes }, key, ciphertextBytes)
+    console.debug('[yaply:crypto] decryptMessage ok')
+    return new TextDecoder().decode(decrypted)
+  } catch (err) {
+    const domErr = err as { name?: string; message?: string }
+    console.error('[yaply:crypto] decryptMessage FAILED', { name: domErr.name, message: domErr.message })
+    throw err
+  }
 }

@@ -200,7 +200,9 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
             try {
               content = await decrypt(activeId!, peerId, msg.content, msg.iv)
               decryptCacheRef.current.set(cacheKey, content)
-            } catch {
+              console.debug('[yaply:crypto] ChatView decrypt ok', { msgId: msg.id, senderId, peerId })
+            } catch (err) {
+              console.error('[yaply:crypto] ChatView decrypt FAILED', { msgId: msg.id, senderId, peerId, err })
               decryptFailed = true
               content = ''
               decryptCacheRef.current.set(cacheKey, null)
@@ -208,6 +210,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
           } else {
             // No peer to derive against (e.g. own message in a group from the
             // legacy encrypt path). Don't cache — the peer may still load.
+            console.debug('[yaply:crypto] ChatView decrypt skipped: no peer resolved', { msgId: msg.id, senderId, isGroup, otherMemberId: otherMember?.userId })
             decryptFailed = true
             content = ''
           }
