@@ -18,3 +18,4 @@ todos.json
 # Sister platform apps (each has its own GitHub repo)
 yaply-ios/
 yaply-android/
+yaply-native/

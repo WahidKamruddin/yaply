@@ -4,15 +4,18 @@
 
 ### Platform Context
 
-When the user says **"ios"** — work exclusively inside `yaply-ios/`. That directory is the Swift/SwiftUI app and is its own git repo connected to its own GitHub. Do not reference or modify files in the web root.
+When the user says **"native"** (or "ios", or "mobile") — work exclusively inside `yaply-native/`. That directory is the React Native/Expo app (TypeScript) and is its own git repo connected to its own GitHub. It is the active client for iOS (and, later, Android) — build/iOS-specific work happens here now. Do not reference or modify files in the web root.
 
-When the user says **"web"** — work exclusively inside the yaply root folder (this repo). Ignore `yaply-ios/` entirely.
+When the user says **"web"** — work exclusively inside the yaply root folder (this repo). Ignore `yaply-native/` and `yaply-ios/` entirely.
 
-Both repos are independent: they have separate git histories, separate GitHub remotes, and separate issue trackers. Any reported bug or feature request must be filed against the correct repo — never mix them.
+`yaply-ios/` (Swift/SwiftUI) is **deprecated** — superseded by `yaply-native/` (see Sister Projects below for why). Do not add new work there. It's kept around only as a historical reference for its encryption-contract/DB-schema notes until it's formally archived. If the user says "ios" and means the old Swift app specifically, confirm before touching it.
+
+All three (web, yaply-native, legacy yaply-ios) are independent repos: separate git histories, separate GitHub remotes, separate issue trackers. Any reported bug or feature request must be filed against the correct repo — never mix them.
 
 **GitHub Remotes:**
 - Web: https://github.com/WahidKamruddin/yaply
-- iOS: https://github.com/WahidKamruddin/yaply-ios
+- Native (iOS/Android): https://github.com/WahidKamruddin/yaply-native
+- iOS (legacy, deprecated): https://github.com/WahidKamruddin/yaply-ios
 
 ### GitHub Issues
 
@@ -21,7 +24,7 @@ When the user describes a problem or request, determine which platform(s) it aff
 ### Committing & Pushing
 
 When the user says **"both apps are good"**:
-1. Stage all changed files in each repo separately (`git add` the relevant files in `yaply-ios/` and in the web root).
+1. Stage all changed files in each repo separately (`git add` the relevant files in `yaply-native/` and in the web root). `yaply-ios/` is deprecated and no longer part of this workflow unless the user explicitly asks to touch it.
 2. Propose a commit message following the repo's existing style — conventional commits format: `feat(): …`, `fix(): …`, `refactor(): …`, etc. Generate a message, then ask the user what to change before committing.
 3. **Never include "Co-authored-by: Claude" or any AI attribution in commit messages.**
 4. After the user approves the message, commit and push to `main`. Create a branch only if the user asks; by default push straight to `main` since this is a solo project.
@@ -34,7 +37,7 @@ After every feature is finished and the user confirms it's good, ask: "Want to c
 
 ## What This Is
 
-yaply is a web-based E2E encrypted messaging application. It is a Progressive Web App (PWA-capable) built with React and backed entirely by Supabase. It lives as the web platform in a planned monorepo that will eventually include `yaply-ios` (Swift/SwiftUI) and `yaply-android` (Kotlin). All platforms share one Supabase project.
+yaply is a web-based E2E encrypted messaging application. It is a Progressive Web App (PWA-capable) built with React and backed entirely by Supabase. It lives as the web platform in a monorepo alongside `yaply-native` (React Native/Expo, TypeScript — the active iOS and future Android client) and the deprecated `yaply-ios` (Swift/SwiftUI, kept only as a historical reference). All platforms share one Supabase project.
 
 ---
 
@@ -148,7 +151,7 @@ E2E here means **text message content is encrypted between a user's active devic
 - **Push previews / reactions leak:** notification content routes through a push provider outside E2E; reactions are stored in plaintext.
 - **Search:** no server-side search over ciphertext; client-side search only covers already-decrypted, loaded messages.
 - **Fan-out scaling:** envelope rows = messages × recipients × devices, bounded only by the 90-day `last_active_at` filter; large groups are heavy on writes/storage.
-- **Cross-platform interop window:** until yaply-ios implements the v2 envelope format, mixed web/iOS conversations can't read each other's v2 messages.
+- **Cross-platform interop window:** until yaply-native implements the v2 envelope format, mixed web/native conversations can't read each other's v2 messages. (Legacy yaply-ios never completed this and is deprecated.)
 - **Browser-E2E trust:** the app *ships the JavaScript that does the crypto*, so whoever controls delivery could exfiltrate keys/plaintext via a malicious update. This is an *active* attack (detectable via open-source/audits) and can't retroactively recover messages sealed to a key that was never captured — but it means "the server can't read it" is not the same as "the operator physically cannot read it."
 
 ### Packages (Monorepo)
@@ -322,7 +325,9 @@ created_at      timestamptz
 
 Web is the reference implementation; all platforms share one Supabase project and
 the same schema (see **Database Schema** and **Feature Map** above). Per-feature
-iOS how-to lives in `yaply-ios/CLAUDE.md` — do not duplicate it here. Only
+native how-to lives in `yaply-native/CLAUDE.md` — do not duplicate it here.
+(`yaply-ios/CLAUDE.md` still documents the same contracts accurately since the
+backend hasn't changed, but is otherwise deprecated — see Sister Projects.) Only
 cross-platform **contracts** that must match byte-for-byte or behave identically
 belong in this repo:
 
@@ -464,9 +469,9 @@ The dev server is also accessible via Netlify Dev at port 8888 (configured in `n
 | Directory | Platform | GitHub | Status |
 |-----------|----------|--------|--------|
 | `.` (root) | Web (React + Supabase) | https://github.com/WahidKamruddin/yaply | Active |
-| `yaply-ios/` | iOS (Swift + SwiftUI) | https://github.com/WahidKamruddin/yaply-ios | Active — own GitHub repo, gitignored here |
-| `yaply-android/` | Android (Kotlin + Jetpack Compose) | — | Future |
+| `yaply-native/` | iOS + (future) Android — React Native/Expo, TypeScript | https://github.com/WahidKamruddin/yaply-native | Active — the client for iOS and Android going forward. Own GitHub repo, gitignored here. |
+| `yaply-ios/` | iOS (Swift + SwiftUI) | https://github.com/WahidKamruddin/yaply-ios | **Deprecated** — superseded by `yaply-native/`. SwiftUI's native look didn't allow the design customizability wanted (a Meta Messenger–esque UI); React Native was chosen instead so one codebase can eventually cover iOS and Android. No new feature work happens here. Kept as a historical reference for its encryption wire-format v2 and DB schema notes until formally archived — do not treat its SwiftUI implementation patterns or its `Known Issues to Fix` list as applicable to `yaply-native/`. |
 
-The web repo's `.gitignore` excludes `yaply-ios/` and `yaply-android/` since they have their own GitHub repositories. The monorepo root exists so Claude Code can cross-reference all platforms in the same working directory.
+The web repo's `.gitignore` excludes `yaply-native/`, `yaply-ios/`, and `yaply-android/` since each has (or will have) its own GitHub repository. The monorepo root exists so Claude Code can cross-reference all platforms in the same working directory.
 
-`yaply-ios/CLAUDE.md` contains iOS-specific architecture notes. Any change to the encryption wire format or database schema **must be reflected in all platform CLAUDE.md files** and implemented consistently across all apps.
+`yaply-native/CLAUDE.md` contains its architecture notes and design direction. `yaply-ios/CLAUDE.md` still documents the encryption/schema contract accurately (the backend hasn't changed) but its UI architecture is no longer the target to build against. Any change to the encryption wire format or database schema **must be reflected in all active platform CLAUDE.md files** (web and yaply-native) and implemented consistently across both.
