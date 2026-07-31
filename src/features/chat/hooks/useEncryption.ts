@@ -89,6 +89,11 @@ async function getIdentityPair(userId: string): Promise<{ pub: JsonWebKey; priv:
 // Fingerprint of this install's device key for `userId` — used to pick this
 // device's envelope out of message_envelopes. Null before keys initialize.
 export async function getMyFingerprint(userId: string): Promise<string | null> {
+  // Wait for an in-flight registration first — otherwise this can race a
+  // fresh device's keypair generation, return null, and cause callers to
+  // skip fetching envelopes entirely (see encryptForMembers/decryptV2ForUser,
+  // which already await this before reading the identity pair).
+  await registrationInFlight.get(userId)
   const pair = await getIdentityPair(userId)
   return pair ? publicKeyFingerprint(pair.pub) : null
 }
