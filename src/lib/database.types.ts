@@ -11,6 +11,7 @@ export interface Database {
           avatar_url: string | null
           is_online: boolean
           last_seen_at: string | null
+          username_set: boolean
           created_at: string
         }
         Insert: {
@@ -20,6 +21,7 @@ export interface Database {
           avatar_url?: string | null
           is_online?: boolean
           last_seen_at?: string | null
+          username_set?: boolean
           created_at?: string
         }
         Update: {
@@ -29,6 +31,7 @@ export interface Database {
           avatar_url?: string | null
           is_online?: boolean
           last_seen_at?: string | null
+          username_set?: boolean
         }
         Relationships: []
       }

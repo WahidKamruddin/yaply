@@ -906,7 +906,7 @@ function LandingPage() {
               <span className="lp-h1-grad">done right.</span>
             </h1>
             <p className="lp-sub" data-reveal style={{ ['--d' as string]: '140ms' }}>
-              More than just messaging. Plan events, manage tasks, share memories, and let AI handle the details. 
+              An all-in-one messaging platform. Plan events, manage tasks, share memories, and let AI handle the details. 
             </p>
             <div className="lp-cta-row" data-reveal style={{ ['--d' as string]: '220ms' }}>
               <Link to="/auth" className="lp-btn-primary">

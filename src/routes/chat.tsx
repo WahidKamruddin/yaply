@@ -4,7 +4,9 @@ import { useAtom } from 'jotai'
 import { getSession, getUser, onAuthStateChange } from '@/lib/auth'
 import ConversationList from '@/features/chat/components/ConversationList'
 import ChatView from '@/features/chat/components/ChatView'
+import UsernameSetupModal from '@/features/chat/components/UsernameSetupModal'
 import CommandProvider from '@/features/commands/components/CommandProvider'
+import { useProfile } from '@/features/chat/hooks/useProfile'
 import DragDropZone from '@/features/media/components/DragDropZone'
 import NotificationBanner from '@/features/notifications/components/NotificationBanner'
 import { useInAppNotifications } from '@/features/notifications/hooks/useInAppNotifications'
@@ -31,6 +33,7 @@ function ChatPage() {
   const navigate = useNavigate()
 
   const { data: conversations = [] } = useConversations(user?.id ?? '')
+  const { data: profile } = useProfile(user?.id ?? '')
   const { notification, dismiss } = useInAppNotifications(
     user?.id ?? '',
     activeConvId,
@@ -80,6 +83,9 @@ function ChatPage() {
 
   return (
     <CommandProvider userId={user.id}>
+      {profile && !profile.username_set && (
+        <UsernameSetupModal userId={user.id} suggestedUsername={profile.username} />
+      )}
       <NotificationBanner notification={notification} onDismiss={dismiss} />
       <DragDropZone
         onFileDrop={(file) => void handleFileDrop(file)}
