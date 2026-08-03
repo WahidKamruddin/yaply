@@ -3,6 +3,7 @@ import { CheckCheck, Reply, Trash2, AlertCircle, Smile, MessageSquarePlus, Messa
 import * as Dialog from '@radix-ui/react-dialog'
 import type { DecryptedMessage } from '@/features/chat/types'
 import type { ReactionGroup } from '@/features/chat/api/reactions'
+import Avatar from '@/components/Avatar'
 import AddToAlbumModal from './AddToAlbumModal'
 
 function formatMessageTime(dateStr: string): string {
@@ -92,11 +93,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
     return (
       <div className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'} mb-1`}>
         {!isOwn && (
-          <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-[11px] font-semibold">
-            {message.senderProfile?.avatar_url
-              ? <img src={message.senderProfile.avatar_url} className="w-full h-full object-cover" alt="" />
-              : (message.senderProfile?.display_name?.[0] ?? message.senderProfile?.username?.[0] ?? '?').toUpperCase()}
-          </div>
+          <Avatar src={message.senderProfile?.avatar_url} alt="" size={28} />
         )}
         <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-tint border border-border">
           <AlertCircle size={12} className="text-text-subtle" />
@@ -121,9 +118,11 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
         </div>
       )}
       <div className={`flex flex-col max-w-[65%] ${isOwn ? 'items-end' : 'items-start'}`}>
-        {!isOwn && message.senderProfile && (
+        {!isOwn && (
           <span className="text-xs text-primary-text font-medium mb-1 px-1">
-            {message.senderProfile.display_name ?? message.senderProfile.username}
+            {message.senderProfile
+              ? (message.senderProfile.display_name ?? message.senderProfile.username)
+              : 'Deleted user'}
           </span>
         )}
 
@@ -198,7 +197,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                 <div className="w-0.5 bg-[#5b8def] rounded-full flex-shrink-0 mx-2 my-2" />
                 <div className="py-2 pr-3 min-w-0">
                   <p className="text-[10px] font-semibold text-primary-text mb-0.5 truncate">
-                    {replyMessage.senderProfile?.display_name ?? replyMessage.senderProfile?.username ?? 'Unknown'}
+                    {replyMessage.senderProfile?.display_name ?? replyMessage.senderProfile?.username ?? 'Deleted user'}
                   </p>
                   <p className={`text-[11px] truncate ${replyMessage.deletedAt ? 'italic text-text-subtle' : 'text-text-muted'}`}>
                     {replyMessage.deletedAt

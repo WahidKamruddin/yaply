@@ -3,6 +3,7 @@ import { X, UserPlus, Trash2, Search, Crown, ShieldCheck, AlertTriangle } from '
 import * as Dialog from '@radix-ui/react-dialog'
 import { useQueryClient } from '@tanstack/react-query'
 import { searchUsers, addGroupMember, removeGroupMember, promoteMemberToAdmin, deleteGroupForEveryone } from '@/features/chat/api/conversations'
+import Avatar from '@/components/Avatar'
 import type { ConversationListItem, Profile } from '@/features/chat/types'
 
 interface Props {
@@ -115,18 +116,12 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
         <div className="max-h-60 overflow-y-auto px-3 py-2">
           {conversation.members.map((m) => (
             <div key={m.userId} className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-[#f3f7ff]">
-              <div className="relative w-8 h-8 flex-shrink-0">
-                {m.profile.avatar_url ? (
-                  <img src={m.profile.avatar_url} className="w-full h-full rounded-full object-cover" alt="" />
-                ) : (
-                  <div className="w-full h-full rounded-full bg-[#5b8def] flex items-center justify-center text-white text-xs font-semibold">
-                    {(m.profile.display_name ?? m.profile.username).charAt(0).toUpperCase()}
-                  </div>
-                )}
-                {m.profile.is_online && (
-                  <span className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full border border-white" />
-                )}
-              </div>
+              <Avatar
+                src={m.profile.avatar_url}
+                alt={m.profile.display_name ?? m.profile.username}
+                size={32}
+                online={m.profile.is_online}
+              />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-[#1a2744] truncate">
                   {m.profile.display_name ?? m.profile.username}
@@ -192,9 +187,7 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
                     disabled={adding === u.id}
                     className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#f3f7ff] text-left disabled:opacity-40 transition-colors"
                   >
-                    <div className="w-7 h-7 rounded-full bg-[#5b8def] flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
-                      {(u.display_name ?? u.username).charAt(0).toUpperCase()}
-                    </div>
+                    <Avatar src={u.avatar_url} alt={u.display_name ?? u.username} size={28} />
                     <span className="text-xs font-medium text-[#1a2744]">{u.display_name ?? u.username}</span>
                     <span className="text-xs text-[#9ab0cc] ml-auto">@{u.username}</span>
                   </button>

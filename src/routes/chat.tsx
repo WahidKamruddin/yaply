@@ -93,12 +93,12 @@ function ChatPage() {
       >
         {/* Sidebar: full-screen on mobile when no chat is open; fixed 288px column on ≥ md */}
         <div className={`flex-col h-full w-full md:w-72 md:flex-shrink-0 ${activeConvId ? 'hidden md:flex' : 'flex'}`}>
-          <ConversationList currentUserId={user.id} userEmail={user.email ?? ''} />
+          <ConversationList currentUserId={user.id} />
         </div>
 
         {/* Chat: full-screen on mobile when a conversation is open; flex-1 column on ≥ md */}
         <div className={`flex-1 min-w-0 overflow-hidden ${activeConvId ? 'flex' : 'hidden md:flex'}`}>
-          <ChatView currentUserId={user.id} userEmail={user.email ?? ''} />
+          <ChatView currentUserId={user.id} />
         </div>
       </DragDropZone>
     </CommandProvider>

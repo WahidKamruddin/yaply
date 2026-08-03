@@ -7,6 +7,7 @@ import { useNotes } from '../../hooks/useNotes'
 import { useAlbums } from '../../hooks/useAlbums'
 import { useBudgets } from '../../hooks/useBudgets'
 import type { MemberSummary } from '../../types'
+import Avatar from '@/components/Avatar'
 import AvailabilityCalendar from './AvailabilityCalendar'
 
 interface Props {
@@ -42,20 +43,6 @@ function RsvpButton({
     >
       {label}
     </button>
-  )
-}
-
-function Avatar({ profile }: { profile: { display_name: string | null; username: string; avatar_url: string | null } }) {
-  return (
-    <div className="w-6 h-6 rounded-full bg-[#5b8def] flex items-center justify-center overflow-hidden flex-shrink-0">
-      {profile.avatar_url ? (
-        <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
-      ) : (
-        <span className="text-[9px] text-white font-semibold">
-          {(profile.display_name ?? profile.username).charAt(0).toUpperCase()}
-        </span>
-      )}
-    </div>
   )
 }
 
@@ -274,7 +261,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                       if (!member) return null
                       return (
                         <div key={r.id} className="flex items-center gap-1.5">
-                          <Avatar profile={member.profile} />
+                          <Avatar src={member.profile.avatar_url} alt={member.profile.display_name ?? member.profile.username} size={24} />
                           <span className="text-[10px] text-[#6b84ab]">
                             {member.profile.display_name ?? member.profile.username}
                           </span>

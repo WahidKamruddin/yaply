@@ -7,6 +7,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { TimePicker } from '@mui/x-date-pickers/TimePicker'
 import type { Event, EventAvailability } from '../../hooks/useEvents'
 import { useEventAvailability, useSetAvailability, useConfirmEventTime } from '../../hooks/useEvents'
+import Avatar from '@/components/Avatar'
 
 interface Props {
   event: Event
@@ -310,15 +311,7 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
                 onMouseEnter={() => setHoveredMember(m.id)}
                 onMouseLeave={() => setHoveredMember(null)}
               >
-                <div className="w-6 h-6 rounded-full bg-[#5b8def] flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {m.avatar_url ? (
-                    <img src={m.avatar_url} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-[9px] text-white font-semibold">
-                      {(m.display_name ?? m.username).charAt(0).toUpperCase()}
-                    </span>
-                  )}
-                </div>
+                <Avatar src={m.avatar_url} alt={m.display_name ?? m.username} size={24} />
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] font-medium text-[#1a2744] truncate">
                     {m.display_name ?? m.username}

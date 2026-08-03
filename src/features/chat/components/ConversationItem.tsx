@@ -4,6 +4,7 @@ import { BellOff, BellRing, Trash2 } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useQueryClient } from '@tanstack/react-query'
 import { muteConversation, deleteConversation } from '@/features/chat/api/conversations'
+import Avatar from '@/components/Avatar'
 import type { ConversationListItem } from '@/features/chat/types'
 
 interface Props {
@@ -20,25 +21,6 @@ const MUTE_OPTIONS: { label: string; hours: number | null }[] = [
   { label: 'Forever', hours: null },
 ]
 
-function Avatar({ src, name, online }: { src?: string | null; name: string; online?: boolean }) {
-  return (
-    <div className="relative flex-shrink-0 w-10 h-10 overflow-hidden rounded-full">
-      {src ? (
-        <img src={src} alt={name} className="w-full h-full object-cover" />
-      ) : (
-        <div className="w-full h-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white font-semibold text-sm">
-          {name.charAt(0).toUpperCase()}
-        </div>
-      )}
-      {online !== undefined && (
-        <span
-          className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-surface ${online ? 'bg-green-500' : 'bg-offline'}`}
-        />
-      )}
-    </div>
-  )
-}
-
 export default function ConversationItem({ conversation, currentUserId, isActive, onClick }: Props) {
   const queryClient = useQueryClient()
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
@@ -52,7 +34,9 @@ export default function ConversationItem({ conversation, currentUserId, isActive
   const otherMembers = conversation.members.filter((m) => m.userId !== currentUserId)
   const displayName = conversation.isGroup
     ? (conversation.name ?? 'Group')
-    : (otherMembers[0]?.profile.display_name ?? otherMembers[0]?.profile.username ?? 'Unknown')
+    : otherMembers[0]
+      ? (otherMembers[0].profile.display_name ?? otherMembers[0].profile.username)
+      : 'Deleted user'
   const avatarSrc = conversation.isGroup ? conversation.avatarUrl : otherMembers[0]?.profile.avatar_url
   const isOnline = !conversation.isGroup && (otherMembers[0]?.profile.is_online ?? false)
 
@@ -158,7 +142,7 @@ export default function ConversationItem({ conversation, currentUserId, isActive
               : 'bg-transparent hover:bg-tint border-transparent'
           }`}
         >
-          <Avatar src={avatarSrc} name={displayName} online={!conversation.isGroup ? isOnline : undefined} />
+          <Avatar src={avatarSrc} alt={displayName} size={40} online={!conversation.isGroup ? isOnline : undefined} />
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-1">

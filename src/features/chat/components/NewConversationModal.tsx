@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { X, Search, UserPlus, Users } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { searchUsers, createDirectConversation, createGroupConversation } from '@/features/chat/api/conversations'
+import Avatar from '@/components/Avatar'
 import type { Profile } from '@/features/chat/types'
 
 interface Props {
@@ -119,9 +120,7 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
                   onClick={() => toggleSelect(profile)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isSelected ? 'bg-[#edf3ff]' : 'hover:bg-[#f3f7ff]'}`}
                 >
-                  <div className="w-8 h-8 rounded-full bg-[#5b8def] flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
-                    {(profile.display_name ?? profile.username).charAt(0).toUpperCase()}
-                  </div>
+                  <Avatar src={profile.avatar_url} alt={profile.display_name ?? profile.username} size={32} />
                   <div className="text-left min-w-0">
                     <p className="text-sm text-[#1a2744] font-medium truncate">{profile.display_name ?? profile.username}</p>
                     <p className="text-xs text-[#9ab0cc] truncate">@{profile.username}</p>

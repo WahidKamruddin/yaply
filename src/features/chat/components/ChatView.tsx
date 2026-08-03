@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import { flushSync } from 'react-dom'
+import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Phone, Video, Info, ChevronDown, ArrowLeft, Search, X, PanelRight } from 'lucide-react'
 import { useAtom, useSetAtom } from 'jotai'
@@ -31,13 +32,12 @@ import { supabase } from '@/lib/supabase'
 import type { DecryptedMessage, ConversationListItem } from '@/features/chat/types'
 import MessageBubble from './MessageBubble'
 import MessageInput from './MessageInput'
-import ProfileModal from './ProfileModal'
+import Avatar from '@/components/Avatar'
 import MediaPicker from '@/features/media/components/MediaPicker'
 import ThreadView from './ThreadView'
 
 interface Props {
   currentUserId: string
-  userEmail: string
 }
 
 function DateSeparator({ date }: { date: string }) {
@@ -52,8 +52,9 @@ function DateSeparator({ date }: { date: string }) {
   )
 }
 
-export default function ChatView({ currentUserId, userEmail }: Props) {
+export default function ChatView({ currentUserId }: Props) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [activeId, setActiveId] = useAtom(activeConversationIdAtom)
   const [replyId, setReplyId] = useAtom(replyToMessageIdAtom)
   const [panelOpen, setPanelOpen] = useAtom(conversationPanelOpenAtom)
@@ -65,7 +66,6 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
   const [decrypted, setDecrypted] = useState<DecryptedMessage[]>([])
   const [reactionsMap, setReactionsMap] = useState<Record<string, ReactionGroup[]>>({})
   const [showMedia, setShowMedia] = useState(false)
-  const [showProfile, setShowProfile] = useState(false)
   const [mediaUploading, setMediaUploading] = useState(false)
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const [pendingMessages, setPendingMessages] = useState<DecryptedMessage[]>([])
@@ -92,6 +92,10 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
   const { data: conversations = [] } = useConversations(currentUserId)
   const conversation = conversations.find((c) => c.id === activeId) ?? null
   const otherMember = conversation?.members.find((m) => m.userId !== currentUserId)
+  // The other member's profile row is dropped by fetchConversations when their account was
+  // deleted — conversation_members cascades but the conversation itself survives so the
+  // remaining user keeps their message history.
+  const isOrphanedDM = !!conversation && !conversation.isGroup && !otherMember
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useMessages(activeId)
   const { mutate: send } = useSendMessage(activeId ?? '')
@@ -481,7 +485,9 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
 
   const displayName = conversation.isGroup
     ? (conversation.name ?? 'Group')
-    : (otherMember?.profile.display_name ?? otherMember?.profile.username ?? 'Unknown')
+    : otherMember
+      ? (otherMember.profile.display_name ?? otherMember.profile.username)
+      : 'Deleted user'
 
   const avatarSrc = conversation.isGroup ? conversation.avatarUrl : otherMember?.profile.avatar_url
   const isOnline = !conversation.isGroup && (otherMember?.profile.is_online ?? false)
@@ -496,18 +502,12 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
         <button onClick={() => setActiveId(null)} className="md:hidden -ml-1 w-10 h-10 flex items-center justify-center rounded-full text-text-subtle active:bg-tint transition-colors">
           <ArrowLeft size={22} />
         </button>
-        <div className="relative flex-shrink-0 w-9 h-9">
-          {avatarSrc ? (
-            <img src={avatarSrc} alt={displayName} className="w-full h-full rounded-full object-cover" />
-          ) : (
-            <div className="w-full h-full rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white font-semibold text-sm">
-              {displayName.charAt(0).toUpperCase()}
-            </div>
-          )}
-          {!conversation.isGroup && (
-            <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-surface ${isOnline ? 'bg-green-500' : 'bg-offline'}`} />
-          )}
-        </div>
+        <Avatar
+          src={avatarSrc}
+          alt={displayName}
+          size={36}
+          online={!conversation.isGroup ? isOnline : undefined}
+        />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold font-display text-text truncate">{displayName}</p>
           <p className="text-xs text-text-subtle">{isOnline ? 'Online' : conversation.isGroup ? `${conversation.members.length} members` : 'Offline'}</p>
@@ -542,14 +542,10 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
           </button>
           <div className="w-px h-4 bg-border mx-1" />
           <button
-            onClick={() => setShowProfile(true)}
-            className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-xs font-semibold overflow-hidden hover:ring-2 hover:ring-[#5b8def]/40 transition-all flex-shrink-0"
+            onClick={() => void navigate({ to: '/settings' })}
+            className="rounded-full hover:ring-2 hover:ring-[#5b8def]/40 transition-all flex-shrink-0"
           >
-            {currentUserProfile?.avatar_url ? (
-              <img src={currentUserProfile.avatar_url} alt="You" className="w-full h-full object-cover" />
-            ) : (
-              <span>{(currentUserProfile?.display_name ?? currentUserProfile?.username ?? 'Y').charAt(0).toUpperCase()}</span>
-            )}
+            <Avatar src={currentUserProfile?.avatar_url} alt="You" size={32} />
           </button>
         </div>
       </div>
@@ -649,11 +645,7 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
       {/* Typing indicator — iMessage style, only visible at bottom */}
       {typingUsers.length > 0 && !showScrollBtn && (
         <div className="px-4 py-1.5 flex items-end gap-2">
-          <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-[11px] font-semibold">
-            {typingProfile?.avatar_url
-              ? <img src={typingProfile.avatar_url} className="w-full h-full object-cover" alt="" />
-              : (typingUsers[0]?.[0]?.toUpperCase() ?? '?')}
-          </div>
+          <Avatar src={typingProfile?.avatar_url} alt="" size={28} />
           <div className="bg-card rounded-2xl rounded-bl-[4px] shadow-sm shadow-black/30 border border-border px-3 py-2.5 flex items-center gap-1.5">
             {[0, 1, 2].map((i) => (
               <span
@@ -681,7 +673,8 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
         onTyping={notifyTyping}
         onStopTyping={notifyStopTyping}
         replyMessage={replyMessage}
-        disabled={!activeId || mediaUploading}
+        disabled={!activeId || mediaUploading || isOrphanedDM}
+        placeholder={isOrphanedDM ? 'This person deleted their account' : undefined}
       />
 
       {/* Media picker */}
@@ -694,13 +687,6 @@ export default function ChatView({ currentUserId, userEmail }: Props) {
           onClose={() => setShowMedia(false)}
         />
       )}
-
-      <ProfileModal
-        userId={currentUserId}
-        userEmail={userEmail}
-        open={showProfile}
-        onClose={() => setShowProfile(false)}
-      />
 
       {/* Thread panel */}
       {threadViewRoot && activeId && (

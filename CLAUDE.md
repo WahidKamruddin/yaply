@@ -49,7 +49,7 @@ TanStack Start = a Vite-based full-stack meta-framework (like Next/Remix, TanSta
 
 ### Routing: TanStack Router (file-based)
 
-Routes live in `src/routes/`. The router auto-generates `routeTree.gen.ts` from the file structure — never edit that file manually. There are only three routes:
+Routes live in `src/routes/`. The router auto-generates `routeTree.gen.ts` from the file structure — never edit that file manually. There are only four routes:
 
 | File | Path | Purpose |
 |------|------|---------|
@@ -57,6 +57,7 @@ Routes live in `src/routes/`. The router auto-generates `routeTree.gen.ts` from 
 | `index.tsx` | `/` | Public marketing landing page (see **Landing Page** below) — not an auth redirect |
 | `auth.tsx` | `/auth` | Sign in / sign up |
 | `chat.tsx` | `/chat` | Main app: conversation list + chat |
+| `settings.tsx` | `/settings` | Account/profile editing, billing, privacy policy, terms, help, report-a-problem (see Feature Map) |
 
 ### State Management: Jotai + TanStack Query
 
@@ -237,7 +238,7 @@ created_at      timestamptz
 
 **`message_envelopes` table:** `id, message_id (FK → messages ON DELETE CASCADE), recipient_user_id (FK → profiles), recipient_fp (text — JWK x.y of the recipient device key), eph_pub (text — JSON-stringified JWK of the per-message ephemeral public key), key_iv (text — base64 nonce[12]), wrapped_key (text — base64(AES-GCM(KEK, raw 32-byte message key) + tag)), created_at`. UNIQUE(message_id, recipient_user_id, recipient_fp); index (recipient_user_id, message_id). RLS: SELECT for the recipient or the message's sender; INSERT/DELETE for the message's sender only. Migration `00029_multi_device_envelopes.sql`.
 
-**`profiles` table:** id, username, display_name, avatar_url, bio, public_key, is_online, last_seen_at, created_at, updated_at.
+**`profiles` table:** id, username, display_name, avatar_url, bio, birthdate (date, nullable — migration `00032_add_profile_birthdate.sql`), public_key, is_online, last_seen_at, created_at, updated_at.
 
 **`devices` table:** user_id, device_id (int), identity_key (text — JSON-stringified JWK public key), key_fingerprint (text — JWK `x.y`, matches `message_envelopes.recipient_fp`), signed_prekey, device_name, push_subscription, last_active_at, created_at. UNIQUE(user_id, device_id); index (user_id, key_fingerprint). **One row per install** — each browser/device generates its own random `device_id` (stored locally as `deviceId:<userId>` in IndexedDB) and upserts only that row. Never hard-code `device_id = 1`: that was the single-slot bug where every login overwrote the one published key and orphaned history. RLS: owner can manage own rows; any authenticated user can read (needed to encrypt to a peer's devices). Codified in `00027_create_devices.sql`; `key_fingerprint` added in `00029_multi_device_envelopes.sql`.
 
@@ -310,6 +311,8 @@ created_at      timestamptz
 | **System message hyperlinks** (tier 4) | `MessageBubble.tsx` — system messages show inline "Open {Tab} →" button that opens sidebar at the relevant tab. 1-week auto-destruct: `deleted_at = now + 7d` at insert. Expired system messages are hidden silently. |
 | **Command cache invalidation** (tier 4) | `CommandProvider.tsx` threads `QueryClient` through `CommandContext`; `CommandModal.tsx` invalidates the right query key after insert; `/remind` invalidates `['reminders']`. Fixes sidebar not updating after slash command creation. |
 | **Delete confirmations** (tier 4) | All list views (TaskList, NoteList, AlbumList, BudgetList, EventList, ReminderList) use Radix Dialog for destructive confirmations before deletes. |
+| **Settings page** (tier 5) | `src/routes/settings.tsx` — full replacement for the old `ProfileModal` popup. Tabs: Account (name, unique username, avatar upload to `avatars` bucket, bio, birthdate, email-auth-only password change), Billing/Privacy Policy/Terms of Service/Help (placeholders), Report a Problem (emails the developer via the `report-problem` Edge Function, see below). `src/features/settings/components/`. |
+| Shared `Avatar` component | `src/components/Avatar.tsx` — single source of truth for avatar rendering app-wide; shows the real photo or a neutral person-silhouette placeholder (never initials) when `avatar_url` is null. |
 
 ### Not yet integrated
 
@@ -399,12 +402,16 @@ yaply/
 │   │       ├── api/               # gifs.ts (Giphy), upload.ts (Supabase Storage)
 │   │       ├── components/        # GifPicker, StickerPicker, MediaPicker, DragDropZone
 │   │       └── hooks/             # useGifSearch, useStickers, useUpload
+│   │   └── settings/               # Settings page tabs (Account, Billing, Privacy, Terms, Help, Report)
+│   │       └── components/
+│   ├── components/                # Cross-feature shared UI: YaplyLogo, Avatar (avatar_url → img, else person-silhouette placeholder)
 │   ├── lib/
 │   │   ├── auth.ts                # getUser(), onAuthStateChange(), DEV_BYPASS flag
 │   │   ├── supabase.ts            # Supabase client singleton
 │   │   └── database.types.ts      # Auto-generated Supabase types (may be stale — see discrepancy note)
 │   └── routes/                    # File-based routes (TanStack Router)
-│       └── index.tsx              # `/` — self-contained marketing landing page (see Landing Page above)
+│       ├── index.tsx              # `/` — self-contained marketing landing page (see Landing Page above)
+│       └── settings.tsx           # `/settings` — profile + account settings
 ├── public/
 │   └── fonts/                     # Self-hosted webfonts (CSP font-src is 'self' — no external font CDNs)
 ├── packages/
@@ -415,7 +422,8 @@ yaply/
 │       ├── types.ts               # Canonical type definitions (aspirational schema)
 │       └── constants/             # Command definitions, app constants
 └── supabase/
-    └── migrations/                # 14 SQL files — NOT all applied to live DB (see discrepancy note above)
+    ├── functions/                 # Edge Functions (server secrets) — report-problem (see Environment Variables)
+    └── migrations/                # NOT all applied to live DB (see discrepancy note above)
 ```
 
 ---
@@ -432,6 +440,12 @@ VITE_DEV_BYPASS_AUTH=false # Set to true to skip Supabase auth entirely during l
 ```
 
 When `VITE_DEV_BYPASS_AUTH=true`, all auth calls return a hardcoded dev user (`dev-user-00000000-0000-0000-0000-000000000000`). This is useful when testing UI changes without needing a live Supabase instance.
+
+### Supabase Edge Functions
+
+`supabase/functions/` holds server-side functions deployed separately from the client build (`supabase functions deploy <name>`), for logic that needs a secret the client must never see.
+
+- **`report-problem`** — relays the Settings → Report a Problem form to the developer's email via [Resend](https://resend.com), so that address never appears in client code. Requires the secret `RESEND_API_KEY` (`supabase secrets set RESEND_API_KEY=...`) — **not** a `VITE_*` client env var, and not in `.env.example`. Sends from Resend's shared `onboarding@resend.dev` test address unless/until a verified sending domain is configured.
 
 ---
 

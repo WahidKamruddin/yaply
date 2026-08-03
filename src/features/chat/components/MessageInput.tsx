@@ -12,6 +12,7 @@ interface Props {
   onStopTyping?: () => void
   replyMessage?: DecryptedMessage | null
   disabled?: boolean
+  placeholder?: string
 }
 
 const ALL_COMMANDS = [
@@ -19,7 +20,7 @@ const ALL_COMMANDS = [
   { name: 'help' as const, description: 'Show all commands', usage: '/help', category: 'utility' as const },
 ]
 
-export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyping, replyMessage, disabled }: Props) {
+export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyping, replyMessage, disabled, placeholder }: Props) {
   const [text, setText] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -241,7 +242,7 @@ export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyp
           value={text}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          placeholder="Message... (/ for commands)"
+          placeholder={placeholder ?? 'Message... (/ for commands)'}
           disabled={disabled}
           rows={1}
           className="flex-1 resize-none bg-tint border border-border rounded-2xl px-4 py-2.5 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition max-h-40 leading-relaxed disabled:opacity-50"

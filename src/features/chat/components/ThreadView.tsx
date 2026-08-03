@@ -124,7 +124,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
     setSending(false)
   }, [text, sending, rootMessage, conversationId, currentUserId, memberUserIds, encrypt, loadReplies])
 
-  const rootName = rootMessage.senderProfile?.display_name ?? rootMessage.senderProfile?.username ?? 'Unknown'
+  const rootName = rootMessage.senderProfile?.display_name ?? rootMessage.senderProfile?.username ?? 'Deleted user'
   const rootTime = formatDistanceToNow(new Date(rootMessage.createdAt), { addSuffix: true })
 
   function replyMessageFor(msg: DecryptedMessage): DecryptedMessage | null {

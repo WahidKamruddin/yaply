@@ -6,6 +6,7 @@ export interface Profile {
   username: string | null
   avatar_url: string | null
   bio: string | null
+  birthdate: string | null
   username_set: boolean
 }
 
@@ -15,7 +16,7 @@ export function useProfile(userId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('display_name, username, avatar_url, bio, username_set')
+        .select('display_name, username, avatar_url, bio, birthdate, username_set')
         .eq('id', userId)
         .single()
       if (error) throw error

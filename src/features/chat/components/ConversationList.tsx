@@ -9,10 +9,9 @@ import BottomBar from './BottomBar'
 
 interface Props {
   currentUserId: string
-  userEmail: string
 }
 
-export default function ConversationList({ currentUserId, userEmail }: Props) {
+export default function ConversationList({ currentUserId }: Props) {
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [activeId, setActiveId] = useAtom(activeConversationIdAtom)
@@ -85,7 +84,7 @@ export default function ConversationList({ currentUserId, userEmail }: Props) {
         />
       )}
 
-      <BottomBar userId={currentUserId} userEmail={userEmail} />
+      <BottomBar userId={currentUserId} />
     </div>
   )
 }
