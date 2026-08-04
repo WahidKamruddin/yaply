@@ -19,13 +19,13 @@ function LinkSplitwisePanel({ budgetId, onClose }: { budgetId: string; onClose: 
   const { data: groups = [], isLoading } = useSplitwiseGroups()
   const { mutate: link, isPending } = useLinkSplitwiseGroup(budgetId)
 
-  if (isLoading) return <p className="text-xs text-[#9ab0cc] text-center py-4">Loading Splitwise groups…</p>
+  if (isLoading) return <p className="text-xs text-text-subtle text-center py-4">Loading Splitwise groups…</p>
 
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-medium text-[#6b84ab]">Select a Splitwise group</span>
-        <button onClick={onClose} className="text-xs text-[#9ab0cc] hover:text-[#6b84ab]">Cancel</button>
+        <span className="text-xs font-medium text-text-muted">Select a Splitwise group</span>
+        <button onClick={onClose} className="text-xs text-text-subtle hover:text-text-muted">Cancel</button>
       </div>
       <div className="space-y-1.5">
         {groups.filter((g) => g.id !== 0).map((g) => (
@@ -33,14 +33,14 @@ function LinkSplitwisePanel({ budgetId, onClose }: { budgetId: string; onClose: 
             key={g.id}
             disabled={isPending}
             onClick={() => link(String(g.id), { onSuccess: onClose })}
-            className="w-full flex items-center justify-between px-3 py-2 border border-[#dce7f8] rounded-xl hover:bg-[#f3f7ff] transition-colors text-left disabled:opacity-50"
+            className="w-full flex items-center justify-between px-3 py-2 border border-border rounded-xl hover:bg-tint transition-colors text-left disabled:opacity-50"
           >
-            <span className="text-sm text-[#1a2744]">{g.name}</span>
-            <span className="text-xs text-[#9ab0cc]">{g.members?.length ?? 0} members</span>
+            <span className="text-sm text-text">{g.name}</span>
+            <span className="text-xs text-text-subtle">{g.members?.length ?? 0} members</span>
           </button>
         ))}
         {!groups.filter((g) => g.id !== 0).length && (
-          <p className="text-xs text-[#9ab0cc] text-center py-2">No groups found in Splitwise.</p>
+          <p className="text-xs text-text-subtle text-center py-2">No groups found in Splitwise.</p>
         )}
       </div>
     </div>
@@ -104,29 +104,29 @@ function SplitwiseBudgetDetail({
         <button
           onClick={() => canDelete && onDelete()}
           disabled={!canDelete}
-          className={`transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+          className={`transition-colors ${canDelete ? 'text-text-faint hover:text-red-400' : 'text-text-subtle opacity-40 cursor-not-allowed'}`}
           title="Delete budget"
         >
           <Trash2 size={13} />
         </button>
       </div>
       <div className="flex items-center justify-between mb-1">
-        <h3 className="text-sm font-semibold text-[#1a2744]">{budget.name}</h3>
+        <h3 className="text-sm font-semibold text-text">{budget.name}</h3>
         <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">Splitwise</span>
       </div>
-      <p className="text-[10px] text-[#b0c0d8] mb-1">by {creatorName}</p>
-      <p className="text-xs text-[#9ab0cc] mb-3">Linked to: <span className="text-[#6b84ab] font-medium">{group.name}</span></p>
+      <p className="text-[10px] text-text-subtle mb-1">by {creatorName}</p>
+      <p className="text-xs text-text-subtle mb-3">Linked to: <span className="text-text-muted font-medium">{group.name}</span></p>
 
       {/* Balance summary */}
       {group.simplified_debts?.length > 0 && (
-        <div className="mb-3 p-2.5 bg-[#f3f7ff] rounded-xl space-y-1">
-          <p className="text-xs font-medium text-[#6b84ab] mb-1">Balances</p>
+        <div className="mb-3 p-2.5 bg-tint rounded-xl space-y-1">
+          <p className="text-xs font-medium text-text-muted mb-1">Balances</p>
           {(group.simplified_debts ?? []).map((d, i) => {
             const fromMember = group.members.find((m) => m.id === d.from)
             const toMember = group.members.find((m) => m.id === d.to)
             return (
               <div key={i} className="flex justify-between text-xs">
-                <span className="text-[#6b84ab]">
+                <span className="text-text-muted">
                   {fromMember?.first_name ?? d.from} → {toMember?.first_name ?? d.to}
                 </span>
                 <span className="text-red-500 font-medium">{d.amount} {d.currency_code}</span>
@@ -137,8 +137,8 @@ function SplitwiseBudgetDetail({
       )}
 
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-[#6b84ab]">
-          Expenses · <span className="text-[#1a2744]">${totalSpent.toFixed(2)}</span> total
+        <span className="text-xs font-medium text-text-muted">
+          Expenses · <span className="text-text">${totalSpent.toFixed(2)}</span> total
         </span>
         <button onClick={() => setShowForm((v) => !v)} className="text-xs text-[#5b8def] hover:text-[#4a7de4] flex items-center gap-0.5">
           <Plus size={12} /> Add
@@ -146,16 +146,16 @@ function SplitwiseBudgetDetail({
       </div>
 
       {showForm && (
-        <form onSubmit={handleAdd} className="mb-3 p-2.5 border border-[#dce7f8] rounded-xl space-y-2">
-          <input required value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description" className="w-full px-2.5 py-1.5 bg-[#f3f7ff] rounded-lg text-xs text-[#1a2744] placeholder:text-[#9ab0cc] outline-none" />
-          <input required type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount" className="w-full px-2.5 py-1.5 bg-[#f3f7ff] rounded-lg text-xs text-[#1a2744] placeholder:text-[#9ab0cc] outline-none" />
+        <form onSubmit={handleAdd} className="mb-3 p-2.5 border border-border rounded-xl space-y-2">
+          <input required value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description" className="w-full px-2.5 py-1.5 bg-tint rounded-lg text-xs text-text placeholder:text-text-subtle outline-none" />
+          <input required type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount" className="w-full px-2.5 py-1.5 bg-tint rounded-lg text-xs text-text placeholder:text-text-subtle outline-none" />
           <div>
-            <p className="text-xs text-[#9ab0cc] mb-1">Paid by</p>
-            <select value={paidById ?? ''} onChange={(e) => setPaidById(Number(e.target.value))} className="w-full px-2 py-1.5 bg-[#f3f7ff] rounded-lg text-xs text-[#1a2744] outline-none">
+            <p className="text-xs text-text-subtle mb-1">Paid by</p>
+            <select value={paidById ?? ''} onChange={(e) => setPaidById(Number(e.target.value))} className="w-full px-2 py-1.5 bg-tint rounded-lg text-xs text-text outline-none">
               {group.members.map((m) => <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>)}
             </select>
           </div>
-          <p className="text-xs text-[#9ab0cc]">Split equally among {group.members.length} members</p>
+          <p className="text-xs text-text-subtle">Split equally among {group.members.length} members</p>
           <button type="submit" disabled={isPending} className="w-full py-1.5 bg-[#5b8def] hover:bg-[#4a7de4] text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
             {isPending ? 'Adding…' : 'Add to Splitwise'}
           </button>
@@ -163,21 +163,21 @@ function SplitwiseBudgetDetail({
       )}
 
       {isLoading ? (
-        <p className="text-xs text-[#9ab0cc] text-center py-2">Loading…</p>
+        <p className="text-xs text-text-subtle text-center py-2">Loading…</p>
       ) : (
         <div className="space-y-1.5">
           {expenses.map((ex) => (
-            <div key={ex.id} className="flex items-center justify-between py-1.5 border-b border-[#dce7f8] last:border-0">
+            <div key={ex.id} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
               <div>
-                <p className="text-xs font-medium text-[#1a2744]">{ex.description}</p>
-                <p className="text-xs text-[#9ab0cc]">
+                <p className="text-xs font-medium text-text">{ex.description}</p>
+                <p className="text-xs text-text-subtle">
                   {ex.created_by?.first_name} · {new Date(ex.date).toLocaleDateString()}
                 </p>
               </div>
-              <span className="text-xs font-semibold text-[#1a2744]">${parseFloat(ex.cost).toFixed(2)}</span>
+              <span className="text-xs font-semibold text-text">${parseFloat(ex.cost).toFixed(2)}</span>
             </div>
           ))}
-          {!expenses.length && <p className="text-xs text-[#9ab0cc] text-center py-2">No expenses yet.</p>}
+          {!expenses.length && <p className="text-xs text-text-subtle text-center py-2">No expenses yet.</p>}
         </div>
       )}
     </div>
@@ -234,44 +234,44 @@ function LocalBudgetDetail({
         <button
           onClick={() => canDelete && onDelete()}
           disabled={!canDelete}
-          className={`transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+          className={`transition-colors ${canDelete ? 'text-text-faint hover:text-red-400' : 'text-text-subtle opacity-40 cursor-not-allowed'}`}
           title="Delete budget"
         >
           <Trash2 size={13} />
         </button>
       </div>
       <div className="flex items-center justify-between mb-1">
-        <h3 className="text-sm font-semibold text-[#1a2744]">{budget.name}</h3>
-        <span className="text-xs text-[#9ab0cc]">{budget.currency}</span>
+        <h3 className="text-sm font-semibold text-text">{budget.name}</h3>
+        <span className="text-xs text-text-subtle">{budget.currency}</span>
       </div>
-      <p className="text-[10px] text-[#b0c0d8] mb-1">by {creatorName}</p>
-      <div className="flex items-center justify-between text-xs text-[#6b84ab] mb-2">
-        <span>Budget: <strong className="text-[#1a2744]">${budget.total_amount.toFixed(2)}</strong></span>
-        <span>Spent: <strong className={totalSpent > budget.total_amount ? 'text-red-500' : 'text-[#1a2744]'}>${totalSpent.toFixed(2)}</strong></span>
+      <p className="text-[10px] text-text-subtle mb-1">by {creatorName}</p>
+      <div className="flex items-center justify-between text-xs text-text-muted mb-2">
+        <span>Budget: <strong className="text-text">${budget.total_amount.toFixed(2)}</strong></span>
+        <span>Spent: <strong className={totalSpent > budget.total_amount ? 'text-red-500' : 'text-text'}>${totalSpent.toFixed(2)}</strong></span>
       </div>
 
       {splitwiseEnabled && (
         <button
           onClick={onLinkSplitwise}
-          className="w-full mb-3 flex items-center justify-center gap-1.5 py-1.5 border border-[#5b8def]/40 text-[#5b8def] text-xs rounded-xl hover:bg-[#edf3ff] transition-colors"
+          className="w-full mb-3 flex items-center justify-center gap-1.5 py-1.5 border border-[#5b8def]/40 text-[#5b8def] text-xs rounded-xl hover:bg-primary-tint transition-colors"
         >
           <Link2 size={12} /> Link to Splitwise group
         </button>
       )}
 
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-[#6b84ab]">Expenses</span>
+        <span className="text-xs font-medium text-text-muted">Expenses</span>
         <button onClick={() => setShowForm((v) => !v)} className="text-xs text-[#5b8def] hover:text-[#4a7de4] flex items-center gap-0.5">
           <Plus size={12} /> Add
         </button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleAdd} className="mb-3 p-2.5 border border-[#dce7f8] rounded-xl space-y-2">
-          <input required value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description" className="w-full px-2.5 py-1.5 bg-[#f3f7ff] rounded-lg text-xs text-[#1a2744] placeholder:text-[#9ab0cc] outline-none" />
+        <form onSubmit={handleAdd} className="mb-3 p-2.5 border border-border rounded-xl space-y-2">
+          <input required value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description" className="w-full px-2.5 py-1.5 bg-tint rounded-lg text-xs text-text placeholder:text-text-subtle outline-none" />
           <div className="flex gap-2">
-            <input required type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount" className="flex-1 px-2.5 py-1.5 bg-[#f3f7ff] rounded-lg text-xs text-[#1a2744] placeholder:text-[#9ab0cc] outline-none" />
-            <select value={category} onChange={(e) => setCategory(e.target.value as typeof CATEGORIES[number])} className="px-2 py-1.5 bg-[#f3f7ff] rounded-lg text-xs text-[#1a2744] outline-none">
+            <input required type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount" className="flex-1 px-2.5 py-1.5 bg-tint rounded-lg text-xs text-text placeholder:text-text-subtle outline-none" />
+            <select value={category} onChange={(e) => setCategory(e.target.value as typeof CATEGORIES[number])} className="px-2 py-1.5 bg-tint rounded-lg text-xs text-text outline-none">
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
@@ -283,15 +283,15 @@ function LocalBudgetDetail({
 
       <div className="space-y-1.5">
         {expenses.map((ex) => (
-          <div key={ex.id} className="flex items-center justify-between py-1.5 border-b border-[#dce7f8] last:border-0">
+          <div key={ex.id} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
             <div>
-              <p className="text-xs font-medium text-[#1a2744]">{ex.description}</p>
-              <p className="text-xs text-[#9ab0cc]">{ex.category} · {new Date(ex.created_at).toLocaleDateString()}</p>
+              <p className="text-xs font-medium text-text">{ex.description}</p>
+              <p className="text-xs text-text-subtle">{ex.category} · {new Date(ex.created_at).toLocaleDateString()}</p>
             </div>
-            <span className="text-xs font-semibold text-[#1a2744]">${ex.amount.toFixed(2)}</span>
+            <span className="text-xs font-semibold text-text">${ex.amount.toFixed(2)}</span>
           </div>
         ))}
-        {!expenses.length && <p className="text-xs text-[#9ab0cc] text-center py-2">No expenses yet.</p>}
+        {!expenses.length && <p className="text-xs text-text-subtle text-center py-2">No expenses yet.</p>}
       </div>
     </div>
   )
@@ -339,7 +339,7 @@ function BudgetDetail({
         <div className="flex justify-end mb-1">
           <button
             onClick={() => lockBudget({ budgetId: budget.id, locked: !isLocked })}
-            className={`flex items-center gap-1 text-xs transition-colors ${isLocked ? 'text-amber-400 hover:text-amber-500' : 'text-[#9ab0cc] hover:text-amber-400'}`}
+            className={`flex items-center gap-1 text-xs transition-colors ${isLocked ? 'text-amber-400 hover:text-amber-500' : 'text-text-subtle hover:text-amber-400'}`}
           >
             {isLocked ? <><Unlock size={11} /> Unlock</> : <><Lock size={11} /> Lock</>}
           </button>
@@ -348,21 +348,21 @@ function BudgetDetail({
       {subView}
       <Dialog.Root open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-[#1a2744]/30 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-white rounded-2xl shadow-xl shadow-[#1a2744]/12 border border-[#dce7f8] p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+          <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-card rounded-2xl shadow-xl shadow-black/40 border border-border p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
                 <Trash2 size={20} className="text-red-400" />
               </div>
               <div>
-                <Dialog.Title className="text-base font-semibold text-[#1a2744]">Delete Budget</Dialog.Title>
-                <Dialog.Description className="mt-1 text-sm text-[#9ab0cc]">
+                <Dialog.Title className="text-base font-semibold text-text">Delete Budget</Dialog.Title>
+                <Dialog.Description className="mt-1 text-sm text-text-subtle">
                   "{budget.name}" and all its expenses will be permanently deleted.
                 </Dialog.Description>
               </div>
               <div className="flex gap-3 w-full mt-1">
                 <Dialog.Close asChild>
-                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-[#dce7f8] text-sm font-medium text-[#6b84ab] hover:bg-[#edf1fa] transition-colors">
+                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium text-text-muted hover:bg-tint transition-colors">
                     Cancel
                   </button>
                 </Dialog.Close>
@@ -395,10 +395,10 @@ function CreateBudgetForm({ conversationId, currentUserId, onDone }: { conversat
   }
 
   return (
-    <form onSubmit={submit} className="mb-3 space-y-2 border border-[#dce7f8] rounded-xl p-3">
+    <form onSubmit={submit} className="mb-3 space-y-2 border border-border rounded-xl p-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-[#6b84ab]">New budget</span>
-        <button type="button" onClick={onDone} className="text-[#9ab0cc] hover:text-[#6b84ab]"><X size={14} /></button>
+        <span className="text-xs font-medium text-text-muted">New budget</span>
+        <button type="button" onClick={onDone} className="text-text-subtle hover:text-text-muted"><X size={14} /></button>
       </div>
       <input
         autoFocus
@@ -406,7 +406,7 @@ function CreateBudgetForm({ conversationId, currentUserId, onDone }: { conversat
         placeholder="Budget name"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full px-3 py-1.5 text-sm bg-[#f3f7ff] rounded-lg text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+        className="w-full px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
       />
       <input
         type="number"
@@ -415,7 +415,7 @@ function CreateBudgetForm({ conversationId, currentUserId, onDone }: { conversat
         onChange={(e) => setAmount(e.target.value)}
         min="0.01"
         step="0.01"
-        className="w-full px-3 py-1.5 text-sm bg-[#f3f7ff] rounded-lg text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+        className="w-full px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
       />
       <button type="submit" disabled={isPending || !name.trim() || !amount} className="w-full py-1.5 text-xs font-medium bg-[#5b8def] text-white rounded-lg disabled:opacity-50">
         Create
@@ -439,51 +439,51 @@ export default function BudgetList({ conversationId, currentUserId, isCurrentUse
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-semibold text-[#9ab0cc] uppercase tracking-wide">Budgets</span>
+        <span className="text-[10px] font-semibold text-text-subtle uppercase tracking-wide">Budgets</span>
         {!creating && (
-          <button onClick={() => setCreating(true)} className="text-[#9ab0cc] hover:text-[#5b8def] transition-colors">
+          <button onClick={() => setCreating(true)} className="text-text-subtle hover:text-[#5b8def] transition-colors">
             <Plus size={14} />
           </button>
         )}
       </div>
       {creating && <CreateBudgetForm conversationId={conversationId} currentUserId={currentUserId} onDone={() => setCreating(false)} />}
       {isLoading ? (
-        <p className="text-xs text-[#9ab0cc] py-4 text-center">Loading…</p>
+        <p className="text-xs text-text-subtle py-4 text-center">Loading…</p>
       ) : !budgets.length && !creating ? (
         <div className="py-6 text-center">
-          <DollarSign size={24} className="mx-auto text-[#dce7f8] mb-2" />
-          <p className="text-xs text-[#9ab0cc]">No budgets yet.</p>
+          <DollarSign size={24} className="mx-auto text-text-subtle mb-2" />
+          <p className="text-xs text-text-subtle">No budgets yet.</p>
         </div>
       ) : (
         <div className="space-y-2">
           {budgets.map((b) => (
-            <div key={b.id} className="border border-[#dce7f8] rounded-xl overflow-hidden">
+            <div key={b.id} className="border border-border rounded-xl overflow-hidden">
               <button
                 onClick={() => setSelected(b)}
-                className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-[#f3f7ff] transition-colors text-left"
+                className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-tint transition-colors text-left"
               >
                 <div>
                   <div className="flex items-center gap-1.5">
                     {b.locked && <Lock size={10} className="text-amber-400 flex-shrink-0" />}
-                    <p className="text-sm font-medium text-[#1a2744]">{b.name}</p>
+                    <p className="text-sm font-medium text-text">{b.name}</p>
                     {b.splitwise_group_id && (
                       <span className="text-xs px-1 py-0.5 bg-green-100 text-green-700 rounded font-medium">SW</span>
                     )}
                   </div>
-                  <p className="text-[10px] text-[#b0c0d8]">by {b.creator?.display_name ?? b.creator?.username ?? 'Unknown'}</p>
+                  <p className="text-[10px] text-text-subtle">by {b.creator?.display_name ?? b.creator?.username ?? 'Unknown'}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-semibold text-[#5b8def]">${b.total_amount.toFixed(2)}</p>
-                  <p className="text-xs text-[#9ab0cc]">{b.currency}</p>
+                  <p className="text-xs text-text-subtle">{b.currency}</p>
                 </div>
               </button>
               {events.length > 0 && (
-                <div className="border-t border-[#f0f4fc] px-3 py-1.5 flex items-center gap-1">
-                  <Link2 size={9} className="text-[#9ab0cc] flex-shrink-0" />
+                <div className="border-t border-border-soft px-3 py-1.5 flex items-center gap-1">
+                  <Link2 size={9} className="text-text-subtle flex-shrink-0" />
                   <select
                     value={b.event_id ?? ''}
                     onChange={(e) => linkToEvent({ table: 'budgets', itemId: b.id, eventId: e.target.value || null })}
-                    className="flex-1 text-[10px] text-[#6b84ab] bg-transparent outline-none cursor-pointer"
+                    className="flex-1 text-[10px] text-text-muted bg-transparent outline-none cursor-pointer"
                   >
                     <option value="">No event</option>
                     {events.map((ev) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}

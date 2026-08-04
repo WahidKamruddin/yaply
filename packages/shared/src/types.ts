@@ -224,3 +224,60 @@ export interface SlashCommandMeta {
   description: string
   usage: string
 }
+
+// ─── Friends ──────────────────────────────────────────────────────────────────
+// Cross-platform contract. All state transitions are enforced server-side (see
+// migration 00033); clients only render what these RPCs report.
+
+export type FriendshipStatus = 'pending' | 'accepted'
+
+export interface Friendship {
+  id: UUID
+  requester_id: UUID
+  recipient_id: UUID
+  status: FriendshipStatus
+  created_at: ISOTimestamp
+  updated_at: ISOTimestamp
+}
+
+export interface UserBlock {
+  blocker_id: UUID
+  blocked_id: UUID
+  created_at: ISOTimestamp
+}
+
+/** Result shape of the get_relationships(uuid[]) RPC. */
+export type RelationshipStatus =
+  | 'none'
+  | 'pending_out'
+  | 'pending_in'
+  | 'friends'
+  | 'blocked'
+  | 'blocked_by'
+
+export interface RelationshipRow {
+  user_id: UUID
+  status: RelationshipStatus
+  request_id: UUID | null
+  mutual_friends: number
+}
+
+/** Result shape of the get_friend_suggestions(int) RPC ("People You May Know"). */
+export interface FriendSuggestionRow {
+  id: UUID
+  username: string
+  display_name: string | null
+  avatar_url: string | null
+  is_online: boolean
+  mutual_friends: number
+  shared_groups: number
+}
+
+/**
+ * conversation_members.request_state — message requests.
+ * 'pending' on a member row means that member may read the conversation but not
+ * send in it; 'declined' locks the thread for BOTH sides. Never delete the
+ * membership row to decline: trg_delete_empty_conversation would drop the whole
+ * conversation.
+ */
+export type RequestState = 'accepted' | 'pending' | 'declined'

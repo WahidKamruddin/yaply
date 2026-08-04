@@ -35,6 +35,9 @@ import MessageInput from './MessageInput'
 import Avatar from '@/components/Avatar'
 import MediaPicker from '@/features/media/components/MediaPicker'
 import ThreadView from './ThreadView'
+import Dashboard from './dashboard/Dashboard'
+import MessageRequestBar from '@/features/friends/components/MessageRequestBar'
+import ProfileModal from '@/features/friends/components/ProfileModal'
 
 interface Props {
   currentUserId: string
@@ -75,6 +78,8 @@ export default function ChatView({ currentUserId }: Props) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showGroupInfo, setShowGroupInfo] = useState(false)
+  const [profileUserId, setProfileUserId] = useState<string | null>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
 
   const { data: currentUserProfile } = useProfile(currentUserId)
 
@@ -96,6 +101,9 @@ export default function ChatView({ currentUserId }: Props) {
   // deleted — conversation_members cascades but the conversation itself survives so the
   // remaining user keeps their message history.
   const isOrphanedDM = !!conversation && !conversation.isGroup && !otherMember
+  // A DM from a non-friend: readable, but the composer is replaced by
+  // accept/decline until this member row is accepted.
+  const isMessageRequest = conversation?.requestState === 'pending'
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useMessages(activeId)
   const { mutate: send } = useSendMessage(activeId ?? '')
@@ -396,8 +404,22 @@ export default function ChatView({ currentUserId }: Props) {
         ? { conversationId: activeId, senderId: currentUserId, content: result.content, iv: result.iv, envelopes: result.envelopes, type: 'text', replyToId: capturedReplyId, threadId: capturedThreadId }
         : { conversationId: activeId, senderId: currentUserId, content: result.content, iv: null, type: 'text', replyToId: capturedReplyId, threadId: capturedThreadId },
       {
-        onSuccess: (data) => { pendingConfirmedRef.current.set(tempId, data.id) },
-        onError: () => setPendingMessages((prev) => prev.filter((m) => m.id !== tempId)),
+        onSuccess: (data) => {
+          pendingConfirmedRef.current.set(tempId, data.id)
+          setSendError(null)
+        },
+        onError: (err) => {
+          setPendingMessages((prev) => prev.filter((m) => m.id !== tempId))
+          // Sends can now be rejected for a reason the user can act on (the
+          // other person declined the request or blocked you), so the message
+          // must not just silently disappear.
+          const message = err instanceof Error ? err.message : ''
+          setSendError(
+            message.includes('cannot send in this conversation')
+              ? "You can't message this person right now."
+              : 'Message not sent. Please try again.',
+          )
+        },
       },
     )
   }, [activeId, currentUserId, currentUserProfile, encrypt, conversation, replyId, replyMessage?.threadId, send, setReplyId])
@@ -473,13 +495,18 @@ export default function ChatView({ currentUserId }: Props) {
 
   if (!activeId || !conversation) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-background text-text-subtle">
-        <div className="w-16 h-16 rounded-full bg-tint border border-border flex items-center justify-center mb-4">
-          <Info size={28} strokeWidth={1.5} className="text-[#5b8def]/60" />
-        </div>
-        <p className="text-sm font-medium text-text-muted">Select a conversation</p>
-        <p className="text-xs mt-1 hidden md:block">Choose from the list on the left</p>
-      </div>
+      <Dashboard
+        currentUserId={currentUserId}
+        currentUserName={currentUserProfile?.display_name ?? currentUserProfile?.username ?? ''}
+        conversations={conversations}
+        onOpenConversation={(conversationId, tab) => {
+          setActiveId(conversationId)
+          if (tab) {
+            setPanelOpen(true)
+            setPanelTab(tab)
+          }
+        }}
+      />
     )
   }
 
@@ -502,16 +529,22 @@ export default function ChatView({ currentUserId }: Props) {
         <button onClick={() => setActiveId(null)} className="md:hidden -ml-1 w-10 h-10 flex items-center justify-center rounded-full text-text-subtle active:bg-tint transition-colors">
           <ArrowLeft size={22} />
         </button>
-        <Avatar
-          src={avatarSrc}
-          alt={displayName}
-          size={36}
-          online={!conversation.isGroup ? isOnline : undefined}
-        />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold font-display text-text truncate">{displayName}</p>
-          <p className="text-xs text-text-subtle">{isOnline ? 'Online' : conversation.isGroup ? `${conversation.members.length} members` : 'Offline'}</p>
-        </div>
+        <button
+          onClick={() => { if (otherMember && !conversation.isGroup) setProfileUserId(otherMember.userId) }}
+          disabled={conversation.isGroup || !otherMember}
+          className="flex items-center gap-3 flex-1 min-w-0 text-left disabled:cursor-default"
+        >
+          <Avatar
+            src={avatarSrc}
+            alt={displayName}
+            size={36}
+            online={!conversation.isGroup ? isOnline : undefined}
+          />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold font-display text-text truncate">{displayName}</p>
+            <p className="text-xs text-text-subtle">{isOnline ? 'Online' : conversation.isGroup ? `${conversation.members.length} members` : 'Offline'}</p>
+          </div>
+        </button>
         <div className="flex items-center gap-1">
           <button className="w-8 h-8 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors">
             <Phone size={16} />
@@ -666,16 +699,38 @@ export default function ChatView({ currentUserId }: Props) {
         </div>
       )}
 
-      {/* Input */}
-      <MessageInput
-        onSend={(text) => { void handleSend(text); notifyStopTyping() }}
-        onAttachment={() => setShowMedia(true)}
-        onTyping={notifyTyping}
-        onStopTyping={notifyStopTyping}
-        replyMessage={replyMessage}
-        disabled={!activeId || mediaUploading || isOrphanedDM}
-        placeholder={isOrphanedDM ? 'This person deleted their account' : undefined}
-      />
+      {sendError && !isMessageRequest && (
+        <div className="px-4 pb-1 flex items-center justify-between gap-2">
+          <p className="text-xs text-red-500">{sendError}</p>
+          <button
+            onClick={() => setSendError(null)}
+            className="text-text-faint hover:text-text-subtle flex-shrink-0"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* Input — replaced by the accept/decline bar while this is still a
+          message request, since the server will reject any send until then. */}
+      {isMessageRequest ? (
+        <MessageRequestBar
+          conversationId={activeId}
+          currentUserId={currentUserId}
+          senderName={displayName}
+          senderUserId={otherMember?.userId ?? null}
+        />
+      ) : (
+        <MessageInput
+          onSend={(text) => { void handleSend(text); notifyStopTyping() }}
+          onAttachment={() => setShowMedia(true)}
+          onTyping={notifyTyping}
+          onStopTyping={notifyStopTyping}
+          replyMessage={replyMessage}
+          disabled={!activeId || mediaUploading || isOrphanedDM}
+          placeholder={isOrphanedDM ? 'This person deleted their account' : undefined}
+        />
+      )}
 
       {/* Media picker */}
       {showMedia && (
@@ -706,6 +761,15 @@ export default function ChatView({ currentUserId }: Props) {
           currentUserId={currentUserId}
           onClose={() => setShowGroupInfo(false)}
           onDeleted={() => setActiveId(null)}
+        />
+      )}
+
+      {/* Profile card, opened from the conversation header */}
+      {profileUserId && (
+        <ProfileModal
+          userId={profileUserId}
+          currentUserId={currentUserId}
+          onClose={() => setProfileUserId(null)}
         />
       )}
     </div>

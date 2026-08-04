@@ -25,6 +25,10 @@ export interface ConversationListItem {
   unreadCount: number
   isMuted: boolean
   mutedUntil: string | null
+  // My own message-request state. 'pending' = a non-friend started this DM and
+  // it belongs in the Message requests section: readable, not repliable, and
+  // excluded from the unread count. 'declined' = hidden entirely.
+  requestState: 'accepted' | 'pending' | 'declined'
   updatedAt: string
 }
 

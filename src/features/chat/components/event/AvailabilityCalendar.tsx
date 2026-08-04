@@ -110,8 +110,8 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
   function heatColor(count: number): string {
     if (count === 0) return 'transparent'
     const ratio = count / totalMembers
-    if (ratio <= 0.33) return '#dce7f8'
-    if (ratio <= 0.66) return '#93b5ef'
+    if (ratio <= 0.33) return 'rgba(91, 141, 239, 0.25)'
+    if (ratio <= 0.66) return 'rgba(91, 141, 239, 0.55)'
     return '#5b8def'
   }
 
@@ -202,17 +202,17 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
   return (
     <div className="flex flex-col h-full select-none">
       {/* Week navigator */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[#dce7f8] flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border flex-shrink-0">
         <button
           onClick={() => setWeekStart((w) => addDays(w, -7))}
-          className="w-7 h-7 flex items-center justify-center rounded-lg text-[#9ab0cc] hover:text-[#1a2744] hover:bg-[#edf1fa] transition-colors"
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-text-subtle hover:text-text hover:bg-tint transition-colors"
         >
           <ChevronLeft size={16} />
         </button>
-        <span className="text-xs font-semibold text-[#1a2744]">{formatWeekRange(weekStart)}</span>
+        <span className="text-xs font-semibold text-text">{formatWeekRange(weekStart)}</span>
         <button
           onClick={() => setWeekStart((w) => addDays(w, 7))}
-          className="w-7 h-7 flex items-center justify-center rounded-lg text-[#9ab0cc] hover:text-[#1a2744] hover:bg-[#edf1fa] transition-colors"
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-text-subtle hover:text-text hover:bg-tint transition-colors"
         >
           <ChevronRight size={16} />
         </button>
@@ -222,12 +222,12 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
         {/* Grid area */}
         <div className="flex-1 overflow-auto">
           {/* Day headers */}
-          <div className="grid sticky top-0 bg-white z-10 border-b border-[#dce7f8]" style={{ gridTemplateColumns: '40px repeat(7, 1fr)' }}>
+          <div className="grid sticky top-0 bg-card z-10 border-b border-border" style={{ gridTemplateColumns: '40px repeat(7, 1fr)' }}>
             <div />
             {week.map((day, i) => (
               <div key={i} className="text-center py-1.5">
-                <div className="text-[10px] text-[#9ab0cc] font-medium">{DAY_LABELS[day[0].getDay()]}</div>
-                <div className="text-xs font-semibold text-[#1a2744]">{day[0].getDate()}</div>
+                <div className="text-[10px] text-text-subtle font-medium">{DAY_LABELS[day[0].getDay()]}</div>
+                <div className="text-xs font-semibold text-text">{day[0].getDate()}</div>
               </div>
             ))}
           </div>
@@ -245,7 +245,7 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
               >
                 <div className="flex items-center justify-end pr-2 h-6">
                   {showLabel && (
-                    <span className="text-[9px] text-[#9ab0cc] leading-none">
+                    <span className="text-[9px] text-text-subtle leading-none">
                       {hour > 12 ? `${hour - 12}pm` : hour === 12 ? '12pm' : `${hour}am`}
                     </span>
                   )}
@@ -260,11 +260,11 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
                   return (
                     <div
                       key={dayIdx}
-                      className={`h-6 border-b border-r border-[#f0f4fc] cursor-pointer transition-all relative ${
+                      className={`h-6 border-b border-r border-border-soft cursor-pointer transition-all relative ${
                         dimmedByMember ? 'opacity-20' : ''
                       }`}
                       style={{
-                        backgroundColor: selected ? '#1a2744' : heatColor(count),
+                        backgroundColor: selected ? 'var(--mint)' : heatColor(count),
                       }}
                       onPointerDown={(e) => { e.preventDefault(); onPointerDown(slot) }}
                       onPointerEnter={() => { onPointerEnter(slot); setHoveredSlot(slot) }}
@@ -295,9 +295,9 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
         </div>
 
         {/* Member sidebar */}
-        <div className="w-36 flex-shrink-0 border-l border-[#dce7f8] flex flex-col overflow-y-auto">
-          <div className="px-3 py-2 border-b border-[#dce7f8]">
-            <p className="text-[10px] font-semibold text-[#9ab0cc] uppercase tracking-wide">Members</p>
+        <div className="w-36 flex-shrink-0 border-l border-border flex flex-col overflow-y-auto">
+          <div className="px-3 py-2 border-b border-border">
+            <p className="text-[10px] font-semibold text-text-subtle uppercase tracking-wide">Members</p>
           </div>
           {members.map((m) => {
             const av = availability.find((a) => a.user_id === m.id)
@@ -306,17 +306,17 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
               <div
                 key={m.id}
                 className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${
-                  hoveredMember === m.id ? 'bg-[#edf1fa]' : 'hover:bg-[#f8faff]'
+                  hoveredMember === m.id ? 'bg-tint' : 'hover:bg-tint'
                 }`}
                 onMouseEnter={() => setHoveredMember(m.id)}
                 onMouseLeave={() => setHoveredMember(null)}
               >
                 <Avatar src={m.avatar_url} alt={m.display_name ?? m.username} size={24} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-medium text-[#1a2744] truncate">
+                  <p className="text-[10px] font-medium text-text truncate">
                     {m.display_name ?? m.username}
                   </p>
-                  <p className="text-[9px] text-[#9ab0cc]">{count} slot{count !== 1 ? 's' : ''}</p>
+                  <p className="text-[9px] text-text-subtle">{count} slot{count !== 1 ? 's' : ''}</p>
                 </div>
               </div>
             )
@@ -325,7 +325,7 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[#dce7f8] flex-shrink-0 bg-white">
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-border flex-shrink-0 bg-card">
         {isCreator ? (
           lockingTime ? (
             <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -338,10 +338,10 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
                       size: 'small',
                       sx: {
                         width: 140,
-                        '& .MuiInputBase-root': { fontSize: '0.75rem', borderRadius: '8px', color: '#1a2744' },
-                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#dce7f8' },
-                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
-                        '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
+                        '& .MuiInputBase-root': { fontSize: '0.75rem', borderRadius: '8px', color: 'var(--ink)' },
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--border)' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--primary)' },
+                        '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--primary)' },
                       },
                     },
                   }}
@@ -354,10 +354,10 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
                       size: 'small',
                       sx: {
                         width: 120,
-                        '& .MuiInputBase-root': { fontSize: '0.75rem', borderRadius: '8px', color: '#1a2744' },
-                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#dce7f8' },
-                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
-                        '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
+                        '& .MuiInputBase-root': { fontSize: '0.75rem', borderRadius: '8px', color: 'var(--ink)' },
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--border)' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--primary)' },
+                        '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--primary)' },
                       },
                     },
                   }}
@@ -369,7 +369,7 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
                 >
                   {confirming ? 'Locking…' : 'Lock'}
                 </button>
-                <button onClick={() => setLockingTime(false)} className="text-xs text-[#9ab0cc] hover:text-[#6b84ab] transition-colors whitespace-nowrap">
+                <button onClick={() => setLockingTime(false)} className="text-xs text-text-subtle hover:text-text-muted transition-colors whitespace-nowrap">
                   Cancel
                 </button>
               </div>
@@ -383,7 +383,7 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
             </button>
           )
         ) : (
-          <p className="text-[10px] text-[#9ab0cc]">Click or drag to mark availability</p>
+          <p className="text-[10px] text-text-subtle">Click or drag to mark availability</p>
         )}
         <button
           onClick={handleSave}
@@ -396,23 +396,23 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
 
       <Dialog.Root open={confirmingLock} onOpenChange={setConfirmingLock}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-[#1a2744]/30 backdrop-blur-sm z-[60] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-sm bg-white rounded-2xl shadow-xl shadow-[#1a2744]/12 border border-[#dce7f8] p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+          <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-sm bg-card rounded-2xl shadow-xl shadow-black/40 border border-border p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center">
                 <Lock size={20} className="text-green-500" />
               </div>
               <div>
-                <Dialog.Title className="text-base font-semibold text-[#1a2744]">Lock Event Time</Dialog.Title>
-                <Dialog.Description className="mt-1 text-sm text-[#9ab0cc]">
+                <Dialog.Title className="text-base font-semibold text-text">Lock Event Time</Dialog.Title>
+                <Dialog.Description className="mt-1 text-sm text-text-subtle">
                   Set "{event.name}" as confirmed for{' '}
-                  <span className="font-medium text-[#1a2744]">{lockTimeFormatted}</span>?
+                  <span className="font-medium text-text">{lockTimeFormatted}</span>?
                   This will move the event from Planning to Confirmed.
                 </Dialog.Description>
               </div>
               <div className="flex gap-3 w-full mt-1">
                 <Dialog.Close asChild>
-                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-[#dce7f8] text-sm font-medium text-[#6b84ab] hover:bg-[#edf1fa] transition-colors">
+                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium text-text-muted hover:bg-tint transition-colors">
                     Cancel
                   </button>
                 </Dialog.Close>

@@ -51,9 +51,10 @@ export default function YaplyLogo({ size = 40, variant = 'mark', className }: Pr
         <YMark size={size} gradId={gradId} />
         <span
           style={{
+            fontFamily: 'var(--font-display)',
             fontSize: Math.round(size * 0.72),
-            fontWeight: 700,
-            color: '#1a2744',
+            fontWeight: 500,
+            color: 'var(--ink)',
             lineHeight: 1,
             letterSpacing: '-0.02em',
           }}

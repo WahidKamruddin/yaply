@@ -1,5 +1,8 @@
 import { createRouter as createTanStackRouter } from '@tanstack/react-router'
 import { routeTree } from './routeTree.gen'
+import LoadingScreen from './components/LoadingScreen'
+import { ErrorScreen } from './components/ErrorBoundary'
+import NotFoundScreen from './components/NotFoundScreen'
 
 export function getRouter() {
   const router = createTanStackRouter({
@@ -7,6 +10,9 @@ export function getRouter() {
     scrollRestoration: true,
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,
+    defaultPendingComponent: LoadingScreen,
+    defaultErrorComponent: ({ reset }) => <ErrorScreen onRetry={reset} />,
+    defaultNotFoundComponent: NotFoundScreen,
   })
 
   return router

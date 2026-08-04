@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react'
-import { X, MessageCircle } from 'lucide-react'
+import { X, MessageCircle, UserPlus } from 'lucide-react'
 
 export interface InAppNotification {
   id: string
   conversationId: string
   senderName: string
   preview: string
+  /** Chooses the icon only — the banner layout is identical either way. */
+  kind?: 'message' | 'friend'
   onNavigate: () => void
 }
 
@@ -28,20 +30,24 @@ export default function NotificationBanner({ notification, onDismiss }: Props) {
 
   return (
     <div
-      className="fixed top-4 right-4 z-50 flex items-start gap-3 bg-white rounded-2xl shadow-xl shadow-[#1a2744]/10 border border-[#dce7f8] p-3 max-w-[280px] cursor-pointer"
+      className="fixed top-4 right-4 z-50 flex items-start gap-3 bg-card rounded-2xl shadow-xl shadow-black/30 border border-border p-3 max-w-[280px] cursor-pointer"
       style={{ animation: 'slideInRight 0.25s ease-out' }}
       onClick={() => { notification.onNavigate(); onDismiss() }}
     >
-      <div className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[#edf1fa]">
-        <MessageCircle size={18} className="text-[#5b8def]" />
+      <div className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-tint">
+        {notification.kind === 'friend' ? (
+          <UserPlus size={18} className="text-[#5b8def]" />
+        ) : (
+          <MessageCircle size={18} className="text-[#5b8def]" />
+        )}
       </div>
       <div className="flex-1 min-w-0 pt-0.5">
-        <p className="text-xs font-semibold text-[#1a2744] leading-tight">{notification.senderName}</p>
-        <p className="text-xs text-[#6b84ab] truncate mt-0.5">{notification.preview}</p>
+        <p className="text-xs font-semibold text-text leading-tight">{notification.senderName}</p>
+        <p className="text-xs text-text-muted truncate mt-0.5">{notification.preview}</p>
       </div>
       <button
         onClick={(e) => { e.stopPropagation(); onDismiss() }}
-        className="flex-shrink-0 text-[#9ab0cc] hover:text-[#6b84ab] mt-0.5"
+        className="flex-shrink-0 text-text-subtle hover:text-text-muted mt-0.5"
       >
         <X size={13} />
       </button>

@@ -16,6 +16,7 @@ import { usePushNotifications } from '@/features/chat/hooks/usePushNotifications
 import { activeConversationIdAtom } from '@/features/chat/store/chat.atoms'
 import { uploadMediaFile } from '@/features/media/api/upload'
 import { sendMessage } from '@/features/chat/api/messages'
+import LoadingScreen from '@/components/LoadingScreen'
 import type { User } from '@supabase/supabase-js'
 
 export const Route = createFileRoute('/chat')({
@@ -39,6 +40,7 @@ function ChatPage() {
     activeConvId,
     conversations,
     (convId) => setActiveId(convId),
+    () => void navigate({ to: '/friends' }),
   )
 
   usePresence(user?.id)
@@ -79,7 +81,7 @@ function ChatPage() {
     [activeConvId, user],
   )
 
-  if (!user) return null
+  if (!user) return <LoadingScreen />
 
   return (
     <CommandProvider userId={user.id}>
@@ -91,7 +93,11 @@ function ChatPage() {
         onFileDrop={(file) => void handleFileDrop(file)}
         className="h-[100dvh] flex overflow-hidden"
       >
-        {/* Sidebar: full-screen on mobile when no chat is open; fixed 288px column on ≥ md */}
+        {/* Sidebar: full-screen on mobile when no chat is open; fixed 288px column on ≥ md.
+            Drag-to-resize (useSidebarWidth) is temporarily disabled — wiring it up broke
+            the desktop layout (the wrapper kept `w-full` at the md breakpoint with no
+            override, collapsing the chat pane to zero width). The hook is kept in
+            src/features/chat/hooks/useSidebarWidth.ts for a future retry. */}
         <div className={`flex-col h-full w-full md:w-72 md:flex-shrink-0 ${activeConvId ? 'hidden md:flex' : 'flex'}`}>
           <ConversationList currentUserId={user.id} />
         </div>

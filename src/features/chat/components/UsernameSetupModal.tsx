@@ -1,18 +1,13 @@
 import { useState } from 'react'
-import { AtSign, Check } from 'lucide-react'
+import { AtSign, Check, X, Loader2 } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { normalizeUsername, useUsernameAvailability } from '@/features/chat/hooks/useUsernameAvailability'
 
 interface Props {
   userId: string
   suggestedUsername: string | null
-}
-
-const USERNAME_PATTERN = /^[a-z0-9_.-]+$/
-
-function normalize(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, '')
 }
 
 export default function UsernameSetupModal({ userId, suggestedUsername }: Props) {
@@ -20,15 +15,19 @@ export default function UsernameSetupModal({ userId, suggestedUsername }: Props)
   const [username, setUsername] = useState(suggestedUsername ?? '')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const availability = useUsernameAvailability(username)
 
   async function handleSave() {
-    const candidate = normalize(username)
-    if (candidate.length < 3) {
-      setError('Username must be at least 3 characters.')
+    const candidate = normalizeUsername(username)
+
+    // The debounced availability check is the pre-save guard the user sees;
+    // block here too in case they hit Enter/click before it settles.
+    if (availability === 'invalid') {
+      setError('Username must be at least 3 characters, using only lowercase letters, numbers, underscores, dots, and hyphens.')
       return
     }
-    if (!USERNAME_PATTERN.test(candidate)) {
-      setError('Only lowercase letters, numbers, underscores, dots, and hyphens.')
+    if (availability !== 'available') {
+      setError('That username is taken.')
       return
     }
 
@@ -41,6 +40,9 @@ export default function UsernameSetupModal({ userId, suggestedUsername }: Props)
         .eq('id', userId)
 
       if (updateError) {
+        // Last-resort guard against a race where someone else claimed the
+        // name between the availability check and this write — the DB's
+        // unique constraint is the actual source of truth.
         setError(updateError.code === '23505' ? 'That username is taken.' : updateError.message)
         return
       }
@@ -75,7 +77,7 @@ export default function UsernameSetupModal({ userId, suggestedUsername }: Props)
             </Dialog.Description>
           </div>
 
-          <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-tint mb-3">
+          <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-tint mb-1.5">
             <span className="text-text-subtle font-mono text-sm">@</span>
             <input
               value={username}
@@ -86,13 +88,17 @@ export default function UsernameSetupModal({ userId, suggestedUsername }: Props)
               autoComplete="username"
               className="flex-1 text-sm text-text bg-transparent outline-none placeholder:text-text-subtle"
             />
+            {availability === 'checking' && <Loader2 size={14} className="text-text-subtle animate-spin" />}
+            {availability === 'available' && <Check size={14} className="text-accent-mint" />}
+            {availability === 'taken' && <X size={14} className="text-danger" />}
           </div>
 
+          {availability === 'taken' && !error && <p className="text-sm text-danger mb-3">That username is taken.</p>}
           {error && <p className="text-sm text-danger mb-3">{error}</p>}
 
           <button
             onClick={() => void handleSave()}
-            disabled={isSaving || !username.trim()}
+            disabled={isSaving || !username.trim() || availability !== 'available'}
             className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-primary text-white text-sm font-medium hover:bg-primary-dark transition-colors disabled:opacity-50"
           >
             {isSaving ? (

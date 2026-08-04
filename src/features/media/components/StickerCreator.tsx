@@ -45,7 +45,7 @@ export default function StickerCreator({ onCreated }: Props) {
     <div className="space-y-3">
       <canvas ref={canvasRef} className="hidden" />
       <div
-        className="border-2 border-dashed border-slate-600 hover:border-amber-500 rounded-xl p-6 flex flex-col items-center gap-3 cursor-pointer transition-colors"
+        className="border-2 border-dashed border-border hover:border-primary/50 rounded-xl p-6 flex flex-col items-center gap-3 cursor-pointer transition-colors bg-tint"
         onClick={() => fileRef.current?.click()}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
@@ -54,8 +54,8 @@ export default function StickerCreator({ onCreated }: Props) {
           <img src={preview} alt="preview" className="w-24 h-24 rounded-lg object-cover" />
         ) : (
           <>
-            <Upload size={24} className="text-slate-400" />
-            <p className="text-sm text-slate-400 text-center">Drop image or click to upload</p>
+            <Upload size={24} className="text-text-subtle" />
+            <p className="text-sm text-text-subtle text-center">Drop image or click to upload</p>
           </>
         )}
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
@@ -65,12 +65,12 @@ export default function StickerCreator({ onCreated }: Props) {
         placeholder="Sticker name"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full px-3 py-2 bg-slate-800 rounded-lg text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-amber-500/50"
+        className="w-full px-3 py-2 bg-tint border border-border rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition"
       />
       <button
         onClick={() => void handleSave()}
         disabled={!preview || !name || saving}
-        className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-black font-medium text-sm rounded-lg disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+        className="w-full py-2 bg-primary hover:bg-primary-dark text-white font-medium text-sm rounded-lg disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
       >
         {saving && <Loader2 size={14} className="animate-spin" />}
         {saving ? 'Saving...' : 'Save Sticker'}

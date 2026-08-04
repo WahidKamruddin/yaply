@@ -66,28 +66,69 @@ export interface Database {
           id: string
           conversation_id: string
           user_id: string
+          role: string
           is_admin: boolean
           is_muted: boolean
           muted_until: string | null
           last_read_at: string | null
+          // 'accepted' | 'pending' | 'declined' — message-request state for this
+          // member. 'pending' means they can read but not reply until they accept.
+          request_state: string
           joined_at: string
         }
         Insert: {
           id?: string
           conversation_id: string
           user_id: string
+          role?: string
           is_admin?: boolean
           is_muted?: boolean
           muted_until?: string | null
           last_read_at?: string | null
+          request_state?: string
           joined_at?: string
         }
         Update: {
+          role?: string
           is_admin?: boolean
           is_muted?: boolean
           muted_until?: string | null
           last_read_at?: string | null
+          request_state?: string
         }
+        Relationships: []
+      }
+      friendships: {
+        Row: {
+          id: string
+          requester_id: string
+          recipient_id: string
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          requester_id: string
+          recipient_id: string
+          status?: string
+        }
+        Update: {
+          status?: string
+        }
+        Relationships: []
+      }
+      user_blocks: {
+        Row: {
+          blocker_id: string
+          blocked_id: string
+          created_at: string
+        }
+        Insert: {
+          blocker_id: string
+          blocked_id: string
+        }
+        Update: Record<string, never>
         Relationships: []
       }
       messages: {
@@ -389,6 +430,54 @@ export interface Database {
           p_media_mime?: string | null
         }
         Returns: Database['public']['Tables']['messages']['Row']
+      }
+      add_group_member: {
+        Args: { p_conversation_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      send_friend_request: {
+        Args: { p_recipient_id: string }
+        Returns: Database['public']['Tables']['friendships']['Row']
+      }
+      accept_friend_request: {
+        Args: { p_request_id: string }
+        Returns: Database['public']['Tables']['friendships']['Row']
+      }
+      block_user: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
+      get_relationships: {
+        Args: { p_user_ids: string[] }
+        Returns: Array<{
+          user_id: string
+          status: string
+          request_id: string | null
+          mutual_friends: number
+        }>
+      }
+      search_users: {
+        Args: { p_query: string }
+        Returns: Array<{
+          id: string
+          username: string
+          display_name: string | null
+          avatar_url: string | null
+          is_online: boolean
+          last_seen_at: string | null
+        }>
+      }
+      get_friend_suggestions: {
+        Args: { p_limit?: number }
+        Returns: Array<{
+          id: string
+          username: string
+          display_name: string | null
+          avatar_url: string | null
+          is_online: boolean
+          mutual_friends: number
+          shared_groups: number
+        }>
       }
     }
     Enums: Record<string, never>

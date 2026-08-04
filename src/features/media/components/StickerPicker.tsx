@@ -18,7 +18,7 @@ export default function StickerPicker({ userId, onSelect }: Props) {
   if (creating) {
     return (
       <div>
-        <button onClick={() => setCreating(false)} className="text-xs text-amber-400 mb-3 hover:text-amber-300">
+        <button onClick={() => setCreating(false)} className="text-xs text-primary-text mb-3 hover:underline underline-offset-2">
           ← Back
         </button>
         <StickerCreator
@@ -36,9 +36,9 @@ export default function StickerPicker({ userId, onSelect }: Props) {
       <div className="grid grid-cols-4 gap-2">
         <button
           onClick={() => setCreating(true)}
-          className="aspect-square flex items-center justify-center rounded-xl border-2 border-dashed border-slate-600 hover:border-amber-500 transition-colors"
+          className="aspect-square flex items-center justify-center rounded-xl border-2 border-dashed border-border hover:border-primary/50 bg-tint transition-colors"
         >
-          <Plus size={20} className="text-slate-400" />
+          <Plus size={20} className="text-text-subtle" />
         </button>
         {stickers.map((s) => {
           const url = getMediaPublicUrl(s.storage_path)
@@ -49,7 +49,7 @@ export default function StickerPicker({ userId, onSelect }: Props) {
               </button>
               <button
                 onClick={() => void deleteSticker(s.id)}
-                className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center bg-black/60 rounded-full text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center bg-black/60 rounded-full text-danger opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 <Trash2 size={10} />
               </button>

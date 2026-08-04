@@ -137,31 +137,31 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
     <div className="absolute inset-0 z-20 flex pointer-events-none">
       {/* Blur backdrop — clickable to close */}
       <div
-        className="absolute inset-0 bg-[#1a2744]/20 backdrop-blur-sm pointer-events-auto cursor-pointer"
+        className="absolute inset-0 bg-black/20 backdrop-blur-sm pointer-events-auto cursor-pointer"
         onClick={onClose}
       />
 
       {/* Thread panel */}
-      <div className="absolute right-0 top-0 bottom-0 w-[400px] bg-white shadow-2xl flex flex-col pointer-events-auto">
+      <div className="absolute right-0 top-0 bottom-0 w-[400px] bg-card shadow-2xl flex flex-col pointer-events-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#dce7f8] flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
           <div>
-            <h3 className="text-sm font-semibold text-[#1a2744]">Thread</h3>
-            <p className="text-xs text-[#9ab0cc]">
+            <h3 className="text-sm font-semibold text-text">Thread</h3>
+            <p className="text-xs text-text-subtle">
               {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-full text-[#9ab0cc] hover:text-[#1a2744] hover:bg-[#edf1fa] transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded-full text-text-subtle hover:text-text hover:bg-tint transition-colors"
           >
             <X size={15} />
           </button>
         </div>
 
         {/* Root message */}
-        <div className="px-3 pt-4 pb-3 border-b border-[#dce7f8] bg-[#f8faff] flex-shrink-0">
-          <p className="text-[10px] text-[#9ab0cc] font-medium mb-1 px-1">
+        <div className="px-3 pt-4 pb-3 border-b border-border bg-tint flex-shrink-0">
+          <p className="text-[10px] text-text-subtle font-medium mb-1 px-1">
             {rootName} · {rootTime}
           </p>
           <MessageBubble
@@ -175,7 +175,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
         {/* Replies */}
         <div className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
           {replies.length === 0 ? (
-            <p className="text-center text-xs text-[#9ab0cc] py-8">
+            <p className="text-center text-xs text-text-subtle py-8">
               No replies yet — start the thread!
             </p>
           ) : (
@@ -194,7 +194,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
         </div>
 
         {/* Input */}
-        <div className="border-t border-[#dce7f8] px-4 py-3 flex-shrink-0">
+        <div className="border-t border-border px-4 py-3 flex-shrink-0">
           {sendError && (
             <p className="text-xs text-red-400 mb-2 px-1">{sendError}</p>
           )}
@@ -206,7 +206,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
               placeholder="Reply in thread…"
               rows={1}
               disabled={sending}
-              className="flex-1 resize-none bg-[#f3f7ff] rounded-2xl px-4 py-2.5 text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40 max-h-32 leading-relaxed disabled:opacity-50"
+              className="flex-1 resize-none bg-tint rounded-2xl px-4 py-2.5 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40 max-h-32 leading-relaxed disabled:opacity-50"
             />
             <button
               onClick={() => void handleSend()}

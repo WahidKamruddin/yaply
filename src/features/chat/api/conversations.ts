@@ -10,6 +10,7 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
       last_read_at,
       is_muted,
       muted_until,
+      request_state,
       conversations (
         id,
         name,
@@ -43,10 +44,15 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
 
   // Map convId → my last_read_at so we can count unread messages below.
   const myLastReadAt: Record<string, string | null> = {}
+  // Message requests must not inflate the unread badge on the main list — they
+  // are counted separately by the Message requests section.
+  const myRequestState: Record<string, string> = {}
   for (const row of memberRows) {
     const conv = row.conversations as unknown as { id: string } | null
     if (!conv) continue
     myLastReadAt[conv.id] = row.last_read_at
+    myRequestState[conv.id] =
+      (row as unknown as { request_state: string | null }).request_state ?? 'accepted'
   }
 
   const lastMessages: Record<string, DecryptedMessage> = {}
@@ -118,7 +124,7 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
         }
 
         // Count messages from others that arrived after my last read timestamp.
-        if (m.sender_id !== userId) {
+        if (m.sender_id !== userId && myRequestState[m.conversation_id] === 'accepted') {
           const lastRead = myLastReadAt[m.conversation_id]
           if (!lastRead || new Date(m.created_at) > new Date(lastRead)) {
             unreadCounts[m.conversation_id] = (unreadCounts[m.conversation_id] ?? 0) + 1
@@ -200,6 +206,7 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
         unreadCount,
         isMuted,
         mutedUntil: rowMutedUntil,
+        requestState: (myRequestState[conv.id] ?? 'accepted') as ConversationListItem['requestState'],
         updatedAt: conv.updated_at,
       }
       return item
@@ -238,16 +245,17 @@ export async function createGroupConversation(
   return data as string
 }
 
+/**
+ * Routed through the search_users RPC rather than querying `profiles` directly:
+ * the RPC also matches display_name and, crucially, excludes anyone blocked in
+ * either direction. `profiles` is world-readable (`using (true)`), so that
+ * exclusion cannot be expressed as a policy without breaking the nested profile
+ * joins the whole app depends on.
+ */
 export async function searchUsers(query: string, currentUserId: string): Promise<Profile[]> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, username, display_name, avatar_url, is_online, last_seen_at')
-    .ilike('username', `%${query}%`)
-    .neq('id', currentUserId)
-    .limit(20)
-
+  const { data, error } = await supabase.rpc('search_users', { p_query: query })
   if (error) throw error
-  return (data ?? []) as unknown as Profile[]
+  return ((data ?? []) as unknown as Profile[]).filter((p) => p.id !== currentUserId)
 }
 
 export async function muteConversation(
@@ -266,10 +274,14 @@ export async function muteConversation(
   if (error) throw error
 }
 
+// Goes through the RPC so the "only friends can be added to a group" rule is
+// enforced server-side in one place (the RLS with-check on conversation_members
+// is the second line of defence).
 export async function addGroupMember(conversationId: string, userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('conversation_members')
-    .insert({ conversation_id: conversationId, user_id: userId, role: 'member' })
+  const { error } = await supabase.rpc('add_group_member', {
+    p_conversation_id: conversationId,
+    p_user_id: userId,
+  })
   if (error) throw error
 }
 

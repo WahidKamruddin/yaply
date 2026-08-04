@@ -8,6 +8,7 @@ import PrivacyPolicySettings from '@/features/settings/components/PrivacyPolicyS
 import TermsSettings from '@/features/settings/components/TermsSettings'
 import HelpSettings from '@/features/settings/components/HelpSettings'
 import ReportProblemSettings from '@/features/settings/components/ReportProblemSettings'
+import LoadingScreen from '@/components/LoadingScreen'
 import type { User } from '@supabase/supabase-js'
 
 export const Route = createFileRoute('/settings')({
@@ -46,7 +47,7 @@ function SettingsPage() {
     return () => listener.subscription.unsubscribe()
   }, [navigate])
 
-  if (!user) return null
+  if (!user) return <LoadingScreen />
 
   return (
     <div className="h-[100dvh] flex flex-col bg-background overflow-hidden">

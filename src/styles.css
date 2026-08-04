@@ -40,6 +40,14 @@ html, body, #app { touch-action: pan-y; }
   font-display: swap;
 }
 
+/* Headings default to the same display font as the landing/auth pages
+   (`--font-display` below) so titles are visually consistent everywhere,
+   including Radix Dialog.Title (renders as <h2>) without touching every
+   call site individually. */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}
+
 /* Design tokens are declared twice on purpose:
    - `@theme` registers the Tailwind color name (generates bg-background,
      text-text-muted, etc.) but its value must be static at build time.
@@ -135,6 +143,7 @@ body,
   background-color: var(--bg);
   color: var(--ink);
   transition: background-color 0.25s, color 0.25s;
+  -webkit-font-smoothing: antialiased;
 }
 
 ::-webkit-scrollbar {
@@ -168,4 +177,15 @@ body,
   0%   { transform: translateY(10px); opacity: 0; }
   60%  { transform: translateY(-2px); opacity: 1; }
   100% { transform: translateY(0);    opacity: 1; }
+}
+
+@keyframes yaply-pulse {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%      { transform: scale(0.88); opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[yaply-pulse_1\.6s_ease-in-out_infinite\] {
+    animation: none;
+  }
 }

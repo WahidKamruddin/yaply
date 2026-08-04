@@ -1,7 +1,10 @@
-import { HeadContent, Scripts, createRootRoute, Navigate } from '@tanstack/react-router'
+import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import Providers from '@/app/Providers'
+import ErrorBoundary from '@/components/ErrorBoundary'
+import NotFoundScreen from '@/components/NotFoundScreen'
+import { useTheme } from '@/lib/useTheme'
 import appCss from '../styles.css?url'
 
 export const Route = createRootRoute({
@@ -17,11 +20,17 @@ export const Route = createRootRoute({
       { rel: 'manifest', href: '/manifest.json' },
     ],
   }),
-  notFoundComponent: () => <Navigate to="/chat" />,
+  notFoundComponent: NotFoundScreen,
   shellComponent: RootDocument,
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  // Applies the saved `.light` class to <html> for every route, not just the
+  // chat app (BottomBar's own useTheme() call only runs once ChatView is
+  // mounted) — otherwise LoadingScreen/ErrorScreen/NotFoundScreen and the
+  // brief pre-ChatView-mount window always fell back to :root's dark defaults.
+  useTheme()
+
   return (
     <html lang="en">
       <head>
@@ -29,7 +38,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <Providers>
-          {children}
+          <ErrorBoundary>{children}</ErrorBoundary>
         </Providers>
         {import.meta.env.DEV && (
           <TanStackDevtools

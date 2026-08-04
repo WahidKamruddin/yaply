@@ -38,7 +38,7 @@ function RsvpButton({
       className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
         active
           ? 'bg-[#5b8def] text-white'
-          : 'bg-[#edf1fa] text-[#6b84ab] hover:bg-[#dce7f8] hover:text-[#1a2744]'
+          : 'bg-tint text-text-muted hover:bg-tint-strong hover:text-text'
       }`}
     >
       {label}
@@ -84,7 +84,7 @@ function LinkPicker({
 
   if (!items.length) {
     return (
-      <div className="mt-2 text-xs text-[#9ab0cc]">
+      <div className="mt-2 text-xs text-text-subtle">
         No unlinked {type} in this conversation.{' '}
         <button onClick={() => setOpen(false)} className="text-[#5b8def]">Close</button>
       </div>
@@ -92,7 +92,7 @@ function LinkPicker({
   }
 
   return (
-    <div className="mt-2 border border-[#dce7f8] rounded-lg overflow-hidden">
+    <div className="mt-2 border border-border rounded-lg overflow-hidden">
       {items.map((item) => (
         <button
           key={item.id}
@@ -100,12 +100,12 @@ function LinkPicker({
             link({ table: type as 'notes' | 'albums' | 'budgets', itemId: item.id, eventId })
             setOpen(false)
           }}
-          className="w-full text-left px-3 py-2 text-xs text-[#1a2744] hover:bg-[#edf1fa] transition-colors border-b border-[#f0f4fc] last:border-0"
+          className="w-full text-left px-3 py-2 text-xs text-text hover:bg-tint transition-colors border-b border-border-soft last:border-0"
         >
           {item.name}
         </button>
       ))}
-      <button onClick={() => setOpen(false)} className="w-full text-left px-3 py-2 text-xs text-[#9ab0cc] hover:bg-[#edf1fa] transition-colors">
+      <button onClick={() => setOpen(false)} className="w-full text-left px-3 py-2 text-xs text-text-subtle hover:bg-tint transition-colors">
         Cancel
       </button>
     </div>
@@ -151,33 +151,33 @@ export default function EventModal({ event, currentUserId, conversationId, membe
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
-      <div className="bg-white border border-[#dce7f8] rounded-2xl shadow-2xl shadow-[#dce7f8]/60 w-full max-w-2xl h-[90vh] flex flex-col">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl shadow-black/40 w-full max-w-2xl h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-start justify-between px-5 py-4 border-b border-[#dce7f8] flex-shrink-0">
+        <div className="flex items-start justify-between px-5 py-4 border-b border-border flex-shrink-0">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
               {isPlanning && (
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#edf1fa] text-[#5b8def]">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-tint text-[#5b8def]">
                   Planning
                 </span>
               )}
-              <span className="text-[10px] text-[#b0c0d8]">by {creatorName}</span>
+              <span className="text-[10px] text-text-subtle">by {creatorName}</span>
             </div>
-            <h2 className="text-base font-semibold text-[#1a2744] truncate">{event.name}</h2>
+            <h2 className="text-base font-semibold text-text truncate">{event.name}</h2>
             {event.description && (
-              <p className="text-xs text-[#9ab0cc] mt-0.5">{event.description}</p>
+              <p className="text-xs text-text-subtle mt-0.5">{event.description}</p>
             )}
           </div>
           <div className="ml-3 flex-shrink-0 flex items-center gap-1">
             <button
               onClick={() => canDelete && setConfirmingDelete(true)}
               disabled={!canDelete}
-              className={`p-1 transition-colors ${canDelete ? 'text-[#c5d5e8] hover:text-red-400' : 'text-[#dce7f8] opacity-40 cursor-not-allowed'}`}
+              className={`p-1 transition-colors ${canDelete ? 'text-text-faint hover:text-red-400' : 'text-text-subtle opacity-40 cursor-not-allowed'}`}
               title="Delete event"
             >
               <Trash2 size={16} />
             </button>
-            <button onClick={onClose} className="p-1 text-[#9ab0cc] hover:text-[#1a2744] transition-colors">
+            <button onClick={onClose} className="p-1 text-text-subtle hover:text-text transition-colors">
               <X size={20} />
             </button>
           </div>
@@ -189,7 +189,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setConfirmingDelete(false)}
-                className="text-xs text-[#6b84ab] hover:text-[#1a2744] transition-colors"
+                className="text-xs text-text-muted hover:text-text transition-colors"
               >
                 Cancel
               </button>
@@ -219,18 +219,18 @@ export default function EventModal({ event, currentUserId, conversationId, membe
             /* Confirmed: event details + RSVP + sub-tabs */
             <div className="flex-1 overflow-y-auto">
               {/* Event details */}
-              <div className="px-5 py-4 space-y-2 border-b border-[#dce7f8]">
+              <div className="px-5 py-4 space-y-2 border-b border-border">
                 {event.starts_at && (
-                  <div className="flex items-center gap-2 text-sm text-[#1a2744]">
+                  <div className="flex items-center gap-2 text-sm text-text">
                     <Calendar size={14} className="text-[#5b8def] flex-shrink-0" />
                     <span>{formatDateTime(event.starts_at)}</span>
                     {event.ends_at && (
-                      <span className="text-[#9ab0cc]">→ {formatDateTime(event.ends_at)}</span>
+                      <span className="text-text-subtle">→ {formatDateTime(event.ends_at)}</span>
                     )}
                   </div>
                 )}
                 {event.location && (
-                  <div className="flex items-center gap-2 text-sm text-[#1a2744]">
+                  <div className="flex items-center gap-2 text-sm text-text">
                     <MapPin size={14} className="text-[#5b8def] flex-shrink-0" />
                     <span>{event.location}</span>
                   </div>
@@ -238,11 +238,11 @@ export default function EventModal({ event, currentUserId, conversationId, membe
               </div>
 
               {/* RSVP */}
-              <div className="px-5 py-3 border-b border-[#dce7f8]">
+              <div className="px-5 py-3 border-b border-border">
                 <div className="flex items-center gap-2 mb-2">
-                  <Users size={13} className="text-[#9ab0cc]" />
-                  <span className="text-xs font-semibold text-[#1a2744]">RSVP</span>
-                  <span className="text-xs text-[#9ab0cc] ml-auto">
+                  <Users size={13} className="text-text-subtle" />
+                  <span className="text-xs font-semibold text-text">RSVP</span>
+                  <span className="text-xs text-text-subtle ml-auto">
                     {going > 0 && `${going} going`}
                     {maybe > 0 && `${going > 0 ? ' · ' : ''}${maybe} maybe`}
                     {notGoing > 0 && `${going + maybe > 0 ? ' · ' : ''}${notGoing} can't go`}
@@ -262,7 +262,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                       return (
                         <div key={r.id} className="flex items-center gap-1.5">
                           <Avatar src={member.profile.avatar_url} alt={member.profile.display_name ?? member.profile.username} size={24} />
-                          <span className="text-[10px] text-[#6b84ab]">
+                          <span className="text-[10px] text-text-muted">
                             {member.profile.display_name ?? member.profile.username}
                           </span>
                           <span
@@ -270,7 +270,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                               r.response === 'going' ? 'text-green-500'
                               : r.response === 'maybe' ? 'text-amber-500'
                               : r.response === 'not_going' ? 'text-red-400'
-                              : 'text-[#9ab0cc]'
+                              : 'text-text-subtle'
                             }`}
                           >
                             {r.response === 'going' ? '✓' : r.response === 'maybe' ? '?' : r.response === 'not_going' ? '✕' : '–'}
@@ -284,7 +284,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
 
               {/* Sub-resource tabs */}
               <div>
-                <div className="flex border-b border-[#dce7f8] px-5">
+                <div className="flex border-b border-border px-5">
                   {([
                     { id: 'notes' as SubTab, label: 'Notes', Icon: FileText },
                     { id: 'albums' as SubTab, label: 'Albums', Icon: Image },
@@ -296,7 +296,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                       className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors ${
                         subTab === id
                           ? 'border-[#5b8def] text-[#5b8def]'
-                          : 'border-transparent text-[#9ab0cc] hover:text-[#6b84ab]'
+                          : 'border-transparent text-text-subtle hover:text-text-muted'
                       }`}
                     >
                       <Icon size={12} />
@@ -309,18 +309,18 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                   {subTab === 'notes' && (
                     <div>
                       {linkedNotes.length === 0 ? (
-                        <p className="text-xs text-[#9ab0cc] py-2">No notes linked to this event.</p>
+                        <p className="text-xs text-text-subtle py-2">No notes linked to this event.</p>
                       ) : (
                         <div className="space-y-0 mb-1">
                           {(linkedNotes as Array<{ id: string; title: string; content: string }>).map((n) => (
-                            <div key={n.id} className="flex items-start gap-2 py-2 border-b border-[#f0f4fc] last:border-0">
+                            <div key={n.id} className="flex items-start gap-2 py-2 border-b border-border-soft last:border-0">
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-[#1a2744]">{n.title}</p>
-                                {n.content && <p className="text-xs text-[#9ab0cc] line-clamp-2 mt-0.5">{n.content}</p>}
+                                <p className="text-sm font-medium text-text">{n.title}</p>
+                                {n.content && <p className="text-xs text-text-subtle line-clamp-2 mt-0.5">{n.content}</p>}
                               </div>
                               <button
                                 onClick={() => unlink({ table: 'notes', itemId: n.id, eventId: null })}
-                                className="flex-shrink-0 p-0.5 text-[#c5d5e8] hover:text-red-400 transition-colors mt-0.5"
+                                className="flex-shrink-0 p-0.5 text-text-faint hover:text-red-400 transition-colors mt-0.5"
                                 title="Unlink"
                               >
                                 <X size={13} />
@@ -340,15 +340,15 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                   {subTab === 'albums' && (
                     <div>
                       {linkedAlbums.length === 0 ? (
-                        <p className="text-xs text-[#9ab0cc] py-2">No albums linked to this event.</p>
+                        <p className="text-xs text-text-subtle py-2">No albums linked to this event.</p>
                       ) : (
                         <div className="space-y-0 mb-1">
                           {(linkedAlbums as Array<{ id: string; name: string }>).map((a) => (
-                            <div key={a.id} className="flex items-center gap-2 py-2 border-b border-[#f0f4fc] last:border-0">
-                              <p className="flex-1 text-sm font-medium text-[#1a2744]">{a.name}</p>
+                            <div key={a.id} className="flex items-center gap-2 py-2 border-b border-border-soft last:border-0">
+                              <p className="flex-1 text-sm font-medium text-text">{a.name}</p>
                               <button
                                 onClick={() => setPendingUnlinkAlbum({ id: a.id, name: a.name })}
-                                className="flex-shrink-0 p-0.5 text-[#c5d5e8] hover:text-red-400 transition-colors"
+                                className="flex-shrink-0 p-0.5 text-text-faint hover:text-red-400 transition-colors"
                                 title="Unlink"
                               >
                                 <X size={13} />
@@ -368,18 +368,18 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                   {subTab === 'budgets' && (
                     <div>
                       {linkedBudgets.length === 0 ? (
-                        <p className="text-xs text-[#9ab0cc] py-2">No budgets linked to this event.</p>
+                        <p className="text-xs text-text-subtle py-2">No budgets linked to this event.</p>
                       ) : (
                         <div className="space-y-0 mb-1">
                           {(linkedBudgets as Array<{ id: string; name: string; total_amount: number; currency: string }>).map((b) => (
-                            <div key={b.id} className="flex items-start gap-2 py-2 border-b border-[#f0f4fc] last:border-0">
+                            <div key={b.id} className="flex items-start gap-2 py-2 border-b border-border-soft last:border-0">
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-[#1a2744]">{b.name}</p>
-                                <p className="text-xs text-[#9ab0cc] mt-0.5">{b.currency} {b.total_amount.toFixed(2)}</p>
+                                <p className="text-sm font-medium text-text">{b.name}</p>
+                                <p className="text-xs text-text-subtle mt-0.5">{b.currency} {b.total_amount.toFixed(2)}</p>
                               </div>
                               <button
                                 onClick={() => unlink({ table: 'budgets', itemId: b.id, eventId: null })}
-                                className="flex-shrink-0 p-0.5 text-[#c5d5e8] hover:text-red-400 transition-colors mt-0.5"
+                                className="flex-shrink-0 p-0.5 text-text-faint hover:text-red-400 transition-colors mt-0.5"
                                 title="Unlink"
                               >
                                 <X size={13} />
@@ -405,21 +405,21 @@ export default function EventModal({ event, currentUserId, conversationId, membe
 
       <Dialog.Root open={!!pendingUnlinkAlbum} onOpenChange={(open) => { if (!open) setPendingUnlinkAlbum(null) }}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-[#1a2744]/30 backdrop-blur-sm z-[60] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-sm bg-white rounded-2xl shadow-xl shadow-[#1a2744]/12 border border-[#dce7f8] p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+          <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-sm bg-card rounded-2xl shadow-xl shadow-black/40 border border-border p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
             <div className="flex flex-col items-center text-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-[#edf3ff] flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-primary-tint flex items-center justify-center">
                 <Link2 size={20} className="text-[#5b8def]" />
               </div>
               <div>
-                <Dialog.Title className="text-base font-semibold text-[#1a2744]">Unlink Album</Dialog.Title>
-                <Dialog.Description className="mt-1 text-sm text-[#9ab0cc]">
+                <Dialog.Title className="text-base font-semibold text-text">Unlink Album</Dialog.Title>
+                <Dialog.Description className="mt-1 text-sm text-text-subtle">
                   Remove "{pendingUnlinkAlbum?.name}" from "{event.name}"?
                 </Dialog.Description>
               </div>
               <div className="flex gap-3 w-full mt-1">
                 <Dialog.Close asChild>
-                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-[#dce7f8] text-sm font-medium text-[#6b84ab] hover:bg-[#edf1fa] transition-colors">
+                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium text-text-muted hover:bg-tint transition-colors">
                     Cancel
                   </button>
                 </Dialog.Close>

@@ -22,17 +22,17 @@ export default function GifPicker({ onSelect }: Props) {
   return (
     <div className="flex flex-col h-72">
       <div className="relative mb-2">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ab0cc]" />
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle" />
         <input
           type="text"
           placeholder="Search GIFs..."
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
-          className="w-full pl-8 pr-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40 border border-[#dce7f8]"
+          className="w-full pl-8 pr-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40 border border-border"
         />
       </div>
       {isLoading && (
-        <div className="flex-1 flex items-center justify-center text-[#9ab0cc] text-sm">Loading…</div>
+        <div className="flex-1 flex items-center justify-center text-text-subtle text-sm">Loading…</div>
       )}
       <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-1.5">
         {gifs.map((gif) => (

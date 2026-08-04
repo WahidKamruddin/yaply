@@ -204,7 +204,7 @@ export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyp
                 }`}
                 onClick={() => selectCommand(cmd.name)}
               >
-                <span className="text-sm text-accent-mint font-mono font-medium flex-shrink-0">/{cmd.name}</span>
+                <span className="text-sm text-[#5b8def] font-mono font-medium flex-shrink-0">/{cmd.name}</span>
                 {argTokens.map((token, i) => (
                   <span
                     key={i}
@@ -242,7 +242,7 @@ export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyp
           value={text}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder ?? 'Message... (/ for commands)'}
+          placeholder={placeholder ?? 'Message...'}
           disabled={disabled}
           rows={1}
           className="flex-1 resize-none bg-tint border border-border rounded-2xl px-4 py-2.5 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition max-h-40 leading-relaxed disabled:opacity-50"

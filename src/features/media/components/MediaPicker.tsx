@@ -29,11 +29,11 @@ export default function MediaPicker({ userId, onImageSelect, onGifSelect, onStic
       onClick={onClose}
     >
       <div
-        className="bg-white border border-[#dce7f8] rounded-t-2xl sm:rounded-2xl shadow-xl shadow-[#1a2744]/10 w-full sm:max-w-sm mx-0 sm:mx-4 p-4"
+        className="bg-card border border-border rounded-t-2xl sm:rounded-2xl shadow-xl shadow-black/30 w-full sm:max-w-sm mx-0 sm:mx-4 p-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">
-          <div className="flex gap-1 bg-[#f3f7ff] rounded-lg p-1">
+          <div className="flex gap-1 bg-tint rounded-lg p-1">
             {tabs.map((t) => (
               <button
                 key={t.id}
@@ -41,7 +41,7 @@ export default function MediaPicker({ userId, onImageSelect, onGifSelect, onStic
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                   tab === t.id
                     ? 'bg-[#5b8def] text-white shadow-sm'
-                    : 'text-[#6b84ab] hover:text-[#1a2744]'
+                    : 'text-text-muted hover:text-text'
                 }`}
               >
                 {t.icon}
@@ -49,15 +49,15 @@ export default function MediaPicker({ userId, onImageSelect, onGifSelect, onStic
               </button>
             ))}
           </div>
-          <button onClick={onClose} className="text-[#9ab0cc] hover:text-[#1a2744] transition-colors ml-2">
+          <button onClick={onClose} className="text-text-subtle hover:text-text transition-colors ml-2">
             <X size={18} />
           </button>
         </div>
 
         {tab === 'image' && (
-          <label className="flex flex-col items-center justify-center h-40 border-2 border-dashed border-[#dce7f8] hover:border-[#5b8def] rounded-xl cursor-pointer transition-colors bg-[#f3f7ff]">
-            <Image size={28} className="text-[#9ab0cc] mb-2" />
-            <span className="text-sm text-[#6b84ab]">Click to select image</span>
+          <label className="flex flex-col items-center justify-center h-40 border-2 border-dashed border-border hover:border-[#5b8def] rounded-xl cursor-pointer transition-colors bg-tint">
+            <Image size={28} className="text-text-subtle mb-2" />
+            <span className="text-sm text-text-muted">Click to select image</span>
             <input
               type="file"
               accept="image/*"

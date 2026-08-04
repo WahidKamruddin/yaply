@@ -62,20 +62,20 @@ export default function ConversationPanel({ conversationId, currentUserId, membe
   const isSecondaryActive = SECONDARY_TABS.some((t) => t.id === activeTab)
 
   return (
-    <div className="flex flex-col w-full md:w-72 md:flex-shrink-0 h-full bg-white border-l border-[#dce7f8] absolute inset-0 z-10 md:relative md:inset-auto md:z-auto">
+    <div className="flex flex-col w-full md:w-72 md:flex-shrink-0 h-full bg-card border-l border-border absolute inset-0 z-10 md:relative md:inset-auto md:z-auto">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#dce7f8]">
-        <span className="text-sm font-semibold text-[#1a2744]">Details</span>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <span className="text-sm font-semibold text-text">Details</span>
         <button
           onClick={onClose}
-          className="w-7 h-7 flex items-center justify-center rounded-full text-[#9ab0cc] hover:text-[#1a2744] hover:bg-[#edf1fa] transition-colors"
+          className="w-7 h-7 flex items-center justify-center rounded-full text-text-subtle hover:text-text hover:bg-tint transition-colors"
         >
           <X size={15} />
         </button>
       </div>
 
       {/* Tab bar */}
-      <div className="flex items-end border-b border-[#dce7f8]">
+      <div className="flex items-end border-b border-border">
         {PRIMARY_TABS.map(({ id, label, Icon }) => (
           <button
             key={id}
@@ -83,7 +83,7 @@ export default function ConversationPanel({ conversationId, currentUserId, membe
             className={`flex-1 flex flex-col items-center gap-0.5 px-1 pt-2 pb-1.5 text-xs font-medium transition-colors min-w-0 border-b-2 ${
               activeTab === id
                 ? 'border-[#5b8def] text-[#5b8def]'
-                : 'border-transparent text-[#9ab0cc] hover:text-[#6b84ab]'
+                : 'border-transparent text-text-subtle hover:text-text-muted'
             }`}
           >
             <Icon size={14} />
@@ -98,7 +98,7 @@ export default function ConversationPanel({ conversationId, currentUserId, membe
             className={`flex flex-col items-center gap-0.5 px-3 pt-2 pb-1.5 text-xs font-medium transition-colors border-b-2 ${
               isSecondaryActive
                 ? 'border-[#5b8def] text-[#5b8def]'
-                : 'border-transparent text-[#9ab0cc] hover:text-[#6b84ab]'
+                : 'border-transparent text-text-subtle hover:text-text-muted'
             }`}
           >
             <MoreHorizontal size={14} />
@@ -106,15 +106,15 @@ export default function ConversationPanel({ conversationId, currentUserId, membe
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-[#dce7f8] rounded-xl shadow-lg shadow-[#dce7f8]/60 overflow-hidden z-20">
+            <div className="absolute right-0 top-full mt-1 w-36 bg-card border border-border rounded-xl shadow-lg shadow-black/40 overflow-hidden z-20">
               {SECONDARY_TABS.map(({ id, label, Icon }) => (
                 <button
                   key={id}
                   onClick={() => { setActiveTab(id); setMenuOpen(false) }}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs transition-colors text-left ${
                     activeTab === id
-                      ? 'bg-[#edf3ff] text-[#5b8def] font-medium'
-                      : 'text-[#6b84ab] hover:bg-[#f3f7ff]'
+                      ? 'bg-primary-tint text-[#5b8def] font-medium'
+                      : 'text-text-muted hover:bg-tint'
                   }`}
                 >
                   <Icon size={13} />

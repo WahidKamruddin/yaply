@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Check, Lock } from 'lucide-react'
+import { Camera, Check, Lock, Trash2, AlertTriangle, X, Loader2 } from 'lucide-react'
+import * as Dialog from '@radix-ui/react-dialog'
 import { useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { differenceInYears } from 'date-fns'
 import { supabase } from '@/lib/supabase'
 import { useProfile } from '@/features/chat/hooks/useProfile'
+import { normalizeUsername, useUsernameAvailability } from '@/features/chat/hooks/useUsernameAvailability'
 import Avatar from '@/components/Avatar'
 
 interface Props {
@@ -11,15 +14,10 @@ interface Props {
   userEmail: string
 }
 
-const USERNAME_PATTERN = /^[a-z0-9_.-]+$/
-
-function normalizeUsername(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, '')
-}
-
 export default function AccountSettings({ userId, userEmail }: Props) {
   const { data: profile, refetch } = useProfile(userId)
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
   const [displayName, setDisplayName] = useState('')
   const [username, setUsername] = useState('')
@@ -39,6 +37,13 @@ export default function AccountSettings({ userId, userEmail }: Props) {
   const [isChangingPassword, setIsChangingPassword] = useState(false)
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordSaved, setPasswordSaved] = useState(false)
+
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+
+  const usernameAvailability = useUsernameAvailability(username, userId)
 
   useEffect(() => {
     if (!profile) return
@@ -67,12 +72,15 @@ export default function AccountSettings({ userId, userEmail }: Props) {
     setSaved(false)
 
     const normalizedUsername = normalizeUsername(username)
-    if (normalizedUsername.length < 3) {
-      setSaveError('Username must be at least 3 characters.')
+
+    // The debounced availability check (rendered next to the field) is the
+    // pre-save guard; re-check here in case Save is clicked before it settles.
+    if (usernameAvailability === 'invalid') {
+      setSaveError('Username must be at least 3 characters, using only lowercase letters, numbers, underscores, dots, and hyphens.')
       return
     }
-    if (!USERNAME_PATTERN.test(normalizedUsername)) {
-      setSaveError('Username: only lowercase letters, numbers, underscores, dots, and hyphens.')
+    if (usernameAvailability !== 'available') {
+      setSaveError('That username is taken.')
       return
     }
 
@@ -106,6 +114,9 @@ export default function AccountSettings({ userId, userEmail }: Props) {
         .eq('id', userId)
 
       if (error) {
+        // Last-resort guard against a race where someone else claimed the
+        // name between the availability check and this write — the DB's
+        // unique constraint is the actual source of truth.
         setSaveError(error.code === '23505' ? 'That username is taken.' : error.message)
         return
       }
@@ -146,6 +157,20 @@ export default function AccountSettings({ userId, userEmail }: Props) {
       setPasswordSaved(true)
     } finally {
       setIsChangingPassword(false)
+    }
+  }
+
+  async function handleDeleteAccount() {
+    setDeleteError(null)
+    setIsDeleting(true)
+    try {
+      const { error } = await supabase.functions.invoke('delete-account', { body: {} })
+      if (error) throw error
+      await supabase.auth.signOut()
+      void navigate({ to: '/auth' })
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete account')
+      setIsDeleting(false)
     }
   }
 
@@ -202,7 +227,11 @@ export default function AccountSettings({ userId, userEmail }: Props) {
               placeholder="username"
               className="flex-1 min-w-0 text-sm text-text bg-transparent outline-none placeholder:text-text-subtle"
             />
+            {usernameAvailability === 'checking' && <Loader2 size={14} className="text-text-subtle animate-spin flex-shrink-0" />}
+            {usernameAvailability === 'available' && <Check size={14} className="text-accent-mint flex-shrink-0" />}
+            {usernameAvailability === 'taken' && <X size={14} className="text-danger flex-shrink-0" />}
           </div>
+          {usernameAvailability === 'taken' && <p className="text-xs text-danger mt-1">That username is taken.</p>}
         </div>
       </div>
 
@@ -238,7 +267,7 @@ export default function AccountSettings({ userId, userEmail }: Props) {
       <div className="flex items-center gap-3">
         <button
           onClick={() => void handleSave()}
-          disabled={isSaving}
+          disabled={isSaving || usernameAvailability === 'checking' || usernameAvailability === 'taken' || usernameAvailability === 'invalid'}
           className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-medium hover:bg-primary-dark transition-colors disabled:opacity-50"
         >
           {isSaving ? (
@@ -301,6 +330,86 @@ export default function AccountSettings({ userId, userEmail }: Props) {
           </form>
         </div>
       )}
+
+      {/* Danger zone */}
+      <div className="pt-6 border-t border-border">
+        <div className="flex items-center gap-2.5 mb-4">
+          <span className="w-8 h-8 flex items-center justify-center rounded-full bg-danger-tint flex-shrink-0">
+            <AlertTriangle size={14} className="text-danger" />
+          </span>
+          <p className="text-sm font-semibold text-text">Danger zone</p>
+        </div>
+        <div className="rounded-2xl border border-danger/30 bg-danger-tint/40 p-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-text">Delete account</p>
+            <p className="text-xs text-text-subtle mt-0.5">
+              Permanently deletes your profile, messages, and conversation memberships. This cannot be undone.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowDeleteDialog(true)}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-danger text-white text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            <Trash2 size={14} />
+            Delete
+          </button>
+        </div>
+      </div>
+
+      <Dialog.Root
+        open={showDeleteDialog}
+        onOpenChange={(open) => {
+          setShowDeleteDialog(open)
+          if (!open) {
+            setDeleteConfirmText('')
+            setDeleteError(null)
+          }
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-surface rounded-2xl shadow-xl shadow-black/40 border border-border p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-danger-tint flex items-center justify-center">
+                <Trash2 size={20} className="text-danger" />
+              </div>
+              <div>
+                <Dialog.Title className="text-base font-semibold text-text">Delete your account?</Dialog.Title>
+                <Dialog.Description className="mt-1 text-sm text-text-subtle">
+                  This permanently deletes your profile, messages, and memberships across every conversation. This cannot be undone.
+                </Dialog.Description>
+              </div>
+              <div className="w-full text-left">
+                <label htmlFor="delete-confirm" className="block text-xs font-medium text-text-subtle mb-1.5">
+                  Type <span className="font-semibold text-text">DELETE</span> to confirm
+                </label>
+                <input
+                  id="delete-confirm"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  autoComplete="off"
+                  className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text outline-none focus:ring-1 focus:ring-danger/50 focus:border-danger/50 transition"
+                />
+              </div>
+              {deleteError && <p className="text-sm text-danger">{deleteError}</p>}
+              <div className="flex gap-3 w-full mt-1">
+                <Dialog.Close asChild>
+                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium text-text-muted hover:bg-tint transition-colors">
+                    Cancel
+                  </button>
+                </Dialog.Close>
+                <button
+                  onClick={() => void handleDeleteAccount()}
+                  disabled={deleteConfirmText !== 'DELETE' || isDeleting}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-danger hover:opacity-90 text-sm font-medium text-white transition-opacity disabled:opacity-40"
+                >
+                  {isDeleting ? 'Deleting…' : 'Delete account'}
+                </button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }

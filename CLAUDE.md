@@ -4,18 +4,17 @@
 
 ### Platform Context
 
-When the user says **"native"** (or "ios", or "mobile") — work exclusively inside `yaply-native/`. That directory is the React Native/Expo app (TypeScript) and is its own git repo connected to its own GitHub. It is the active client for iOS (and, later, Android) — build/iOS-specific work happens here now. Do not reference or modify files in the web root.
+When the user says **"ios"**, **"swift"**, or **"native"/"mobile"** — work exclusively inside `yaply-ios/`. That directory is the Swift/SwiftUI app and is its own git repo connected to its own GitHub. It is the active client for iOS — build/iOS-specific work happens here now. Do not reference or modify files in the web root.
 
-When the user says **"web"** — work exclusively inside the yaply root folder (this repo). Ignore `yaply-native/` and `yaply-ios/` entirely.
+When the user says **"web"** — work exclusively inside the yaply root folder (this repo). Ignore `yaply-ios/` entirely.
 
-`yaply-ios/` (Swift/SwiftUI) is **deprecated** — superseded by `yaply-native/` (see Sister Projects below for why). Do not add new work there. It's kept around only as a historical reference for its encryption-contract/DB-schema notes until it's formally archived. If the user says "ios" and means the old Swift app specifically, confirm before touching it.
+**`yaply-native/` (React Native/Expo, TypeScript) no longer exists** — as of 2026-08-03 the user reverted course: it has been deleted and `yaply-ios/` (Swift/SwiftUI) is once again the active iOS client, not deprecated. SwiftUI's native look didn't allow the design customizability wanted, which is why React Native was tried, but that path was abandoned. If you see stale references to `yaply-native/` elsewhere in this file or in `yaply-ios/CLAUDE.md`, they describe the old (now-reversed) direction — treat `yaply-ios/` as the current, actively-developed iOS app.
 
-All three (web, yaply-native, legacy yaply-ios) are independent repos: separate git histories, separate GitHub remotes, separate issue trackers. Any reported bug or feature request must be filed against the correct repo — never mix them.
+Web and yaply-ios are independent repos: separate git histories, separate GitHub remotes, separate issue trackers. Any reported bug or feature request must be filed against the correct repo — never mix them.
 
 **GitHub Remotes:**
 - Web: https://github.com/WahidKamruddin/yaply
-- Native (iOS/Android): https://github.com/WahidKamruddin/yaply-native
-- iOS (legacy, deprecated): https://github.com/WahidKamruddin/yaply-ios
+- iOS: https://github.com/WahidKamruddin/yaply-ios
 
 ### GitHub Issues
 
@@ -24,7 +23,7 @@ When the user describes a problem or request, determine which platform(s) it aff
 ### Committing & Pushing
 
 When the user says **"both apps are good"**:
-1. Stage all changed files in each repo separately (`git add` the relevant files in `yaply-native/` and in the web root). `yaply-ios/` is deprecated and no longer part of this workflow unless the user explicitly asks to touch it.
+1. Stage all changed files in each repo separately (`git add` the relevant files in `yaply-ios/` and in the web root).
 2. Propose a commit message following the repo's existing style — conventional commits format: `feat(): …`, `fix(): …`, `refactor(): …`, etc. Generate a message, then ask the user what to change before committing.
 3. **Never include "Co-authored-by: Claude" or any AI attribution in commit messages.**
 4. After the user approves the message, commit and push to `main`. Create a branch only if the user asks; by default push straight to `main` since this is a solo project.
@@ -33,11 +32,15 @@ When the user says **"both apps are good"**:
 
 After every feature is finished and the user confirms it's good, ask: "Want to commit and push?" Then follow the steps above.
 
+### UI Verification
+
+Do not launch the dev server, open a browser, or otherwise check UI changes live — the user reviews all UI changes themselves. Verify with `tsc`/`lint` and code review only, unless the user explicitly asks for a live check.
+
 ---
 
 ## What This Is
 
-yaply is a web-based E2E encrypted messaging application. It is a Progressive Web App (PWA-capable) built with React and backed entirely by Supabase. It lives as the web platform in a monorepo alongside `yaply-native` (React Native/Expo, TypeScript — the active iOS and future Android client) and the deprecated `yaply-ios` (Swift/SwiftUI, kept only as a historical reference). All platforms share one Supabase project.
+yaply is a web-based E2E encrypted messaging application. It is a Progressive Web App (PWA-capable) built with React and backed entirely by Supabase. It lives as the web platform in a monorepo alongside `yaply-ios` (Swift/SwiftUI — the active iOS client). Both platforms share one Supabase project.
 
 ---
 
@@ -152,7 +155,7 @@ E2E here means **text message content is encrypted between a user's active devic
 - **Push previews / reactions leak:** notification content routes through a push provider outside E2E; reactions are stored in plaintext.
 - **Search:** no server-side search over ciphertext; client-side search only covers already-decrypted, loaded messages.
 - **Fan-out scaling:** envelope rows = messages × recipients × devices, bounded only by the 90-day `last_active_at` filter; large groups are heavy on writes/storage.
-- **Cross-platform interop window:** until yaply-native implements the v2 envelope format, mixed web/native conversations can't read each other's v2 messages. (Legacy yaply-ios never completed this and is deprecated.)
+- **Cross-platform interop window:** until yaply-ios implements the v2 envelope format, mixed web/iOS conversations can't read each other's v2 messages.
 - **Browser-E2E trust:** the app *ships the JavaScript that does the crypto*, so whoever controls delivery could exfiltrate keys/plaintext via a malicious update. This is an *active* attack (detectable via open-source/audits) and can't retroactively recover messages sealed to a key that was never captured — but it means "the server can't read it" is not the same as "the operator physically cannot read it."
 
 ### Packages (Monorepo)
@@ -214,6 +217,7 @@ role             text   ('owner' | 'admin' | 'member')
 joined_at        timestamptz
 last_read_at     timestamptz
 muted_until      timestamptz   — null = not muted; future date = muted until then; 8640000000000 ms epoch = muted forever
+request_state    text   ('accepted' | 'pending' | 'declined') default 'accepted' — message requests, see Friends System
 ```
 
 **`messages` table:**
@@ -238,7 +242,9 @@ created_at      timestamptz
 
 **`message_envelopes` table:** `id, message_id (FK → messages ON DELETE CASCADE), recipient_user_id (FK → profiles), recipient_fp (text — JWK x.y of the recipient device key), eph_pub (text — JSON-stringified JWK of the per-message ephemeral public key), key_iv (text — base64 nonce[12]), wrapped_key (text — base64(AES-GCM(KEK, raw 32-byte message key) + tag)), created_at`. UNIQUE(message_id, recipient_user_id, recipient_fp); index (recipient_user_id, message_id). RLS: SELECT for the recipient or the message's sender; INSERT/DELETE for the message's sender only. Migration `00029_multi_device_envelopes.sql`.
 
-**`profiles` table:** id, username, display_name, avatar_url, bio, birthdate (date, nullable — migration `00032_add_profile_birthdate.sql`), public_key, is_online, last_seen_at, created_at, updated_at.
+**`profiles` table:** id, username (`unique` DB constraint — the actual source of truth), display_name, avatar_url, bio, birthdate (date, nullable — migration `00032_add_profile_birthdate.sql`), public_key, is_online, last_seen_at, created_at, updated_at.
+
+**Username uniqueness check (pre-save, both places a username is set):** `src/features/chat/hooks/useUsernameAvailability.ts` debounces a `select id from profiles where username = candidate` (excluding the caller's own id when editing) so the UI can block Save *before* attempting a write, rather than only reacting to the Postgres `23505` unique-violation after a failed insert/update. Both call sites still catch `23505` on the actual write as a last-resort guard against a race between the check and the save — the DB constraint remains the real enforcement, the live check is UX. Used by `UsernameSetupModal.tsx` (first-login username prompt) and `AccountSettings.tsx` (Settings → Account username field).
 
 **`devices` table:** user_id, device_id (int), identity_key (text — JSON-stringified JWK public key), key_fingerprint (text — JWK `x.y`, matches `message_envelopes.recipient_fp`), signed_prekey, device_name, push_subscription, last_active_at, created_at. UNIQUE(user_id, device_id); index (user_id, key_fingerprint). **One row per install** — each browser/device generates its own random `device_id` (stored locally as `deviceId:<userId>` in IndexedDB) and upserts only that row. Never hard-code `device_id = 1`: that was the single-slot bug where every login overwrote the one published key and orphaned history. RLS: owner can manage own rows; any authenticated user can read (needed to encrypt to a peer's devices). Codified in `00027_create_devices.sql`; `key_fingerprint` added in `00029_multi_device_envelopes.sql`.
 
@@ -264,9 +270,42 @@ created_at      timestamptz
 
 **FK cascade note:** `albums.event_id`, `notes.event_id`, `budgets.event_id` → `ON DELETE SET NULL` (migration 00021). Deleting an event detaches linked albums/notes/budgets rather than cascading their deletion.
 
+**Account deletion FK cascade note:** every FK referencing `profiles(id)` is `ON DELETE CASCADE` except `conversations.created_by` and `messages.sender_id`, which are `ON DELETE SET NULL` (a departed creator's conversation stays around for remaining members; a departed sender's messages stay visible, attributed to no one) — migration `00031_fix_profile_delete_fk_actions.sql` closed the last gaps (`conversations.created_by`, `events.created_by`, `polls.created_by`, `message_receipts.user_id` previously had no `ON DELETE` action and would have thrown a foreign key violation on account deletion). `profiles.id` itself is `ON DELETE CASCADE` off `auth.users.id`, so deleting the `auth.users` row (only done by the `delete-account` Edge Function, see Supabase Edge Functions below) is what triggers the entire cascade.
+
+**`friendships` table:** `id, requester_id (FK → profiles), recipient_id (FK → profiles), status ('pending' | 'accepted'), created_at, updated_at`. **One row per pair**, direction preserved so incoming and outgoing requests are distinguishable. A duplicate in either direction is impossible via the functional unique index `friendships_pair_uq on (least(requester_id, recipient_id), greatest(...))`. There is deliberately **no `declined` status** — decline, cancel and unfriend all DELETE the row so a later re-request stays possible; blocking is the permanent tool. RLS: participants can SELECT and DELETE; **no INSERT/UPDATE policy at all** — those carry invariants and go through RPCs. In the `supabase_realtime` publication. Migration `00033_friends_system.sql`.
+
+**`user_blocks` table:** `blocker_id, blocked_id, created_at`, PK (blocker_id, blocked_id). Directed. RLS restricts SELECT/INSERT/DELETE to `blocker_id = auth.uid()`, so **the blocked user can never see the row** — they get no signal, their sends simply fail.
+
 **Key RPCs:**
-- `find_or_create_direct_conversation(target_user_id uuid)` — finds or creates a direct DM, inserts both members correctly. Security definer. Always use this instead of manual inserts for direct chats.
-- `send_message_with_envelopes(p_conversation_id, p_content, p_iv, p_envelopes jsonb, p_type, p_reply_to_id, p_thread_id, p_media_url, p_media_mime)` — inserts an `enc_v = 2` message **and** all its `message_envelopes` rows in one transaction. Security definer; validates conversation membership and **rejects an empty envelope array or a NULL iv**, so a v2 message can never exist without envelopes. Always use this for encrypted sends; the plain `messages` insert is only for phase-1/system/media rows.
+- `find_or_create_direct_conversation(target_user_id uuid)` — finds or creates a direct DM, inserts both members correctly. Security definer. Always use this instead of manual inserts for direct chats. Raises `blocked` if either party blocked the other, and `cannot message yourself`. On create the recipient's `request_state` is `'accepted'` if the pair are friends, else `'pending'` (a message request). If the caller had previously declined an existing thread, reaching this RPC is an explicit intent to talk and resets **their own** side to `'accepted'`.
+- `send_message_with_envelopes(p_conversation_id, p_content, p_iv, p_envelopes jsonb, p_type, p_reply_to_id, p_thread_id, p_media_url, p_media_mime)` — inserts an `enc_v = 2` message **and** all its `message_envelopes` rows in one transaction. Security definer; **rejects an empty envelope array or a NULL iv**, so a v2 message can never exist without envelopes. Gates on `can_send_in_conversation()` (raises `cannot send in this conversation`). Always use this for encrypted sends; the plain `messages` insert is only for phase-1/system/media rows.
+- `create_group_conversation(p_name, p_member_ids)` / `add_group_member(p_conversation_id, p_user_id)` — both raise `can only add friends to groups` for a non-friend.
+- `send_friend_request(p_recipient_id)` / `accept_friend_request(p_request_id)` / `block_user(p_user_id)` — the only write paths into `friendships`. `send_friend_request` auto-accepts when a reverse pending request already exists, and raises `friend request already exists` / `blocked` / `cannot friend yourself`. `block_user` inserts the block **and** deletes any friendship atomically.
+- `get_relationships(p_user_ids uuid[])` → `(user_id, status, request_id, mutual_friends)` where status ∈ `none | pending_out | pending_in | friends | blocked | blocked_by`. **Batched — always resolve a whole list in one call**, never per row.
+- `search_users(p_query)` — matches username **or** display_name and excludes anyone blocked in either direction. Use instead of querying `profiles` directly (see the Friends System note below).
+- `get_friend_suggestions(p_limit)` — "People You May Know": friends-of-friends by mutual count merged with shared-group co-members, excluding self, existing friends/requests, and blocks.
+
+**Helper functions (security definer, used by both RLS policies and RPC bodies):** `are_friends(a,b)`, `is_blocked_between(a,b)`, `mutual_friend_count(a,b)`, `can_send_in_conversation(user, conversation)`. Per migration 00028's recursion lesson, a policy on table T may never contain an `EXISTS` over T itself — route every cross-table check through one of these. `sync_direct_request_state(a,b)` is **revoked from `anon`/`authenticated`**: it takes both user ids and has no `auth.uid()` guard, so exposing it over PostgREST would let anyone accept a message request on someone else's behalf; only the security-definer callers reach it.
+
+### Friends System (migration 00033)
+
+Two separate consent mechanisms that are easy to conflate — they are not the same thing:
+
+- **Friend requests** (`friendships`) — a social relationship. Needed to be added to a group; drives the friends list, suggestions and mutual counts.
+- **Message requests** (`conversation_members.request_state`) — permission to talk. A DM from a **non-friend** arrives with the recipient's own member row set to `'pending'`: they can read it but **cannot reply until they accept**. Accepting a message request does **not** create a friendship — it only opens the thread. Friends skip this entirely and chat immediately.
+
+`request_state` semantics (per-member, asymmetric):
+- `'accepted'` — normal. The default, so every pre-existing row and every group membership is unaffected.
+- `'pending'` — this member may read but not send. Excluded from the unread count and from in-app notification banners; shown in the sidebar's "Message requests" section.
+- `'declined'` — hidden from the list, and `can_send_in_conversation` returns false for **everyone** in the conversation, so the sender cannot keep messaging into a wall. The declining user can reopen their own side by explicitly starting the chat again (which routes through `find_or_create_direct_conversation`).
+
+**Declining must never delete the membership row** — `trg_delete_empty_conversation` (below) would take the entire conversation and its messages with it. It is always a `request_state` UPDATE.
+
+**Block semantics (v1):** sends are blocked in both directions, new DM creation raises `blocked`, any friendship is deleted, and the blocked user is hidden from the blocker's search results and suggestions. History is not deleted. The blocked party sees no indication — the block row is invisible to them and their send simply fails, which the client renders as "You can't message this person right now."
+
+**Why `profiles` RLS was left as `using (true)`:** tightening it to hide blocked users would silently null out the nested `profiles(...)` joins that `fetchConversations`, message senders and the encryption device lookups all depend on. Block-hiding therefore lives in `search_users` plus client-side filtering. **Known, accepted limitation:** a blocked user can still read the blocker's profile row directly.
+
+**All gating is server-side.** Both conversation-creating RPCs are `SECURITY DEFINER` and bypass RLS, so a client-side check is decorative — and iOS shares this backend. Add rules to the RPC body and/or an RLS policy, never to the client. (Migration 00033 also fixed the `messages` INSERT policy, whose membership subquery compared `cm.conversation_id = cm.conversation_id` and was consequently always true.)
 
 **Postgres trigger — orphan conversation cleanup:**
 `trg_delete_empty_conversation` (AFTER DELETE on `conversation_members`, FOR EACH ROW) — calls `delete_conversation_if_empty()` which deletes the `conversations` row if no members remain. This means deleting your membership from a DM where the other user already left cascades to deleting all messages and the conversation itself. Migration: `delete_conversation_if_empty`.
@@ -279,7 +318,7 @@ created_at      timestamptz
 
 | Feature | Files |
 |---------|-------|
-| Auth (sign in / sign up) | `src/routes/auth.tsx`, `src/lib/auth.ts` |
+| Auth (sign in / sign up) | `src/routes/auth.tsx`, `src/lib/auth.ts`, `src/lib/passwordStrength.ts` — signup requires a password meeting all 5 checks (8+ chars, upper, lower, number, symbol) shown live via a strength meter + checklist (`isPasswordStrongEnough` gates the submit button); password/confirm-password fields have a show/hide toggle. Email/password signups require clicking an emailed confirmation link before `signInWithPassword` succeeds — Google OAuth accounts are exempt since Google already verifies the address. **This is enforced by the Supabase project's "Confirm email" toggle (Dashboard → Authentication → Sign In / Providers → Email), not by app code** — no migration/RLS/Edge Function can set it, only the Dashboard or the Management API with a personal access token. The client handles an unconfirmed-login attempt by surfacing a "Resend confirmation email" action (`supabase.auth.resend({ type: 'signup', email })`). |
 | Conversation list | `src/features/chat/components/ConversationList.tsx`, `src/features/chat/hooks/useConversations.ts` |
 | Direct messaging | `src/features/chat/components/ChatView.tsx` |
 | Group conversations | `createGroupConversation` in `src/features/chat/api/conversations.ts` |
@@ -311,8 +350,11 @@ created_at      timestamptz
 | **System message hyperlinks** (tier 4) | `MessageBubble.tsx` — system messages show inline "Open {Tab} →" button that opens sidebar at the relevant tab. 1-week auto-destruct: `deleted_at = now + 7d` at insert. Expired system messages are hidden silently. |
 | **Command cache invalidation** (tier 4) | `CommandProvider.tsx` threads `QueryClient` through `CommandContext`; `CommandModal.tsx` invalidates the right query key after insert; `/remind` invalidates `['reminders']`. Fixes sidebar not updating after slash command creation. |
 | **Delete confirmations** (tier 4) | All list views (TaskList, NoteList, AlbumList, BudgetList, EventList, ReminderList) use Radix Dialog for destructive confirmations before deletes. |
-| **Settings page** (tier 5) | `src/routes/settings.tsx` — full replacement for the old `ProfileModal` popup. Tabs: Account (name, unique username, avatar upload to `avatars` bucket, bio, birthdate, email-auth-only password change), Billing/Privacy Policy/Terms of Service/Help (placeholders), Report a Problem (emails the developer via the `report-problem` Edge Function, see below). `src/features/settings/components/`. |
+| **Settings page** (tier 5) | `src/routes/settings.tsx` — full replacement for the old `ProfileModal` popup. Tabs: Account (name, unique username, avatar upload to `avatars` bucket, bio, birthdate, email-auth-only password change, danger-zone account deletion via the `delete-account` Edge Function), Billing/Privacy Policy/Terms of Service (sample content), Help (FAQ accordion), Report a Problem (known-issues list + a form that emails the developer via the `report-problem` Edge Function, see below). `src/features/settings/components/`. |
 | Shared `Avatar` component | `src/components/Avatar.tsx` — single source of truth for avatar rendering app-wide; shows the real photo or a neutral person-silhouette placeholder (never initials) when `avatar_url` is null. |
+| **Friends system** (tier 6) | `src/routes/friends.tsx` (`/friends` — tabs: Friends, Requests, Sent, Discover, Blocked, plus a people search that takes over the panel), `src/features/friends/` (`api/friends.ts`, `hooks/useFriends.ts`, components incl. `ProfileModal`, `FriendActionButton`, `MessageRequestBar`, `UserRow`, `ConfirmDialog`). DB: `friendships`, `user_blocks`, `conversation_members.request_state` (migration 00033). Entry point: Users icon + pending badge in the `ConversationList` header. |
+| **User profile view** | `src/features/friends/components/ProfileModal.tsx` — the app's only profile card, opened from the `ChatView` header avatar and every friends list. Shows public profile fields only (never email/account data). |
+| **Message requests** | Non-friend DMs land in the "Message requests" section of `ConversationList`; `ChatView` swaps `MessageInput` for `MessageRequestBar` (Accept / Decline / Block) while `requestState === 'pending'`. |
 
 ### Not yet integrated
 
@@ -324,13 +366,11 @@ created_at      timestamptz
 
 ---
 
-## Cross-Platform Implementation Reference (iOS / Android)
+## Cross-Platform Implementation Reference (iOS)
 
-Web is the reference implementation; all platforms share one Supabase project and
+Web is the reference implementation; both platforms share one Supabase project and
 the same schema (see **Database Schema** and **Feature Map** above). Per-feature
-native how-to lives in `yaply-native/CLAUDE.md` — do not duplicate it here.
-(`yaply-ios/CLAUDE.md` still documents the same contracts accurately since the
-backend hasn't changed, but is otherwise deprecated — see Sister Projects.) Only
+iOS how-to lives in `yaply-ios/CLAUDE.md` — do not duplicate it here. Only
 cross-platform **contracts** that must match byte-for-byte or behave identically
 belong in this repo:
 
@@ -373,6 +413,25 @@ belong in this repo:
   `content = base64(TextEncoder(text))`), rendered as centered grey text (no
   bubble, no sender). System messages auto-destruct after 1 week
   (`deleted_at = now + 7d`); expired ones are hidden silently.
+- **Friends & message requests (not yet on iOS)** — see the Friends System
+  section above for full semantics. The contract iOS must honour:
+  - Never write `friendships` or `user_blocks` directly for create/accept/block.
+    Use `send_friend_request` / `accept_friend_request` / `block_user`; there is
+    no INSERT or UPDATE RLS policy, so a direct write silently fails. Decline,
+    cancel and unfriend are all a plain `DELETE` on the `friendships` row.
+  - Resolve relationship state with the **batched** `get_relationships(uuid[])`,
+    never one call per user, and render the same six states everywhere a person
+    appears (`none | pending_out | pending_in | friends | blocked | blocked_by`).
+    `blocked_by` must be indistinguishable from `none` in the UI.
+  - Use `search_users(p_query)` for people search — querying `profiles` directly
+    skips the block filter.
+  - Honour `conversation_members.request_state`: hide `'declined'`, put
+    `'pending'` in a separate Message requests section, disable the composer
+    there, and exclude both from unread counts and notification banners.
+    Accepting/declining is an UPDATE of **your own** member row — never a DELETE.
+  - Expect these RPC errors and map them to human text rather than surfacing
+    raw: `blocked`, `cannot send in this conversation`,
+    `can only add friends to groups`, `friend request already exists`.
 - **Stickers / media are not encrypted** — `media_url` is a public Storage URL;
   render directly, no decryption.
 - **Splitwise** — REST API `https://secure.splitwise.com/api/v3.0/`, OAuth2 client
@@ -422,7 +481,7 @@ yaply/
 │       ├── types.ts               # Canonical type definitions (aspirational schema)
 │       └── constants/             # Command definitions, app constants
 └── supabase/
-    ├── functions/                 # Edge Functions (server secrets) — report-problem (see Environment Variables)
+    ├── functions/                 # Edge Functions (server secrets) — report-problem, delete-account (see Environment Variables)
     └── migrations/                # NOT all applied to live DB (see discrepancy note above)
 ```
 
@@ -446,6 +505,7 @@ When `VITE_DEV_BYPASS_AUTH=true`, all auth calls return a hardcoded dev user (`d
 `supabase/functions/` holds server-side functions deployed separately from the client build (`supabase functions deploy <name>`), for logic that needs a secret the client must never see.
 
 - **`report-problem`** — relays the Settings → Report a Problem form to the developer's email via [Resend](https://resend.com), so that address never appears in client code. Requires the secret `RESEND_API_KEY` (`supabase secrets set RESEND_API_KEY=...`) — **not** a `VITE_*` client env var, and not in `.env.example`. Sends from Resend's shared `onboarding@resend.dev` test address unless/until a verified sending domain is configured.
+- **`delete-account`** — permanently deletes the caller's own account (Settings → Account → Danger zone, confirmed via a "type delete to confirm" dialog). Client-side code cannot delete an `auth.users` row directly — only the service role can — so the function identifies the caller from **their own JWT** (`auth.getUser()` on a client built with the forwarded `Authorization` header) and never accepts a user id from the request body, which is what guarantees a caller can only ever delete their own account, not someone else's. It then uses a **separate** service-role client (`SUPABASE_SERVICE_ROLE_KEY`, auto-provided to every Edge Function — not a secret you set yourself) to best-effort remove the user's `avatars` storage objects and call `auth.admin.deleteUser(userId)`. Deleting the `auth.users` row cascades through `profiles` (`profiles_id_fkey ... on delete cascade`) and from there through every other table via the `profiles(id)`-referencing FKs — see the FK cascade note below; this is why `profiles` intentionally has **no DELETE RLS policy** (only `SELECT`/`UPDATE`) — row deletion is never exposed to PostgREST/the client directly, it only ever happens as a cascade side effect of the admin API call.
 
 ---
 
@@ -474,7 +534,7 @@ The dev server is also accessible via Netlify Dev at port 8888 (configured in `n
 
 **Real-time via Supabase channels:** Instead of parsing the Realtime payload (which contains the raw encrypted DB row), `useRealtimeMessages` uses the channel event as a trigger to invalidate and re-fetch via TanStack Query. This avoids having to maintain duplicate decryption logic in the realtime handler.
 
-**Monorepo for cross-platform parity:** `packages/crypto` documents the encryption contract. `packages/shared/types.ts` documents the intended canonical schema. Even though the iOS/Android apps will use different crypto libraries (CryptoKit, BouncyCastle), they must reproduce the same wire format. These packages are the specification, not just the web implementation.
+**Monorepo for cross-platform parity:** `packages/crypto` documents the encryption contract. `packages/shared/types.ts` documents the intended canonical schema. Even though yaply-ios uses a different crypto library (CryptoKit), it must reproduce the same wire format. These packages are the specification, not just the web implementation.
 
 ---
 
@@ -483,9 +543,8 @@ The dev server is also accessible via Netlify Dev at port 8888 (configured in `n
 | Directory | Platform | GitHub | Status |
 |-----------|----------|--------|--------|
 | `.` (root) | Web (React + Supabase) | https://github.com/WahidKamruddin/yaply | Active |
-| `yaply-native/` | iOS + (future) Android — React Native/Expo, TypeScript | https://github.com/WahidKamruddin/yaply-native | Active — the client for iOS and Android going forward. Own GitHub repo, gitignored here. |
-| `yaply-ios/` | iOS (Swift + SwiftUI) | https://github.com/WahidKamruddin/yaply-ios | **Deprecated** — superseded by `yaply-native/`. SwiftUI's native look didn't allow the design customizability wanted (a Meta Messenger–esque UI); React Native was chosen instead so one codebase can eventually cover iOS and Android. No new feature work happens here. Kept as a historical reference for its encryption wire-format v2 and DB schema notes until formally archived — do not treat its SwiftUI implementation patterns or its `Known Issues to Fix` list as applicable to `yaply-native/`. |
+| `yaply-ios/` | iOS (Swift + SwiftUI) | https://github.com/WahidKamruddin/yaply-ios | **Active** — the client for iOS. A React Native rewrite (`yaply-native/`) was tried and abandoned as of 2026-08-03 — SwiftUI's native look didn't give the design customizability wanted (a Meta Messenger–esque UI), and rather than persist with React Native the user reverted to this Swift app and deleted `yaply-native/` entirely. If you encounter any documentation elsewhere describing `yaply-ios` as deprecated or `yaply-native` as the active client, it is stale — this table is the current source of truth. |
 
-The web repo's `.gitignore` excludes `yaply-native/`, `yaply-ios/`, and `yaply-android/` since each has (or will have) its own GitHub repository. The monorepo root exists so Claude Code can cross-reference all platforms in the same working directory.
+The web repo's `.gitignore` excludes `yaply-ios/` and `yaply-android/` (not yet started) since each has (or will have) its own GitHub repository. The monorepo root exists so Claude Code can cross-reference both platforms in the same working directory.
 
-`yaply-native/CLAUDE.md` contains its architecture notes and design direction. `yaply-ios/CLAUDE.md` still documents the encryption/schema contract accurately (the backend hasn't changed) but its UI architecture is no longer the target to build against. Any change to the encryption wire format or database schema **must be reflected in all active platform CLAUDE.md files** (web and yaply-native) and implemented consistently across both.
+`yaply-ios/CLAUDE.md` contains its architecture notes and design direction. Any change to the encryption wire format or database schema **must be reflected in both active platform CLAUDE.md files** (web and yaply-ios) and implemented consistently across both.

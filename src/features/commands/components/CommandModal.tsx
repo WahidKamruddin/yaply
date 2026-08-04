@@ -191,13 +191,13 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
-      <div className="bg-white border border-[#dce7f8] rounded-2xl shadow-2xl shadow-[#dce7f8]/60 w-full max-w-md mx-4 max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#dce7f8] flex-shrink-0">
-          <h2 className="text-base font-semibold text-[#1a2744] flex items-center gap-2">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl shadow-black/40 w-full max-w-md mx-4 max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
+          <h2 className="text-base font-semibold text-text flex items-center gap-2">
             {icons[type]}
             {type === 'plan' ? 'New Plan' : type.charAt(0).toUpperCase() + type.slice(1)}
           </h2>
-          <button onClick={onClose} className="text-[#9ab0cc] hover:text-[#1a2744] transition-colors">
+          <button onClick={onClose} className="text-text-subtle hover:text-text transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -211,7 +211,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
               placeholder={type === 'plan' ? 'Plan name' : type === 'event' ? 'Event name' : 'Title'}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+              className="w-full px-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
             />
           )}
 
@@ -222,7 +222,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              className="w-full px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40 resize-none"
+              className="w-full px-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40 resize-none"
             />
           )}
 
@@ -230,7 +230,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
           {type === 'event' && (
             <LocalizationProvider dateAdapter={AdapterDateFns}>
               <div>
-                <label className="text-xs text-[#9ab0cc] mb-1.5 block">Date & time *</label>
+                <label className="text-xs text-text-subtle mb-1.5 block">Date & time *</label>
                 <div className="flex gap-2">
                   <DatePicker
                     value={eventDate}
@@ -240,10 +240,10 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
                         size: 'small',
                         fullWidth: true,
                         sx: {
-                          '& .MuiInputBase-root': { fontSize: '0.875rem', borderRadius: '8px', color: '#1a2744', backgroundColor: '#f3f7ff' },
-                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#dce7f8' },
-                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
-                          '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
+                          '& .MuiInputBase-root': { fontSize: '0.875rem', borderRadius: '8px', color: 'var(--ink)', backgroundColor: 'var(--tint)' },
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--border)' },
+                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--primary)' },
+                          '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--primary)' },
                         },
                       },
                     }}
@@ -256,10 +256,10 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
                         size: 'small',
                         sx: {
                           width: 140,
-                          '& .MuiInputBase-root': { fontSize: '0.875rem', borderRadius: '8px', color: '#1a2744', backgroundColor: '#f3f7ff' },
-                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#dce7f8' },
-                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
-                          '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#5b8def' },
+                          '& .MuiInputBase-root': { fontSize: '0.875rem', borderRadius: '8px', color: 'var(--ink)', backgroundColor: 'var(--tint)' },
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--border)' },
+                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--primary)' },
+                          '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--primary)' },
                         },
                       },
                     }}
@@ -270,12 +270,12 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
           )}
           {type === 'task' && (
             <div>
-              <label className="text-xs text-[#9ab0cc] mb-1 block">Due date (optional)</label>
+              <label className="text-xs text-text-subtle mb-1 block">Due date (optional)</label>
               <input
                 type="datetime-local"
                 value={dueAt}
                 onChange={(e) => setDueAt(e.target.value)}
-                className="w-full px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+                className="w-full px-3 py-2 bg-tint rounded-lg text-sm text-text outline-none focus:ring-1 focus:ring-[#5b8def]/40"
               />
             </div>
           )}
@@ -287,7 +287,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
               placeholder="Location (optional)"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              className="w-full px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+              className="w-full px-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
             />
           )}
 
@@ -301,7 +301,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
               onChange={(e) => setAmount(e.target.value)}
               min="0.01"
               step="0.01"
-              className="w-full px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+              className="w-full px-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
             />
           )}
 
@@ -315,10 +315,10 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
                     placeholder={`Option ${i + 1}`}
                     value={opt}
                     onChange={(e) => setPollOptions((prev) => prev.map((o, j) => (j === i ? e.target.value : o)))}
-                    className="flex-1 px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] placeholder:text-[#9ab0cc] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+                    className="flex-1 px-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
                   />
                   {pollOptions.length > 2 && (
-                    <button type="button" onClick={() => setPollOptions((prev) => prev.filter((_, j) => j !== i))} className="text-[#9ab0cc] hover:text-red-400">
+                    <button type="button" onClick={() => setPollOptions((prev) => prev.filter((_, j) => j !== i))} className="text-text-subtle hover:text-red-400">
                       <X size={16} />
                     </button>
                   )}
@@ -332,14 +332,14 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
 
           {/* Album: photo picker */}
           {type === 'album' && (
-            <div className="border border-[#dce7f8] rounded-xl overflow-hidden">
+            <div className="border border-border rounded-xl overflow-hidden">
               {/* Tab bar */}
-              <div className="flex border-b border-[#dce7f8]">
+              <div className="flex border-b border-border">
                 <button
                   type="button"
                   onClick={() => setPhotoTab('chat')}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
-                    photoTab === 'chat' ? 'bg-[#edf3ff] text-[#5b8def]' : 'text-[#9ab0cc] hover:text-[#6b84ab]'
+                    photoTab === 'chat' ? 'bg-primary-tint text-[#5b8def]' : 'text-text-subtle hover:text-text-muted'
                   }`}
                 >
                   <MessageSquare size={12} /> From chat
@@ -353,7 +353,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
                   type="button"
                   onClick={() => setPhotoTab('device')}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
-                    photoTab === 'device' ? 'bg-[#edf3ff] text-[#5b8def]' : 'text-[#9ab0cc] hover:text-[#6b84ab]'
+                    photoTab === 'device' ? 'bg-primary-tint text-[#5b8def]' : 'text-text-subtle hover:text-text-muted'
                   }`}
                 >
                   <Upload size={12} /> From device
@@ -369,7 +369,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
               {photoTab === 'chat' && (
                 <div className="p-2">
                   {chatImages.length === 0 ? (
-                    <p className="text-xs text-[#9ab0cc] text-center py-4">No images in this conversation yet.</p>
+                    <p className="text-xs text-text-subtle text-center py-4">No images in this conversation yet.</p>
                   ) : (
                     <div className="grid grid-cols-4 gap-1 max-h-48 overflow-y-auto">
                       {chatImages.map((img) => {
@@ -413,7 +413,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full py-3 border-2 border-dashed border-[#dce7f8] rounded-lg text-xs text-[#9ab0cc] hover:border-[#5b8def]/50 hover:text-[#5b8def] transition-colors flex items-center justify-center gap-2"
+                    className="w-full py-3 border-2 border-dashed border-border rounded-lg text-xs text-text-subtle hover:border-[#5b8def]/50 hover:text-[#5b8def] transition-colors flex items-center justify-center gap-2"
                   >
                     <Upload size={14} /> Choose photos
                   </button>
@@ -441,11 +441,11 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
           {/* Link to event — for album, note, budget */}
           {LINKABLE.includes(type) && existingEvents.length > 0 && (
             <div>
-              <label className="text-xs text-[#9ab0cc] mb-1 block">Link to event (optional)</label>
+              <label className="text-xs text-text-subtle mb-1 block">Link to event (optional)</label>
               <select
                 value={eventId}
                 onChange={(e) => setEventId(e.target.value)}
-                className="w-full px-3 py-2 bg-[#f3f7ff] rounded-lg text-sm text-[#1a2744] outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+                className="w-full px-3 py-2 bg-tint rounded-lg text-sm text-text outline-none focus:ring-1 focus:ring-[#5b8def]/40"
               >
                 <option value="">None</option>
                 {existingEvents.map((ev) => (
@@ -456,7 +456,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
           )}
 
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[#6b84ab] hover:text-[#1a2744] transition-colors">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-text-muted hover:text-text transition-colors">
               Cancel
             </button>
             <button

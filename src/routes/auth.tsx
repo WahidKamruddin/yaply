@@ -1,8 +1,10 @@
 import { createFileRoute, redirect, useNavigate, Link } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Eye, EyeOff, Check, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getSession } from '@/lib/auth'
 import YaplyLogo from '@/components/YaplyLogo'
+import { getPasswordChecks, getPasswordStrength, isPasswordStrongEnough } from '@/lib/passwordStrength'
 
 export const Route = createFileRoute('/auth')({
   beforeLoad: async () => {
@@ -25,15 +27,23 @@ function AuthPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
-  const [light, setLight] = useState(false)
-
-  // Theme: same 'yaply-theme' key as the landing page, so the choice carries over.
-  useEffect(() => {
+  // Lazy initializer so the first client render already has the right theme
+  // (no flash correcting from the wrong default a tick later).
+  const [light, setLight] = useState(() => {
+    if (typeof document === 'undefined') return false
     const saved = localStorage.getItem('yaply-theme')
-    if (saved === 'light') setLight(true)
-    else if (saved === 'dark') setLight(false)
-    else setLight(window.matchMedia('(prefers-color-scheme: light)').matches)
-  }, [])
+    if (saved === 'light') return true
+    if (saved === 'dark') return false
+    return window.matchMedia('(prefers-color-scheme: light)').matches
+  })
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null)
+  const [resending, setResending] = useState(false)
+
+  const passwordChecks = getPasswordChecks(password)
+  const { strength } = getPasswordStrength(password)
+
   useEffect(() => {
     rootRef.current?.classList.toggle('lp-light', light)
   }, [light])
@@ -73,27 +83,61 @@ function AuthPage() {
     e.preventDefault()
     setError(null)
     setInfo(null)
+    setUnconfirmedEmail(null)
     setLoading(true)
 
     try {
       if (mode === 'signup') {
+        if (!isPasswordStrongEnough(password)) {
+          setError('Your password doesn\'t meet all the requirements below.')
+          return
+        }
         if (password !== confirmPassword) {
           setError('Passwords do not match.')
           return
         }
-        const { error: signUpError } = await supabase.auth.signUp({ email, password })
+        const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
         if (signUpError) throw signUpError
-        setInfo('Check your email to confirm your account, then sign in.')
+        // A confirmed session with no confirmation step means "Confirm email"
+        // is off for this project (or the address is already verified) — in
+        // that case the account is usable immediately.
+        if (data.session) {
+          await navigate({ to: '/chat' })
+          return
+        }
+        setInfo('Check your inbox to confirm your email before signing in.')
         setMode('signin')
+        setPassword('')
+        setConfirmPassword('')
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-        if (signInError) throw signInError
+        if (signInError) {
+          if (signInError.message.toLowerCase().includes('email not confirmed')) {
+            setUnconfirmedEmail(email)
+          }
+          throw signInError
+        }
         await navigate({ to: '/chat' })
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleResendConfirmation() {
+    if (!unconfirmedEmail) return
+    setResending(true)
+    setError(null)
+    try {
+      const { error: resendError } = await supabase.auth.resend({ type: 'signup', email: unconfirmedEmail })
+      if (resendError) throw resendError
+      setInfo('Confirmation email resent — check your inbox.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resend confirmation email')
+    } finally {
+      setResending(false)
     }
   }
 
@@ -153,7 +197,7 @@ function AuthPage() {
                   role="tab"
                   aria-selected={mode === m}
                   className={mode === m ? 'lp-seg-on' : ''}
-                  onClick={() => { setMode(m); setError(null); setInfo(null); setConfirmPassword('') }}
+                  onClick={() => { setMode(m); setError(null); setInfo(null); setConfirmPassword(''); setUnconfirmedEmail(null) }}
                 >
                   {m === 'signin' ? 'Sign in' : 'Sign up'}
                 </button>
@@ -176,38 +220,93 @@ function AuthPage() {
 
               <div className="auth-field">
                 <label htmlFor="password">Password</label>
-                <input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                />
+                <div className="auth-input-wrap">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={mode === 'signup' ? 8 : 1}
+                    autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                  />
+                  <button
+                    type="button"
+                    className="auth-visibility-btn"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
+
+              {mode === 'signup' && password.length > 0 && (
+                <div className="auth-strength">
+                  <div className={`auth-strength-bar auth-strength-${strength}`}>
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <ul className="auth-strength-checks">
+                    {passwordChecks.map((c) => (
+                      <li key={c.key} className={c.met ? 'auth-check-met' : ''}>
+                        {c.met ? <Check size={11} /> : <X size={11} />}
+                        {c.label}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {mode === 'signup' && (
                 <div className="auth-field">
                   <label htmlFor="confirm-password">Confirm password</label>
-                  <input
-                    id="confirm-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                    minLength={6}
-                    autoComplete="new-password"
-                  />
+                  <div className="auth-input-wrap">
+                    <input
+                      id="confirm-password"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      className="auth-visibility-btn"
+                      onClick={() => setShowConfirmPassword((v) => !v)}
+                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                      tabIndex={-1}
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
               )}
 
               {error && <p className="auth-banner auth-error">{error}</p>}
               {info && <p className="auth-banner auth-info">{info}</p>}
+              {unconfirmedEmail && (
+                <button
+                  type="button"
+                  onClick={() => void handleResendConfirmation()}
+                  disabled={resending}
+                  className="auth-resend-btn"
+                >
+                  {resending ? 'Resending…' : 'Resend confirmation email'}
+                </button>
+              )}
 
-              <button type="submit" disabled={loading} className="lp-btn-primary auth-submit">
+              <button
+                type="submit"
+                disabled={loading || (mode === 'signup' && (!isPasswordStrongEnough(password) || password !== confirmPassword))}
+                className="lp-btn-primary auth-submit"
+              >
                 {loading
                   ? mode === 'signin' ? 'Signing in…' : 'Creating account…'
                   : mode === 'signin' ? 'Sign in' : 'Create account'}
@@ -500,10 +599,42 @@ const AUTH_CSS = `
   box-shadow: 0 0 0 3px rgba(91,141,239,0.15);
 }
 
+.auth-input-wrap { position: relative; display: flex; }
+.auth-input-wrap input { padding-right: 42px; }
+.auth-visibility-btn {
+  position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+  width: 30px; height: 30px; border-radius: 8px; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--faint);
+  transition: color 0.2s, background 0.2s;
+}
+.auth-visibility-btn:hover { color: var(--ink); background: var(--tint); }
+
+.auth-strength { display: flex; flex-direction: column; gap: 8px; margin-top: -4px; }
+.auth-strength-bar { display: flex; gap: 4px; }
+.auth-strength-bar span { flex: 1; height: 4px; border-radius: 999px; background: var(--tint); transition: background 0.25s; }
+.auth-strength-weak span:nth-child(1) { background: #ff6b6b; }
+.auth-strength-fair span:nth-child(1), .auth-strength-fair span:nth-child(2) { background: #ffb54a; }
+.auth-strength-good span:nth-child(1), .auth-strength-good span:nth-child(2), .auth-strength-good span:nth-child(3) { background: var(--blue); }
+.auth-strength-strong span { background: var(--mint); }
+.auth-strength-checks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 5px 10px; }
+.auth-strength-checks li {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11.5px; color: var(--faint);
+  transition: color 0.2s;
+}
+.auth-strength-checks li.auth-check-met { color: var(--mint); }
+
 .auth-banner { margin: 0; border-radius: 12px; padding: 10px 13px; font-size: 13px; line-height: 1.5; }
 .auth-error { background: rgba(255,99,99,0.1); border: 1px solid rgba(255,99,99,0.28); color: #ff9b9b; }
 .lp-light .auth-error { background: rgba(220,38,38,0.07); border: 1px solid rgba(220,38,38,0.22); color: #c22; }
 .auth-info { background: var(--mint-soft); border: 1px solid var(--mint-line); color: var(--mint); }
+
+.auth-resend-btn {
+  align-self: flex-start; background: none; border: none; cursor: pointer; padding: 0;
+  font-size: 13px; font-weight: 600; color: var(--blue); text-decoration: underline; text-underline-offset: 2px;
+}
+.auth-resend-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .auth-submit { width: 100%; margin-top: 4px; }
 

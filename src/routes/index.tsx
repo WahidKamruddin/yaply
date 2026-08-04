@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import YaplyLogo from '@/components/YaplyLogo'
+import { HeartHandshake } from 'lucide-react'
 
 export const Route = createFileRoute('/')({
   component: LandingPage,
@@ -749,7 +750,17 @@ const STEPS = [
 
 function LandingPage() {
   const rootRef = useRef<HTMLDivElement>(null)
-  const [light, setLight] = useState(true)
+  // Lazy initializer so the very first client render already has the right
+  // theme (no light→dark correction flash on navigation from the app). The
+  // `document === undefined` branch only ever runs during the build's
+  // prerender pass, which has no localStorage.
+  const [light, setLight] = useState(() => {
+    if (typeof document === 'undefined') return true
+    const saved = localStorage.getItem('yaply-theme')
+    if (saved === 'light') return true
+    if (saved === 'dark') return false
+    return window.matchMedia('(prefers-color-scheme: light)').matches
+  })
   // Flips true once the "Sealed, end to end." header finishes decrypting —
   // gates EncryptWire so its plaintext→ciphertext sweep starts after, not
   // concurrently with, the header reveal.
@@ -761,12 +772,6 @@ function LandingPage() {
     rootRef.current?.classList.add('lp-js')
   }, [])
 
-  // Theme: saved preference, else light by default.
-  useEffect(() => {
-    const saved = localStorage.getItem('yaply-theme')
-    if (saved === 'light') setLight(true)
-    else if (saved === 'dark') setLight(false)
-  }, [])
   // Match html/body to the page background so elastic overscroll (rubber-band
   // bounce past the top/bottom on trackpads and iOS) reveals the same color
   // instead of the default white behind the .lp div. Reset on unmount so
@@ -1085,24 +1090,12 @@ function LandingPage() {
             </div>
 
             <div className="lp-bento-card lp-glass lp-span-2" data-reveal style={{ ['--d' as string]: '180ms' }} onMouseMove={spotlight}>
-              <h3>Realtime, actually</h3>
-              <p>Live delivery over WebSockets. No polling, no pull-to-refresh — messages land the moment they’re sent.</p>
-              <div className="lp-ping" aria-hidden="true"><i /></div>
-            </div>
-
-            <div className="lp-bento-card lp-glass lp-span-2" data-reveal style={{ ['--d' as string]: '220ms' }} onMouseMove={spotlight}>
-              <h3>Installs like an app</h3>
-              <p>Add yaply to your home screen or dock straight from the browser. No store, no update nags.</p>
-              <div className="lp-install" aria-hidden="true">
-                <YaplyLogo variant="app-icon" size={30} />
-                <span>Add to Home Screen</span>
-                <b>+</b>
+              <h3>Backed by a team that listens to YOU</h3>
+              <p>Report a bug, request a feature, or just say what’s bugging you — it goes straight to the person building this, not a ticket queue.</p>
+              <div className="lp-team" aria-hidden="true">
+                <HeartHandshake size={16} strokeWidth={2.2} />
+                <span>We’re listening</span>
               </div>
-            </div>
-
-            <div className="lp-bento-card lp-glass lp-span-4" data-reveal style={{ ['--d' as string]: '260ms' }} onMouseMove={spotlight}>
-              <h3>Web · iOS · Android</h3>
-              <p>One account, every device. Your conversations follow you — same chats, same security, everywhere.</p>
             </div>
 
             <div className="lp-bento-card lp-glass lp-span-2 lp-closer" data-reveal style={{ ['--d' as string]: '300ms' }} onMouseMove={spotlight}>
@@ -1233,7 +1226,7 @@ const LP_CSS = `
 .lp-nav-brand {
   display: flex; align-items: center; gap: 9px;
   text-decoration: none; color: var(--ink);
-  font-family: var(--disp); font-weight: 700; font-size: 17px; letter-spacing: -0.02em;
+  font-family: var(--disp); font-weight: 500; font-size: 17px; letter-spacing: -0.02em;
 }
 .lp-nav-links { display: flex; gap: 18px; margin-left: auto; }
 .lp-nav-links a {
@@ -2055,6 +2048,14 @@ const LP_CSS = `
 }
 .lp-light .lp-install { border-color: rgba(23,35,63,0.22); }
 .lp-install b { margin-left: auto; color: var(--sky); font-size: 17px; font-weight: 500; }
+.lp-team {
+  margin-top: 12px;
+  display: flex; align-items: center; gap: 9px;
+  padding: 10px 12px; border-radius: 14px;
+  border: 1px dashed rgba(143,184,255,0.25);
+  color: var(--sky); font-size: 13px; font-weight: 550;
+}
+.lp-light .lp-team { border-color: rgba(23,35,63,0.22); }
 
 /* final */
 .lp-final { padding-bottom: 60px; }
