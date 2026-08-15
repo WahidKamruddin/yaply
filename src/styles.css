@@ -184,8 +184,24 @@ body,
   50%      { transform: scale(0.88); opacity: 0.55; }
 }
 
+@keyframes skeletonShimmer {
+  0%   { background-position: 150% 0; }
+  100% { background-position: -50% 0; }
+}
+
+.skeleton {
+  background-image: linear-gradient(100deg, var(--tint) 30%, var(--tint-strong) 50%, var(--tint) 70%);
+  background-size: 250% 100%;
+  animation: skeletonShimmer 1.8s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-\[yaply-pulse_1\.6s_ease-in-out_infinite\] {
     animation: none;
+  }
+  .skeleton {
+    animation: none;
+    background-image: none;
+    background-color: var(--tint);
   }
 }

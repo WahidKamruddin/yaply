@@ -7,6 +7,7 @@ import { useFriends } from '@/features/friends/hooks/useFriends'
 import { createDirectConversation } from '@/features/chat/api/conversations'
 import type { ConversationListItem } from '@/features/chat/types'
 import DashboardCreateModal from './DashboardCreateModal'
+import { DashboardRowSkeleton, DashboardFriendSkeleton } from './DashboardSkeletons'
 
 interface Props {
   currentUserId: string
@@ -42,7 +43,7 @@ export default function Dashboard({ currentUserId, currentUserName, conversation
 
   // Real friendships now, not "whoever I happen to have a DM with" — those two
   // definitions would drift the moment message requests or unfriending happen.
-  const { data: friendRows = [] } = useFriends(currentUserId)
+  const { data: friendRows = [], isLoading: friendsLoading } = useFriends(currentUserId)
   const friends = useMemo(
     () => friendRows.map((f) => ({ userId: f.profile.id, profile: f.profile })),
     [friendRows],
@@ -114,7 +115,11 @@ export default function Dashboard({ currentUserId, currentUserName, conversation
               <h2 className="text-sm font-semibold text-text">Reminders</h2>
             </div>
             {remindersLoading ? (
-              <p className="text-xs text-text-subtle py-4 text-center">Loading…</p>
+              <div className="space-y-0.5">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <DashboardRowSkeleton key={i} delay={i * 60} />
+                ))}
+              </div>
             ) : reminders.length === 0 ? (
               <p className="text-xs text-text-subtle py-4 text-center">No reminders yet</p>
             ) : (
@@ -147,7 +152,11 @@ export default function Dashboard({ currentUserId, currentUserName, conversation
               <h2 className="text-sm font-semibold text-text">Events</h2>
             </div>
             {eventsLoading ? (
-              <p className="text-xs text-text-subtle py-4 text-center">Loading…</p>
+              <div className="space-y-0.5">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <DashboardRowSkeleton key={i} delay={i * 60} />
+                ))}
+              </div>
             ) : upcomingEvents.length === 0 ? (
               <p className="text-xs text-text-subtle py-4 text-center">No upcoming events</p>
             ) : (
@@ -183,7 +192,13 @@ export default function Dashboard({ currentUserId, currentUserName, conversation
               </div>
               <h2 className="text-sm font-semibold text-text">Friends</h2>
             </div>
-            {friends.length === 0 ? (
+            {friendsLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <DashboardFriendSkeleton key={i} delay={i * 60} />
+                ))}
+              </div>
+            ) : friends.length === 0 ? (
               <p className="text-xs text-text-subtle py-4 text-center">Add friends to see them here</p>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">

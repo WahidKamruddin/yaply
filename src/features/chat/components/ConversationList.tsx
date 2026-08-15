@@ -6,6 +6,7 @@ import { activeConversationIdAtom } from '@/features/chat/store/chat.atoms'
 import { useConversations } from '@/features/chat/hooks/useConversations'
 import { useFriendRequests } from '@/features/friends/hooks/useFriends'
 import ConversationItem from './ConversationItem'
+import ConversationItemSkeleton from './ConversationItemSkeleton'
 import NewConversationModal from './NewConversationModal'
 import BottomBar from './BottomBar'
 import YaplyLogo from '@/components/YaplyLogo'
@@ -80,7 +81,11 @@ export default function ConversationList({ currentUserId }: Props) {
       {/* List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
         {isLoading && (
-          <div className="flex items-center justify-center h-24 text-text-subtle text-sm">Loading...</div>
+          <div className="space-y-0.5">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <ConversationItemSkeleton key={i} delay={i * 60} />
+            ))}
+          </div>
         )}
         {isError && (
           <div className="flex items-center justify-center h-24 text-danger text-sm">Failed to load conversations</div>
