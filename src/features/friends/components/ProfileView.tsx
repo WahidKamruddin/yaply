@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useSetAtom } from 'jotai'
-import { Ban, MessageCircle, UserMinus } from 'lucide-react'
+import { Ban, MessageCircle, UserMinus, X } from 'lucide-react'
+import * as Dialog from '@radix-ui/react-dialog'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
@@ -34,6 +35,7 @@ export default function ProfileView({ username, currentUserId }: Props) {
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [confirmBlock, setConfirmBlock] = useState(false)
   const [opening, setOpening] = useState(false)
+  const [photoOpen, setPhotoOpen] = useState(false)
 
   const {
     data: profile,
@@ -125,7 +127,18 @@ export default function ProfileView({ username, currentUserId }: Props) {
   return (
     <>
       <div className="flex flex-col items-center text-center gap-3 py-6">
-        <Avatar src={profile.avatar_url} alt={name} size={88} online={profile.is_online} />
+        {/* Only a real photo is worth enlarging — the silhouette placeholder isn't. */}
+        {profile.avatar_url ? (
+          <button
+            onClick={() => setPhotoOpen(true)}
+            aria-label={`View ${name}'s profile photo`}
+            className="rounded-full transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5b8def]"
+          >
+            <Avatar src={profile.avatar_url} alt={name} size={88} online={profile.is_online} />
+          </button>
+        ) : (
+          <Avatar src={null} alt={name} size={88} online={profile.is_online} />
+        )}
         <div>
           <p className="text-lg font-semibold font-display text-text">{name}</p>
           <p className="text-sm text-text-subtle">@{profile.username}</p>
@@ -175,6 +188,40 @@ export default function ProfileView({ username, currentUserId }: Props) {
           Block User
         </button>
       </div>
+
+      {/* Enlarged profile photo. Deliberately scoped to this page — avatars
+          everywhere else in the app stay plain navigation targets. */}
+      <Dialog.Root open={photoOpen} onOpenChange={setPhotoOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+            <Dialog.Title className="sr-only">{name}&apos;s profile photo</Dialog.Title>
+            <Dialog.Description className="sr-only">
+              Press Escape or click outside to close.
+            </Dialog.Description>
+            {profile.avatar_url && (
+              // 3x the 88px avatar, still circular. Clamped to 80vw so it can't
+              // outgrow a narrow phone screen.
+              <img
+                src={profile.avatar_url}
+                alt={name}
+                className="w-[min(264px,80vw)] h-[min(264px,80vw)] object-cover rounded-full shadow-2xl shadow-black/50"
+              />
+            )}
+            {/* Anchored to the viewport, not the image — a circle has no corner
+                to hang a button on. */}
+            <Dialog.Close asChild>
+              <button
+                aria-label="Close"
+                style={{ top: `max(1rem, var(--safe-top))` }}
+                className="fixed right-4 w-9 h-9 flex items-center justify-center rounded-full bg-card/90 border border-border text-text-muted hover:text-text hover:bg-tint transition-colors"
+              >
+                <X size={17} />
+              </button>
+            </Dialog.Close>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       <ConfirmDialog
         open={confirmRemove}
