@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { X, UserPlus, Trash2, Search, Crown, ShieldCheck, AlertTriangle } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useQueryClient } from '@tanstack/react-query'
@@ -16,6 +17,7 @@ interface Props {
 
 export default function GroupInfoModal({ conversation, currentUserId, onClose, onDeleted }: Props) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Profile[]>([])
   const [showSearch, setShowSearch] = useState(false)
@@ -130,20 +132,29 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
         <div className="max-h-60 overflow-y-auto px-3 py-2">
           {conversation.members.map((m) => (
             <div key={m.userId} className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-tint">
-              <Avatar
-                src={m.profile.avatar_url}
-                alt={m.profile.display_name ?? m.profile.username}
-                size={32}
-                online={m.profile.is_online}
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-text truncate">
-                  {m.profile.display_name ?? m.profile.username}
-                  {m.userId === currentUserId && (
-                    <span className="text-text-subtle font-normal"> (you)</span>
-                  )}
-                </p>
-              </div>
+              <button
+                onClick={() => {
+                  onClose()
+                  void navigate({ to: '/profile/$username', params: { username: m.profile.username } })
+                }}
+                disabled={m.userId === currentUserId}
+                className="flex items-center gap-3 flex-1 min-w-0 text-left disabled:cursor-default"
+              >
+                <Avatar
+                  src={m.profile.avatar_url}
+                  alt={m.profile.display_name ?? m.profile.username}
+                  size={32}
+                  online={m.profile.is_online}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-text truncate">
+                    {m.profile.display_name ?? m.profile.username}
+                    {m.userId === currentUserId && (
+                      <span className="text-text-subtle font-normal"> (you)</span>
+                    )}
+                  </p>
+                </div>
+              </button>
               {m.isAdmin && (
                 <Crown size={11} className="text-[#5b8def] flex-shrink-0" />
               )}

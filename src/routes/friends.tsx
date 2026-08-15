@@ -1,5 +1,5 @@
 import { createFileRoute, redirect, useNavigate, Link } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, Ban, Inbox, Search, Send, Sparkles, Users, X } from 'lucide-react'
 import { getSession, getUser, onAuthStateChange } from '@/lib/auth'
 import LoadingScreen from '@/components/LoadingScreen'
@@ -8,7 +8,6 @@ import FriendRequestsList from '@/features/friends/components/FriendRequestsList
 import PeopleYouMayKnow from '@/features/friends/components/PeopleYouMayKnow'
 import BlockedUsersList from '@/features/friends/components/BlockedUsersList'
 import PeopleSearchResults from '@/features/friends/components/PeopleSearchResults'
-import ProfileModal from '@/features/friends/components/ProfileModal'
 import { useFriendRequests } from '@/features/friends/hooks/useFriends'
 import type { User } from '@supabase/supabase-js'
 
@@ -36,7 +35,13 @@ function FriendsPage() {
   const [user, setUser] = useState<User | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('friends')
   const [search, setSearch] = useState('')
-  const [profileUserId, setProfileUserId] = useState<string | null>(null)
+
+  const openProfile = useCallback(
+    (username: string) => {
+      void navigate({ to: '/profile/$username', params: { username } })
+    },
+    [navigate],
+  )
 
   useEffect(() => {
     void getUser().then(setUser)
@@ -129,14 +134,14 @@ function FriendsPage() {
               <PeopleSearchResults
                 query={search.trim()}
                 currentUserId={user.id}
-                onOpenProfile={setProfileUserId}
+                onOpenProfile={openProfile}
               />
             ) : (
               <>
                 {activeTab === 'friends' && (
                   <FriendsList
                     currentUserId={user.id}
-                    onOpenProfile={setProfileUserId}
+                    onOpenProfile={openProfile}
                     onFindFriends={() => setActiveTab('discover')}
                   />
                 )}
@@ -144,33 +149,27 @@ function FriendsPage() {
                   <FriendRequestsList
                     currentUserId={user.id}
                     direction="incoming"
-                    onOpenProfile={setProfileUserId}
+                    onOpenProfile={openProfile}
                   />
                 )}
                 {activeTab === 'sent' && (
                   <FriendRequestsList
                     currentUserId={user.id}
                     direction="outgoing"
-                    onOpenProfile={setProfileUserId}
+                    onOpenProfile={openProfile}
                   />
                 )}
                 {activeTab === 'discover' && (
-                  <PeopleYouMayKnow currentUserId={user.id} onOpenProfile={setProfileUserId} />
+                  <PeopleYouMayKnow currentUserId={user.id} onOpenProfile={openProfile} />
                 )}
-                {activeTab === 'blocked' && <BlockedUsersList currentUserId={user.id} />}
+                {activeTab === 'blocked' && (
+                  <BlockedUsersList currentUserId={user.id} onOpenProfile={openProfile} />
+                )}
               </>
             )}
           </div>
         </div>
       </div>
-
-      {profileUserId && (
-        <ProfileModal
-          userId={profileUserId}
-          currentUserId={user.id}
-          onClose={() => setProfileUserId(null)}
-        />
-      )}
     </div>
   )
 }

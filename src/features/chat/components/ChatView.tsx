@@ -37,7 +37,6 @@ import MediaPicker from '@/features/media/components/MediaPicker'
 import ThreadView from './ThreadView'
 import Dashboard from './dashboard/Dashboard'
 import MessageRequestBar from '@/features/friends/components/MessageRequestBar'
-import ProfileModal from '@/features/friends/components/ProfileModal'
 
 interface Props {
   currentUserId: string
@@ -78,7 +77,6 @@ export default function ChatView({ currentUserId }: Props) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showGroupInfo, setShowGroupInfo] = useState(false)
-  const [profileUserId, setProfileUserId] = useState<string | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
 
   const { data: currentUserProfile } = useProfile(currentUserId)
@@ -530,7 +528,7 @@ export default function ChatView({ currentUserId }: Props) {
           <ArrowLeft size={22} />
         </button>
         <button
-          onClick={() => { if (otherMember && !conversation.isGroup) setProfileUserId(otherMember.userId) }}
+          onClick={() => { if (otherMember && !conversation.isGroup) void navigate({ to: '/profile/$username', params: { username: otherMember.profile.username } }) }}
           disabled={conversation.isGroup || !otherMember}
           className="flex items-center gap-3 flex-1 min-w-0 text-left disabled:cursor-default"
         >
@@ -764,14 +762,6 @@ export default function ChatView({ currentUserId }: Props) {
         />
       )}
 
-      {/* Profile card, opened from the conversation header */}
-      {profileUserId && (
-        <ProfileModal
-          userId={profileUserId}
-          currentUserId={currentUserId}
-          onClose={() => setProfileUserId(null)}
-        />
-      )}
     </div>
 
     {/* Conversation details panel */}

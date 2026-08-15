@@ -12,7 +12,7 @@ import type { FriendRequest } from '../types'
 interface Props {
   currentUserId: string
   direction: 'incoming' | 'outgoing'
-  onOpenProfile: (userId: string) => void
+  onOpenProfile: (username: string) => void
 }
 
 function relativeDate(iso: string): string {
@@ -80,7 +80,7 @@ export default function FriendRequestsList({ currentUserId, direction, onOpenPro
               key={request.id}
               profile={request.profile}
               subtitle={subtitle}
-              onClick={() => onOpenProfile(request.profile.id)}
+              onClick={() => onOpenProfile(request.profile.username)}
               actions={
                 direction === 'incoming' ? (
                   <>

@@ -5,9 +5,10 @@ import UserRow from './UserRow'
 
 interface Props {
   currentUserId: string
+  onOpenProfile?: (username: string) => void
 }
 
-export default function BlockedUsersList({ currentUserId }: Props) {
+export default function BlockedUsersList({ currentUserId, onOpenProfile }: Props) {
   const { data: blocked = [], isLoading, isError } = useBlockedUsers(currentUserId)
   const unblock = useUnblockUser(currentUserId)
   const [error, setError] = useState<string | null>(null)
@@ -32,6 +33,7 @@ export default function BlockedUsersList({ currentUserId }: Props) {
           <UserRow
             key={entry.profile.id}
             profile={entry.profile}
+            onClick={onOpenProfile ? () => onOpenProfile(entry.profile.username) : undefined}
             actions={
               <button
                 onClick={() =>

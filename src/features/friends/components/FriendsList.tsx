@@ -11,7 +11,7 @@ import type { Friend } from '../types'
 
 interface Props {
   currentUserId: string
-  onOpenProfile: (userId: string) => void
+  onOpenProfile: (username: string) => void
   onFindFriends: () => void
 }
 
@@ -69,7 +69,7 @@ export default function FriendsList({ currentUserId, onOpenProfile, onFindFriend
             <UserRow
               profile={friend.profile}
               showPresence
-              onClick={() => onOpenProfile(friend.profile.id)}
+              onClick={() => onOpenProfile(friend.profile.username)}
               actions={
                 <>
                   <button

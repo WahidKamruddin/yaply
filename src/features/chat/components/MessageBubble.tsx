@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { CheckCheck, Reply, Trash2, AlertCircle, Smile, MessageSquarePlus, MessageSquare, BookImage, Lock } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { DecryptedMessage } from '@/features/chat/types'
@@ -63,6 +64,13 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
   const [showTime, setShowTime] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showAddToAlbum, setShowAddToAlbum] = useState(false)
+  const navigate = useNavigate()
+
+  // Deleted senders have no profile row, so there's no profile to open.
+  const senderUsername = !isOwn ? message.senderProfile?.username : undefined
+  const openSenderProfile = senderUsername
+    ? () => void navigate({ to: '/profile/$username', params: { username: senderUsername } })
+    : undefined
 
   const isMedia = ['image', 'gif', 'sticker'].includes(message.type)
   const isSystem = message.type === 'system'
@@ -93,7 +101,14 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
     return (
       <div className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'} mb-1`}>
         {!isOwn && (
-          <Avatar src={message.senderProfile?.avatar_url} alt="" size={28} />
+          <button
+            onClick={openSenderProfile}
+            disabled={!openSenderProfile}
+            aria-label="View profile"
+            className="flex-shrink-0 rounded-full disabled:cursor-default"
+          >
+            <Avatar src={message.senderProfile?.avatar_url} alt="" size={28} />
+          </button>
         )}
         <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-tint border border-border">
           <AlertCircle size={12} className="text-text-subtle" />
@@ -111,19 +126,28 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
       onMouseLeave={() => { setHovered(false); setShowEmojiPicker(false) }}
     >
       {!isOwn && (
-        <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-[11px] font-semibold">
+        <button
+          onClick={openSenderProfile}
+          disabled={!openSenderProfile}
+          aria-label="View profile"
+          className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-[11px] font-semibold disabled:cursor-default"
+        >
           {message.senderProfile?.avatar_url
             ? <img src={message.senderProfile.avatar_url} className="w-full h-full object-cover" alt="" />
             : (message.senderProfile?.display_name?.[0] ?? message.senderProfile?.username?.[0] ?? '?').toUpperCase()}
-        </div>
+        </button>
       )}
       <div className={`flex flex-col max-w-[65%] ${isOwn ? 'items-end' : 'items-start'}`}>
         {!isOwn && (
-          <span className="text-xs text-primary-text font-medium mb-1 px-1">
+          <button
+            onClick={openSenderProfile}
+            disabled={!openSenderProfile}
+            className="text-xs text-primary-text font-medium mb-1 px-1 hover:underline disabled:no-underline disabled:cursor-default"
+          >
             {message.senderProfile
               ? (message.senderProfile.display_name ?? message.senderProfile.username)
               : 'Deleted user'}
-          </span>
+          </button>
         )}
 
         <div className="relative flex items-center gap-2">

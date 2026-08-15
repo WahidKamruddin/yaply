@@ -6,7 +6,7 @@ import FriendActionButton from './FriendActionButton'
 
 interface Props {
   currentUserId: string
-  onOpenProfile: (userId: string) => void
+  onOpenProfile: (username: string) => void
 }
 
 export default function PeopleYouMayKnow({ currentUserId, onOpenProfile }: Props) {
@@ -61,7 +61,7 @@ export default function PeopleYouMayKnow({ currentUserId, onOpenProfile }: Props
                   {signals.length > 0 && <span className="text-text-faint"> · {signals.join(' · ')}</span>}
                 </>
               }
-              onClick={() => onOpenProfile(suggestion.profile.id)}
+              onClick={() => onOpenProfile(suggestion.profile.username)}
               actions={
                 <>
                   <FriendActionButton

@@ -9,7 +9,7 @@ import FriendActionButton from './FriendActionButton'
 interface Props {
   query: string
   currentUserId: string
-  onOpenProfile: (userId: string) => void
+  onOpenProfile: (username: string) => void
 }
 
 /**
@@ -63,7 +63,7 @@ export default function PeopleSearchResults({ query, currentUserId, onOpenProfil
                   )}
                 </>
               }
-              onClick={() => onOpenProfile(profile.id)}
+              onClick={() => onOpenProfile(profile.username)}
               actions={
                 <FriendActionButton
                   userId={profile.id}
