@@ -61,6 +61,7 @@ Routes live in `src/routes/`. The router auto-generates `routeTree.gen.ts` from 
 | `auth.tsx` | `/auth` | Sign in / sign up |
 | `chat.tsx` | `/chat` | Main app: conversation list + chat |
 | `settings.tsx` | `/settings` | Account/profile editing, billing, privacy policy, terms, help, report-a-problem (see Feature Map) |
+| `link.tsx` | `/link` | Landing point for the pairing QR deep link (`/link#c=<code>`) — see Live device pairing |
 
 ### State Management: Jotai + TanStack Query
 
@@ -132,7 +133,7 @@ envelope.recipient_fp  = JWK x + '.' + y of the recipient device's identity key
 
 **Device registration must be single-flight (critical):** `useEncryption` is mounted by more than one component (`ChatView` and `ThreadView`), so `registerDevice` can run concurrently for the same user. Without a guard, two calls on a fresh install each generate a *different* keypair and race to publish — leaving the locally stored private key out of sync with the published public key, which breaks every message sealed to the losing key. `registrationInFlight: Map<userId, Promise>` makes concurrent calls share one registration. Both `encryptForMembers` and `decryptV2ForUser` **await** that promise, so a message sent or read immediately after login is never silently downgraded to unencrypted phase-1 (or reported as a false decrypt failure) merely because registration hadn't finished. iOS must apply the same single-flight rule.
 
-**Key storage:** IndexedDB via `idb`, DB `yaply-keys` **version 3** (v3 dropped the pairwise `derived` store and legacy unscoped keypair entries). Store `identity` holds, **scoped per user**: `pub:<userId>` / `priv:<userId>` (identity JWKs) and `deviceId:<userId>` (this install's `devices.device_id`).
+**Key storage:** IndexedDB via `idb`, DB `yaply-keys` **version 3** (v3 dropped the pairwise `derived` store and legacy unscoped keypair entries). Store `identity` holds, **scoped per user**: `pub:<userId>` / `priv:<userId>` (identity JWKs), `deviceId:<userId>` (this install's `devices.device_id`), and `escrow:<userId>` (an array of `{ deviceId, pub, priv }` adopted from another device via live pairing — see below).
 
 **In-memory cache must be keyed by userId, not a single mutable slot (critical):** `useEncryption.ts` keeps an in-JS-memory cache on top of IndexedDB (`identityPairMemCache`) so repeated encrypts/decrypts don't hit IndexedDB every time. An earlier version stored this as one mutable variable plus a "clear everything when a different userId shows up" check (`cacheOwner`) — this had a real race: sign out and back into a *different* account fast enough in the same tab, and a straggling async call still in flight for the old account (e.g. the sidebar's preview decryption, which runs independently of `ChatView`) could resolve *after* the new account's session had already reset the cache, and overwrite it with the old account's keypair while the tracker still said it belonged to the new user. Every decrypt for the new account then silently used the wrong private key — **every message failed**, specifically when testing multiple accounts by signing in/out in one browser tab (the common way to test multi-user flows solo). Fixed by making `identityPairMemCache` a `Map<userId, pair>`. `devicesMemCache` (60s TTL) is intentionally global/unscoped by requester since a user's public device list is the same no matter who is asking. iOS must not replicate the single-slot-plus-owner-check pattern for any per-user in-memory cache.
 
@@ -140,11 +141,99 @@ envelope.recipient_fp  = JWK x + '.' + y of the recipient device's identity key
 
 **What we build vs. what's provided:** the crypto *algorithms* are the browser's Web Crypto (`crypto.subtle`) — not hand-rolled. Supabase does *zero* crypto; it only stores ciphertext + public keys and never sees a private key. The *protocol* tying primitives together (key gen/storage, public-key exchange via `devices`, wire format, envelope scheme, rotation handling) is custom yaply code — this middle layer is where the risk lives (the historical single-slot bug was a protocol flaw, not an algorithm flaw). A future hardening path is adopting a vetted protocol lib (libsignal) instead of the custom ECDH+AES scheme.
 
+### Live device pairing (history sync across devices)
+
+Every install has its own identity keypair, which is why a new device cannot read
+messages sealed before it existed. **Live pairing** closes that gap: an
+already-linked device (the *sender*) hands its key material to a newly signed-in
+one (the *receiver*) over an ephemeral, authenticated Realtime channel. Nothing
+is stored server-side — there is no PIN, no vault, no recovery blob. Code lives
+in `packages/crypto/src/pairing.ts`, `src/features/pairing/`,
+`src/features/settings/components/DevicePairingSettings.tsx`, and `src/routes/link.tsx`.
+
+**Two independent role axes — do not conflate them:**
+- **Trust role**: `sender` (holds keys) vs `receiver` (needs them). Fixed by which device has history.
+- **Rendezvous role**: `presenter` (shows the code) vs `entrant` (scans or types it). Free choice.
+
+All four combinations are supported, which is the whole point: the pairing code
+carries only a short rendezvous id — **never key material** — so it is small
+enough to type. That is what makes a camera optional and covers desktop→phone,
+phone→desktop, desktop→desktop and phone→phone. The QR is a convenience layer
+over the same code, never the only path; the "Scan QR" control is only rendered
+when `enumerateDevices()` actually reports a `videoinput`, so a camera-less
+desktop never sees a dead end.
+
+**Pairing code:** 8 characters of Crockford base32 (`0-9`, `A-Z` minus I/L/O/U),
+displayed `XXXX-XXXX`. `normalizePairingCode` parses leniently (case-insensitive,
+strips dashes/spaces, folds `O→0` and `I,L→1`). **It is a rendezvous identifier,
+not a secret.**
+
+**QR deep link:** `https://<origin>/link#c=<code>` — the code is in the
+**fragment** on purpose, so it never reaches server logs, proxies, or a Referer
+header. `/link` reads it from `window.location.hash` (not search params) and
+drops the user into the receiver flow.
+
+**Channel:** `supabase.channel('pairing:<userId>:<code>', { config: { private: true } })`.
+Migration `00034_pairing_channel_authorization.sql` adds the first-ever RLS
+policies on `realtime.messages`, scoping SELECT/INSERT to topics matching
+`pairing:<auth.uid()>:%`. Every other channel in the app (typing, presence,
+message invalidation) is public and unaffected — RLS on `realtime.messages` only
+applies to channels opened with `private: true`.
+
+**Protocol** (roles are *trust* roles; either side may have presented the code):
+1. Both subscribe. Sender broadcasts `ready`; receiver broadcasts `hello { ephPub }`
+   both on subscribe and on `ready` — neither side can assume it joined first.
+2. Sender derives the shared secret + SAS, broadcasts `ack { ephPub }`.
+3. Receiver derives the same secret + SAS independently.
+4. Human compares the two 6-digit codes and confirms **on the sender**.
+5. Sender broadcasts `payload { iv, ciphertext }`; receiver decrypts, merges into
+   its local escrow, broadcasts `done`.
+
+**Wire format (iOS must match byte-for-byte):**
+- Ephemeral P-256 keypair per side, **memory-only** — never IndexedDB, never Postgres.
+- `secret = raw 32-byte ECDH shared secret` used **directly** as the AES-256-GCM
+  transfer key — same no-HKDF convention as the message envelope KEK.
+- `sas = SHA-256(secret ‖ "yaply-sas-v1")`, first 4 bytes big-endian, `mod 1_000_000`, zero-padded to 6 digits.
+- `ciphertext = base64(AES-GCM(secret, JSON.stringify(EscrowedKey[])) + tag)`,
+  `iv = base64(nonce[12])`, where `EscrowedKey = { deviceId, pub: JsonWebKey, priv: JsonWebKey }`.
+
+**Invariants (each guards a real failure mode):**
+- **The SAS step is load-bearing, not decorative.** It is what stops a *second
+  authenticated session on the same account* (a stolen JWT / logged-in tab) from
+  racing to join the channel and impersonating the receiver — that attacker
+  passes the RLS policy. A relay in the middle necessarily holds two different
+  shared secrets and produces two different codes. Never ship a "skip
+  verification" path.
+- **Abort on a second joiner.** If a *different* `ephPub` arrives on a live
+  session, the whole session is cancelled rather than picking a winner. Silently
+  choosing one is exactly how a race becomes key exfiltration.
+- **Escrowed keys are decrypt-only.** They are never published to `devices` and
+  never used as a recipient when sealing new messages — this install still seals
+  to its own key. They exist solely so old envelopes stay readable.
+- **Import merges, never overwrites** (`mergeEscrowedKeys`, de-duped by
+  fingerprint): pairing twice from two devices unions history access.
+- **Candidate fingerprints, not one fingerprint.** `getCandidateFingerprints()`
+  returns own fp first, then escrowed ones; `fetchEnvelopesForMessages` filters
+  `.in('recipient_fp', candidateFps)` and `decryptV2ForUser` picks the private key
+  matching `envelope.recipient_fp`. Applied identically at all three decrypt
+  sites (`ChatView` effect, `ThreadView.loadReplies`, `api/conversations.ts`
+  previews) — the same lockstep rule as the `enc_v`/`iv` invariants above.
+- Session TTL is 90s and single-use; expiry surfaces an explicit "code expired"
+  state, never a silent stall.
+
+**Accepted limitation:** both devices must be online at the same time. There is
+no cold-start recovery — lose every linked device at once and history is
+permanently `decryptFailed`. This is the deliberate trade for storing no
+recovery secret server-side. Anyone holding an unlocked linked device can also
+mint new linked devices, exactly as in Signal/WhatsApp.
+
 ### Security Model — Known Gaps & Limitations
 
 E2E here means **text message content is encrypted between a user's active devices** — not "everything is private from everyone." Do not overstate it. Known gaps (treat as documented limitations, not bugs):
 
-- **Explicitly out of scope (future work):** reading pre-device history on a *new* device (needs key backup/escrow — cryptographically impossible otherwise); server-side pruning of stale device rows; recovering already-orphaned legacy messages (permanent `decryptFailed`); message-editing implementation (no UI; contract only).
+- **Pre-device history: solved for the online case only.** Live device pairing (above) lets a new device adopt an existing device's keys and read history sealed before it existed. It requires an **already-linked device online at the same time** — there is no cold-start recovery, by design, because nothing that could unlock messages is stored server-side.
+- **Explicitly out of scope (future work):** cold-start history recovery when every linked device is lost (would require key escrow, which was deliberately rejected — see the pairing section); server-side pruning of stale device rows; recovering already-orphaned legacy messages (permanent `decryptFailed`); message-editing implementation (no UI; contract only).
+- **Device linking is as strong as an unlocked device.** Whoever holds an unlocked, signed-in device can approve linking a new one. Inherent to every device-linking design (Signal/WhatsApp included); the SAS confirmation defends against a network/relay attacker, not against physical access.
 - **No key verification (MITM):** the server distributes public keys and there is no safety-number/fingerprint verification UI, so an *active* or compromised server could substitute keys. Protects against a *passive* server, not an active one.
 - **No forward secrecy / no ratchet:** a device's identity key never rotates; the per-message ephemeral key wraps to a *static* recipient key, so compromise of a device's private key exposes all past **and** future messages sent to it. No Double-Ratchet-style evolution.
 - **Metadata is unprotected:** who talks to whom, timing, frequency, reply chains, conversation membership, and message sizes are all plaintext in the DB.
@@ -353,6 +442,7 @@ Two separate consent mechanisms that are easy to conflate — they are not the s
 | **Settings page** (tier 5) | `src/routes/settings.tsx` — full replacement for the old `ProfileModal` popup. Tabs: Account (name, unique username, avatar upload to `avatars` bucket, bio, birthdate, email-auth-only password change, danger-zone account deletion via the `delete-account` Edge Function), Billing/Privacy Policy/Terms of Service (sample content), Help (FAQ accordion), Report a Problem (known-issues list + a form that emails the developer via the `report-problem` Edge Function, see below). `src/features/settings/components/`. |
 | Shared `Avatar` component | `src/components/Avatar.tsx` — single source of truth for avatar rendering app-wide; shows the real photo or a neutral person-silhouette placeholder (never initials) when `avatar_url` is null. |
 | **Friends system** (tier 6) | `src/routes/friends.tsx` (`/friends` — tabs: Friends, Requests, Sent, Discover, Blocked, plus a people search that takes over the panel), `src/features/friends/` (`api/friends.ts`, `hooks/useFriends.ts`, components incl. `ProfileModal`, `FriendActionButton`, `MessageRequestBar`, `UserRow`, `ConfirmDialog`). DB: `friendships`, `user_blocks`, `conversation_members.request_state` (migration 00033). Entry point: Users icon + pending badge in the `ConversationList` header. |
+| **Live device pairing** (history sync) | `packages/crypto/src/pairing.ts`, `src/features/pairing/` (`hooks/useDevicePairing.ts`, `components/PairingQr.tsx`, `components/QrScanner.tsx`), `src/features/settings/components/DevicePairingSettings.tsx` (Settings → Devices), `src/routes/link.tsx`. Migration `00034_pairing_channel_authorization.sql`. Deps: `qrcode`, `jsqr`. |
 | **User profile view** | `src/features/friends/components/ProfileModal.tsx` — the app's only profile card, opened from the `ChatView` header avatar and every friends list. Shows public profile fields only (never email/account data). |
 | **Message requests** | Non-friend DMs land in the "Message requests" section of `ConversationList`; `ChatView` swaps `MessageInput` for `MessageRequestBar` (Accept / Decline / Block) while `requestState === 'pending'`. |
 
@@ -397,6 +487,28 @@ belong in this repo:
   - Editing (when built): re-seal with a new message key and replace all
     envelopes in one transaction; never reuse the old key.
   - Per-user in-memory caches only — never a single-slot-plus-owner-check.
+- **Live device pairing** — see the Live device pairing section above for the
+  full protocol. The contract iOS must reproduce exactly:
+  - Code alphabet Crockford base32 (no I/L/O/U), 8 chars, displayed `XXXX-XXXX`;
+    normalise leniently (case-insensitive, strip dashes/spaces, `O→0`, `I,L→1`).
+  - Channel topic `pairing:<userId>:<code>`, opened **private** (`isPrivate = true`
+    in swift-supabase). The RLS policy scopes it to `auth.uid()`.
+  - Ephemeral P-256 per side, memory-only. `secret` = the **raw** ECDH shared
+    secret bytes used directly as an AES-256-GCM key (CryptoKit:
+    `P256.KeyAgreement`, raw bytes — **not** `hkdfDerivedSymmetricKey`).
+  - `sas = SHA-256(secret ‖ "yaply-sas-v1")`, first 4 bytes big-endian,
+    `mod 1_000_000`, zero-padded to 6 digits. Any drift here and the two devices
+    show different numbers and the user correctly refuses to pair.
+  - Payload `base64(AES-GCM(secret, JSON [{deviceId, pub, priv}]) + tag)` with
+    `iv = base64(nonce[12])`; JWKs, not DER/SEC1.
+  - Handshake events `ready` / `hello {ephPub}` / `ack {ephPub}` /
+    `payload {iv, ciphertext}` / `done`, with the receiver re-sending `hello` on
+    `ready`; abort on a second, different `ephPub`.
+  - **iOS is most often the *sender* to a desktop receiver**, so it must ship the
+    presenter-with-typed-code path (show an 8-char code), not just QR scanning.
+    Never gate pairing behind the camera.
+  - Adopted keys are decrypt-only: never publish them to `devices`, never seal
+    new messages to them, and merge (don't overwrite) on a second pairing.
 - **Events availability slot keys** — each slot key is the **UTC ISO string** of
   the slot start (e.g. `"2025-06-10T14:00:00.000Z"`), 8am–10pm local in 30-min
   increments, 7 days × 28 rows. iOS must build local-time `Date`s then format with
@@ -495,10 +607,7 @@ Copy `.env.example` to `.env` and fill in:
 VITE_SUPABASE_URL=         # From Supabase project settings
 VITE_SUPABASE_ANON_KEY=    # From Supabase project settings (public/anon key)
 VITE_GIPHY_API_KEY=        # From Giphy Developer Dashboard
-VITE_DEV_BYPASS_AUTH=false # Set to true to skip Supabase auth entirely during local dev
 ```
-
-When `VITE_DEV_BYPASS_AUTH=true`, all auth calls return a hardcoded dev user (`dev-user-00000000-0000-0000-0000-000000000000`). This is useful when testing UI changes without needing a live Supabase instance.
 
 ### Supabase Edge Functions
 

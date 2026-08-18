@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Send } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { useEncryption, getMyFingerprint, decodePhase1 } from '@/features/chat/hooks/useEncryption'
+import { useEncryption, getCandidateFingerprints, decodePhase1 } from '@/features/chat/hooks/useEncryption'
 import { fetchThreadMessages, fetchEnvelopesForMessages, sendMessage } from '@/features/chat/api/messages'
 import { supabase } from '@/lib/supabase'
 import type { DbEnvelope } from '@/features/chat/hooks/useEncryption'
@@ -34,8 +34,8 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
     const v2Ids = raw.filter((m) => m.enc_v === 2).map((m) => m.id)
     if (v2Ids.length > 0) {
       try {
-        const myFp = await getMyFingerprint(currentUserId)
-        if (myFp) envelopes = await fetchEnvelopesForMessages(v2Ids, myFp)
+        const fps = await getCandidateFingerprints(currentUserId)
+        if (fps.length > 0) envelopes = await fetchEnvelopesForMessages(v2Ids, fps)
       } catch (err) {
         console.error('[yaply:crypto] ThreadView envelope batch FAILED', { err })
       }

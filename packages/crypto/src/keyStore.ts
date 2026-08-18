@@ -1,4 +1,5 @@
 import { openDB } from 'idb'
+import type { EscrowedKey } from './pairing'
 
 const DB_NAME = 'yaply-keys'
 const DB_VERSION = 3
@@ -57,6 +58,49 @@ export async function loadLocalDeviceId(userId: string): Promise<number | null> 
   const db = await getDb()
   const raw = await db.get(STORE_IDENTITY, `deviceId:${userId}`)
   return typeof raw === 'number' ? raw : null
+}
+
+// Identity keypairs received from another device via live pairing. These are
+// DECRYPT-ONLY: this install never publishes them to the `devices` table and
+// never seals new messages to them — it keeps its own key for that. They exist
+// solely so history sealed to a device that already existed stays readable
+// here. Stored per user, alongside (never replacing) this install's own pair.
+export async function storeEscrowedKeys(userId: string, keys: EscrowedKey[]): Promise<void> {
+  const db = await getDb()
+  await db.put(STORE_IDENTITY, keys, `escrow:${userId}`)
+}
+
+export async function loadEscrowedKeys(userId: string): Promise<EscrowedKey[]> {
+  const db = await getDb()
+  const raw = await db.get(STORE_IDENTITY, `escrow:${userId}`)
+  if (!raw) return []
+  const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw
+  return Array.isArray(parsed) ? (parsed as EscrowedKey[]) : []
+}
+
+// `incoming` arrives over the wire from another device, so it is validated at
+// runtime rather than trusted from its type — hence the `unknown` parameter.
+function isEscrowedKey(v: unknown): v is EscrowedKey {
+  if (typeof v !== 'object' || v === null) return false
+  const k = v as Record<string, unknown>
+  const pub = k.pub as Record<string, unknown> | undefined
+  return typeof pub?.x === 'string' && typeof pub.y === 'string' && typeof k.priv === 'object'
+}
+
+// Merges newly received keys into the local escrow, de-duplicated by public
+// key fingerprint. Merge rather than overwrite: pairing twice from two
+// different devices should union what each could read, not have the second
+// transfer silently drop the first one's keys.
+export async function mergeEscrowedKeys(userId: string, incoming: unknown[]): Promise<EscrowedKey[]> {
+  const existing = await loadEscrowedKeys(userId)
+  const byFp = new Map<string, EscrowedKey>()
+  for (const raw of [...existing, ...incoming]) {
+    if (!isEscrowedKey(raw)) continue
+    byFp.set(`${raw.pub.x!}.${raw.pub.y!}`, raw)
+  }
+  const merged = [...byFp.values()]
+  await storeEscrowedKeys(userId, merged)
+  return merged
 }
 
 export async function clearAllKeys(): Promise<void> {

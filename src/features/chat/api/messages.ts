@@ -126,23 +126,40 @@ export async function sendMessage(params: SendMessageParams): Promise<DbMessage>
   return data as unknown as DbMessage
 }
 
-// This device's envelopes for the given enc_v = 2 messages, in one query.
+// Envelopes this install can open for the given enc_v = 2 messages, in one
+// query. `candidateFps` is this device's own fingerprint plus any escrowed
+// ones adopted via live pairing (see getCandidateFingerprints) — a message
+// sealed before this device existed only has an envelope for an escrowed
+// fingerprint, which is exactly what makes history readable after linking.
+//
 // Returns a map messageId → envelope; a v2 message with no entry has no
-// envelope sealed to this device (sent before the device existed).
+// envelope this install holds a key for, which is a legitimate permanent
+// state, not an error.
 export async function fetchEnvelopesForMessages(
   messageIds: string[],
-  myFp: string,
+  candidateFps: string[],
 ): Promise<Map<string, DbEnvelope>> {
   const map = new Map<string, DbEnvelope>()
-  if (messageIds.length === 0) return map
+  if (messageIds.length === 0 || candidateFps.length === 0) return map
   const { data, error } = await supabase
     .from('message_envelopes')
     .select('message_id, recipient_fp, eph_pub, key_iv, wrapped_key')
     .in('message_id', messageIds)
-    .eq('recipient_fp', myFp)
+    .in('recipient_fp', candidateFps)
   if (error) throw error
+  // A message can match more than one candidate (this device *and* an escrowed
+  // one both received envelopes). Prefer the earliest fingerprint in the
+  // candidate list — getCandidateFingerprints puts this device's own key
+  // first, so we decrypt with the local key whenever it's an option.
+  const rank = new Map(candidateFps.map((fp, i) => [fp, i]))
   for (const row of (data ?? []) as DbEnvelope[]) {
-    map.set(row.message_id, row)
+    const existing = map.get(row.message_id)
+    if (
+      !existing ||
+      (rank.get(row.recipient_fp) ?? Infinity) < (rank.get(existing.recipient_fp) ?? Infinity)
+    ) {
+      map.set(row.message_id, row)
+    }
   }
   return map
 }

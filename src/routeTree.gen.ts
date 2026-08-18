@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as LinkRouteImport } from './routes/link'
 import { Route as FriendsRouteImport } from './routes/friends'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as AuthRouteImport } from './routes/auth'
@@ -19,6 +20,11 @@ import { Route as ProfileUsernameRouteImport } from './routes/profile.$username'
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LinkRoute = LinkRouteImport.update({
+  id: '/link',
+  path: '/link',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FriendsRoute = FriendsRouteImport.update({
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/chat': typeof ChatRoute
   '/friends': typeof FriendsRoute
+  '/link': typeof LinkRoute
   '/settings': typeof SettingsRoute
   '/profile/$username': typeof ProfileUsernameRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/chat': typeof ChatRoute
   '/friends': typeof FriendsRoute
+  '/link': typeof LinkRoute
   '/settings': typeof SettingsRoute
   '/profile/$username': typeof ProfileUsernameRoute
 }
@@ -69,6 +77,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/chat': typeof ChatRoute
   '/friends': typeof FriendsRoute
+  '/link': typeof LinkRoute
   '/settings': typeof SettingsRoute
   '/profile/$username': typeof ProfileUsernameRoute
 }
@@ -79,16 +88,25 @@ export interface FileRouteTypes {
     | '/auth'
     | '/chat'
     | '/friends'
+    | '/link'
     | '/settings'
     | '/profile/$username'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/chat' | '/friends' | '/settings' | '/profile/$username'
+  to:
+    | '/'
+    | '/auth'
+    | '/chat'
+    | '/friends'
+    | '/link'
+    | '/settings'
+    | '/profile/$username'
   id:
     | '__root__'
     | '/'
     | '/auth'
     | '/chat'
     | '/friends'
+    | '/link'
     | '/settings'
     | '/profile/$username'
   fileRoutesById: FileRoutesById
@@ -98,6 +116,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ChatRoute: typeof ChatRoute
   FriendsRoute: typeof FriendsRoute
+  LinkRoute: typeof LinkRoute
   SettingsRoute: typeof SettingsRoute
   ProfileUsernameRoute: typeof ProfileUsernameRoute
 }
@@ -109,6 +128,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/link': {
+      id: '/link'
+      path: '/link'
+      fullPath: '/link'
+      preLoaderRoute: typeof LinkRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/friends': {
@@ -154,6 +180,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ChatRoute: ChatRoute,
   FriendsRoute: FriendsRoute,
+  LinkRoute: LinkRoute,
   SettingsRoute: SettingsRoute,
   ProfileUsernameRoute: ProfileUsernameRoute,
 }

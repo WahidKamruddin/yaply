@@ -9,8 +9,10 @@ import {
   loadIdentityKeyPair,
   storeLocalDeviceId,
   loadLocalDeviceId,
+  loadEscrowedKeys,
+  mergeEscrowedKeys,
 } from '@yaply/crypto'
-import type { EnvelopeRecipient, MessageEnvelope } from '@yaply/crypto'
+import type { EnvelopeRecipient, MessageEnvelope, EscrowedKey } from '@yaply/crypto'
 
 // Thrown when an encrypted (enc_v = 2) message can't be decrypted: no envelope
 // sealed to this device's key, missing identity, or AES-GCM auth failure.
@@ -86,6 +88,18 @@ async function getIdentityPair(userId: string): Promise<{ pub: JsonWebKey; priv:
   return pair
 }
 
+// Escrowed (decrypt-only) keypairs received from another device via live
+// pairing, keyed by userId for the same reason identityPairMemCache is.
+const escrowMemCache = new Map<string, EscrowedKey[]>()
+
+async function getEscrowedKeys(userId: string): Promise<EscrowedKey[]> {
+  const cached = escrowMemCache.get(userId)
+  if (cached) return cached
+  const keys = await loadEscrowedKeys(userId)
+  escrowMemCache.set(userId, keys)
+  return keys
+}
+
 // Fingerprint of this install's device key for `userId` — used to pick this
 // device's envelope out of message_envelopes. Null before keys initialize.
 export async function getMyFingerprint(userId: string): Promise<string | null> {
@@ -96,6 +110,61 @@ export async function getMyFingerprint(userId: string): Promise<string | null> {
   await registrationInFlight.get(userId)
   const pair = await getIdentityPair(userId)
   return pair ? publicKeyFingerprint(pair.pub) : null
+}
+
+// Every fingerprint this install can decrypt with: its own device key first,
+// then any escrowed keys adopted via live pairing. Envelope lookups must use
+// the whole list — a message sealed before this device existed has no envelope
+// for the own fingerprint, but does have one for an escrowed device's, which
+// is exactly what makes history readable after linking.
+export async function getCandidateFingerprints(userId: string): Promise<string[]> {
+  await registrationInFlight.get(userId)
+  const [pair, escrow] = await Promise.all([getIdentityPair(userId), getEscrowedKeys(userId)])
+  const fps: string[] = []
+  if (pair) fps.push(publicKeyFingerprint(pair.pub))
+  for (const k of escrow) {
+    const fp = publicKeyFingerprint(k.pub)
+    if (!fps.includes(fp)) fps.push(fp)
+  }
+  return fps
+}
+
+// Resolves the private key that can open an envelope sealed to `fp`.
+async function getPrivateKeyForFp(userId: string, fp: string): Promise<JsonWebKey | null> {
+  const pair = await getIdentityPair(userId)
+  if (pair && publicKeyFingerprint(pair.pub) === fp) return pair.priv
+  const escrow = await getEscrowedKeys(userId)
+  const match = escrow.find((k) => publicKeyFingerprint(k.pub) === fp)
+  return match ? match.priv : null
+}
+
+// Adopts keys received over a pairing session. Merges (never overwrites) so a
+// second pairing from a different device unions history access instead of
+// dropping what the first one granted.
+export async function importEscrowedKeys(userId: string, keys: EscrowedKey[]): Promise<number> {
+  const merged = await mergeEscrowedKeys(userId, keys)
+  escrowMemCache.set(userId, merged)
+  trace('importEscrowedKeys', { userId, received: keys.length, total: merged.length })
+  return merged.length
+}
+
+// The full set this install can hand to a new device: its own identity pair
+// plus everything already escrowed here.
+export async function collectTransferableKeys(userId: string): Promise<EscrowedKey[]> {
+  await registrationInFlight.get(userId)
+  const [pair, escrow, deviceId] = await Promise.all([
+    getIdentityPair(userId),
+    getEscrowedKeys(userId),
+    loadLocalDeviceId(userId),
+  ])
+  const out: EscrowedKey[] = [...escrow]
+  if (pair) {
+    const fp = publicKeyFingerprint(pair.pub)
+    if (!out.some((k) => publicKeyFingerprint(k.pub) === fp)) {
+      out.push({ deviceId: deviceId ?? 0, pub: pair.pub, priv: pair.priv })
+    }
+  }
+  return out
 }
 
 function parseJwk(raw: unknown): JsonWebKey | null {
@@ -217,9 +286,10 @@ export async function encryptForMembers(
   }
 }
 
-// Decrypt an enc_v = 2 message given this device's envelope (or undefined when
-// no envelope is sealed to this device — a legitimate, permanent state for
-// messages sent before the device existed).
+// Decrypt an enc_v = 2 message given an envelope sealed to one of this
+// install's candidate fingerprints (or undefined when none is — a legitimate,
+// permanent state for messages sent before the device existed and before any
+// pairing granted access to a device that could read them).
 // Standalone (not a hook) so the sidebar-preview builder can call it.
 export async function decryptV2ForUser(
   userId: string,
@@ -238,13 +308,16 @@ export async function decryptV2ForUser(
   // Same reasoning as the send path: a decrypt racing first-login registration
   // should wait for the keypair rather than report a false failure.
   await registrationInFlight.get(userId)
-  const pair = await getIdentityPair(userId)
-  if (!pair) {
-    trace('decryptV2ForUser: no identity pair', { userId })
-    throw new DecryptionFailedError('no identity keypair on this device')
+  // The envelope names the fingerprint it was sealed to, which may be this
+  // install's own device key or an escrowed one adopted via pairing — pick the
+  // matching private key rather than assuming the own pair.
+  const priv = await getPrivateKeyForFp(userId, envelope.recipient_fp)
+  if (!priv) {
+    trace('decryptV2ForUser: no private key for envelope fingerprint', { userId })
+    throw new DecryptionFailedError('no key on this device for that envelope')
   }
   try {
-    const plain = await unwrapAndDecrypt(pair.priv, {
+    const plain = await unwrapAndDecrypt(priv, {
       ephPub: envelope.eph_pub,
       keyIv: envelope.key_iv,
       wrappedKey: envelope.wrapped_key,

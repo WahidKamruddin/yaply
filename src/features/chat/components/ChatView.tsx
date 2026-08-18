@@ -10,7 +10,7 @@ import { useMessages } from '@/features/chat/hooks/useMessages'
 import { useSendMessage } from '@/features/chat/hooks/useSendMessage'
 import { useRealtimeMessages } from '@/features/chat/hooks/useRealtimeMessages'
 import { useTypingIndicator } from '@/features/chat/hooks/useTypingIndicator'
-import { useEncryption, getMyFingerprint, decodePhase1 } from '@/features/chat/hooks/useEncryption'
+import { useEncryption, getCandidateFingerprints, decodePhase1 } from '@/features/chat/hooks/useEncryption'
 import type { DbEnvelope } from '@/features/chat/hooks/useEncryption'
 import { useProfile } from '@/features/chat/hooks/useProfile'
 import { markConversationRead } from '@/features/chat/api/conversations'
@@ -181,8 +181,8 @@ export default function ChatView({ currentUserId }: Props) {
       let envelopes: Map<string, DbEnvelope> = new Map()
       if (v2Ids.length > 0) {
         try {
-          const myFp = await getMyFingerprint(currentUserId)
-          if (myFp) envelopes = await fetchEnvelopesForMessages(v2Ids, myFp)
+          const fps = await getCandidateFingerprints(currentUserId)
+          if (fps.length > 0) envelopes = await fetchEnvelopesForMessages(v2Ids, fps)
           console.debug('[yaply:crypto] ChatView envelope batch', { requested: v2Ids.length, found: envelopes.size })
         } catch (err) {
           console.error('[yaply:crypto] ChatView envelope batch FAILED', { err })

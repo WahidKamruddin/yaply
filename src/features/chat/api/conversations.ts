@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { decryptV2ForUser, getMyFingerprint, decodePhase1 } from '@/features/chat/hooks/useEncryption'
+import { decryptV2ForUser, getCandidateFingerprints, decodePhase1 } from '@/features/chat/hooks/useEncryption'
 import { fetchEnvelopesForMessages } from './messages'
 import type { ConversationListItem, DecryptedMessage, MemberSummary, Profile } from '../types'
 
@@ -136,9 +136,9 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
 
   if (v2Previews.length > 0) {
     try {
-      const myFp = await getMyFingerprint(userId)
-      const envelopes = myFp
-        ? await fetchEnvelopesForMessages(v2Previews.map((p) => p.messageId), myFp)
+      const fps = await getCandidateFingerprints(userId)
+      const envelopes = fps.length > 0
+        ? await fetchEnvelopesForMessages(v2Previews.map((p) => p.messageId), fps)
         : new Map<string, never>()
       console.debug('[yaply:crypto] sidebar preview envelope batch', { requested: v2Previews.length, found: envelopes.size })
       await Promise.all(

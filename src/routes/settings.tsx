@@ -1,8 +1,9 @@
 import { createFileRoute, redirect, useNavigate, Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, User as UserIcon, CreditCard, Shield, FileText, HelpCircle, Bug } from 'lucide-react'
+import { ArrowLeft, User as UserIcon, CreditCard, Shield, FileText, HelpCircle, Bug, Smartphone } from 'lucide-react'
 import { getSession, getUser, onAuthStateChange } from '@/lib/auth'
 import AccountSettings from '@/features/settings/components/AccountSettings'
+import DevicePairingSettings from '@/features/settings/components/DevicePairingSettings'
 import BillingSettings from '@/features/settings/components/BillingSettings'
 import PrivacyPolicySettings from '@/features/settings/components/PrivacyPolicySettings'
 import TermsSettings from '@/features/settings/components/TermsSettings'
@@ -20,10 +21,11 @@ export const Route = createFileRoute('/settings')({
   component: SettingsPage,
 })
 
-type Tab = 'account' | 'billing' | 'privacy' | 'terms' | 'help' | 'report'
+type Tab = 'account' | 'devices' | 'billing' | 'privacy' | 'terms' | 'help' | 'report'
 
 const TABS: Array<{ id: Tab; label: string; Icon: React.ElementType }> = [
   { id: 'account', label: 'Account', Icon: UserIcon },
+  { id: 'devices', label: 'Devices', Icon: Smartphone },
   { id: 'billing', label: 'Billing', Icon: CreditCard },
   { id: 'privacy', label: 'Privacy Policy', Icon: Shield },
   { id: 'terms', label: 'Terms of Service', Icon: FileText },
@@ -88,6 +90,7 @@ function SettingsPage() {
         {/* Panel */}
         <div className="flex-1 overflow-y-auto p-6">
           {activeTab === 'account' && <AccountSettings userId={user.id} userEmail={user.email ?? ''} />}
+          {activeTab === 'devices' && <DevicePairingSettings userId={user.id} />}
           {activeTab === 'billing' && <BillingSettings />}
           {activeTab === 'privacy' && <PrivacyPolicySettings />}
           {activeTab === 'terms' && <TermsSettings />}
