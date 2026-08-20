@@ -13,6 +13,7 @@ import { useInAppNotifications } from '@/features/notifications/hooks/useInAppNo
 import { useConversations } from '@/features/chat/hooks/useConversations'
 import { usePresence } from '@/features/chat/hooks/usePresence'
 import { usePushNotifications } from '@/features/chat/hooks/usePushNotifications'
+import { useDeviceRevocation } from '@/features/pairing/hooks/useDeviceRevocation'
 import { activeConversationIdAtom } from '@/features/chat/store/chat.atoms'
 import { uploadMediaFile } from '@/features/media/api/upload'
 import { sendMessage } from '@/features/chat/api/messages'
@@ -45,6 +46,9 @@ function ChatPage() {
 
   usePresence(user?.id)
   usePushNotifications(user?.id)
+  // Signs this install out the moment it's revoked from another device,
+  // rather than waiting out its access token.
+  useDeviceRevocation(user?.id)
 
   useEffect(() => {
     void getUser().then(setUser)

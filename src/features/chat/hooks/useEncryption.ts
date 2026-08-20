@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { DEVICE_PLATFORM, generateDeviceName } from '@/lib/deviceName'
 import {
   generateKeyPair,
   encryptWithEnvelopes,
@@ -11,6 +12,7 @@ import {
   loadLocalDeviceId,
   loadEscrowedKeys,
   mergeEscrowedKeys,
+  clearAllKeys,
 } from '@yaply/crypto'
 import type { EnvelopeRecipient, MessageEnvelope, EscrowedKey } from '@yaply/crypto'
 
@@ -346,9 +348,50 @@ function registerDevice(uid: string): Promise<void> {
   return run
 }
 
+// The `session_id` claim of the current access token — the auth session this
+// install is signed in with. Recorded on the devices row so revoking the device
+// can also kill that session (see the revoke_device RPC). Best-effort: an older
+// token without the claim just leaves the column null.
+async function currentSessionId(): Promise<string | null> {
+  try {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) return null
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))) as {
+      session_id?: string
+    }
+    return payload.session_id ?? null
+  } catch {
+    return null
+  }
+}
+
 async function doRegisterDevice(uid: string): Promise<void> {
   trace('registerDevice start', { uid })
-  let pair = await loadIdentityKeyPair(uid)
+  let deviceId = await loadLocalDeviceId(uid)
+
+  // A local device_id with no matching row means this install was revoked
+  // (from another device, while this one was offline or after its token
+  // expired). Re-registering the same keypair would silently undo the
+  // revocation, so wipe every local key first: the install comes back as a
+  // brand-new device and has to be paired again to see history.
+  if (deviceId != null) {
+    const { data: existingRow, error: lookupError } = await supabase
+      .from('devices')
+      .select('device_id')
+      .eq('user_id', uid)
+      .eq('device_id', deviceId)
+      .maybeSingle()
+    if (!lookupError && !existingRow) {
+      trace('registerDevice: local device was revoked, clearing keys', { uid, deviceId })
+      await clearAllKeys()
+      identityPairMemCache.delete(uid)
+      escrowMemCache.delete(uid)
+      deviceId = null
+    }
+  }
+
+  let pair = deviceId == null ? null : await loadIdentityKeyPair(uid)
   if (!pair) {
     const { publicKeyJwk, privateKeyJwk } = await generateKeyPair()
     pair = { pub: publicKeyJwk, priv: privateKeyJwk }
@@ -357,7 +400,7 @@ async function doRegisterDevice(uid: string): Promise<void> {
   }
   identityPairMemCache.set(uid, pair)
 
-  let deviceId = await loadLocalDeviceId(uid)
+  const isNewDevice = deviceId == null
   if (deviceId == null) {
     // Random 31-bit id; collision odds across one user's installs are ~2^-31.
     deviceId = 1 + Math.floor(Math.random() * 0x7ffffffe)
@@ -373,6 +416,11 @@ async function doRegisterDevice(uid: string): Promise<void> {
       identity_key: JSON.stringify(pair.pub),
       key_fingerprint: fp,
       last_active_at: new Date().toISOString(),
+      session_id: await currentSessionId(),
+      platform: DEVICE_PLATFORM,
+      // Only named on first registration — a later login must not overwrite a
+      // name the user chose in Settings.
+      ...(isNewDevice ? { device_name: generateDeviceName() } : {}),
     },
     { onConflict: 'user_id,device_id' },
   )

@@ -227,6 +227,41 @@ permanently `decryptFailed`. This is the deliberate trade for storing no
 recovery secret server-side. Anyone holding an unlocked linked device can also
 mint new linked devices, exactly as in Signal/WhatsApp.
 
+### Device management (naming + revocation)
+
+Settings → Devices lists this user's `devices` rows, each renameable inline and
+revocable behind a confirmation dialog.
+
+**Naming.** `src/lib/deviceName.ts` generates a name from the user agent at
+**first registration only** — `Chrome on macOS (Web)`. Later logins must never
+re-write `device_name`, or a device the user renamed silently reverts, which is
+why `doRegisterDevice` only includes the column in its upsert when the row is
+new. The platform is baked into the generated string *and* stored separately in
+`platform`, so a rename can't lose which client a row belongs to.
+
+**Revocation is three things, and all three are required.** Deleting the
+`devices` row alone is theatre: the device keeps a valid session and would
+re-register on next login, republishing the same keypair out of IndexedDB.
+1. **`revoke_device` RPC** deletes the row (peers stop sealing to it) *and* the
+   device's `auth.sessions` row, which cascades `auth.refresh_tokens` — the
+   session can no longer be renewed.
+2. **`useDeviceRevocation`** (mounted in `routes/chat.tsx`) reacts to the
+   realtime DELETE, filtered to the install's **own row id** so no other user's
+   device ids are observable. Without this the device stays usable until its
+   access token expires — up to an hour after you "signed it out".
+3. **The device clears its local keys** (`clearAllKeys`) on revocation, and
+   `doRegisterDevice` runs an **orphan check** at startup: a local `deviceId`
+   with no matching row means it was revoked while offline, so it wipes keys and
+   comes back as a brand-new device. Skipping this step is what would let a
+   revoked device resurrect its old identity.
+
+A revoked device therefore has to sign in again *and* re-pair to read history —
+wiping the keys drops its escrowed keys too, which is the intended outcome.
+
+**A failed query must never be read as "revoked."** Both the realtime hook and
+the orphan check only act on a *successful* empty result; treating a network
+error as a missing row would sign users out on a blip.
+
 ### Security Model — Known Gaps & Limitations
 
 E2E here means **text message content is encrypted between a user's active devices** — not "everything is private from everyone." Do not overstate it. Known gaps (treat as documented limitations, not bugs):
@@ -239,7 +274,7 @@ E2E here means **text message content is encrypted between a user's active devic
 - **Metadata is unprotected:** who talks to whom, timing, frequency, reply chains, conversation membership, and message sizes are all plaintext in the DB.
 - **Private keys stored extractable** in IndexedDB (JWK) → exfiltratable via XSS or malicious code. Non-extractable keys would harden this.
 - **Media is NOT encrypted:** images, files, and stickers live at public Storage URLs. Encryption covers text content only.
-- **No device management / revocation:** users can't list, name, or revoke devices or "log out everywhere"; a lost/stolen device keeps receiving envelopes, and the `devices` table only grows.
+- **Device management: partial.** Users can list, rename and revoke devices (Settings → Devices). Revoking kills the device's auth session and forces it to re-pair. Still missing: a one-tap "log out everywhere", and server-side pruning of stale rows — the `devices` table only grows. Revocation of a device that is **offline** takes effect when it next comes online (via the orphan check); until then it simply can't reach the API with a dead refresh token.
 - **Group membership changes unhandled:** new members can't read pre-join history; removed members aren't cryptographically cut off (no group re-keying).
 - **Push previews / reactions leak:** notification content routes through a push provider outside E2E; reactions are stored in plaintext.
 - **Search:** no server-side search over ciphertext; client-side search only covers already-decrypted, loaded messages.
@@ -335,7 +370,7 @@ created_at      timestamptz
 
 **Username uniqueness check (pre-save, both places a username is set):** `src/features/chat/hooks/useUsernameAvailability.ts` debounces a `select id from profiles where username = candidate` (excluding the caller's own id when editing) so the UI can block Save *before* attempting a write, rather than only reacting to the Postgres `23505` unique-violation after a failed insert/update. Both call sites still catch `23505` on the actual write as a last-resort guard against a race between the check and the save — the DB constraint remains the real enforcement, the live check is UX. Used by `UsernameSetupModal.tsx` (first-login username prompt) and `AccountSettings.tsx` (Settings → Account username field).
 
-**`devices` table:** user_id, device_id (int), identity_key (text — JSON-stringified JWK public key), key_fingerprint (text — JWK `x.y`, matches `message_envelopes.recipient_fp`), signed_prekey, device_name, push_subscription, last_active_at, created_at. UNIQUE(user_id, device_id); index (user_id, key_fingerprint). **One row per install** — each browser/device generates its own random `device_id` (stored locally as `deviceId:<userId>` in IndexedDB) and upserts only that row. Never hard-code `device_id = 1`: that was the single-slot bug where every login overwrote the one published key and orphaned history. RLS: owner can manage own rows; any authenticated user can read (needed to encrypt to a peer's devices). Codified in `00027_create_devices.sql`; `key_fingerprint` added in `00029_multi_device_envelopes.sql`.
+**`devices` table:** user_id, device_id (int), identity_key (text — JSON-stringified JWK public key), key_fingerprint (text — JWK `x.y`, matches `message_envelopes.recipient_fp`), signed_prekey, device_name (user-editable; auto-generated once at first registration, e.g. `Chrome on macOS (Web)`), platform (`web` | `ios` | `android`), session_id (uuid — the `session_id` claim of the access token this install signed in with; nullable for rows written before migration 00035), push_subscription, last_active_at, created_at. UNIQUE(user_id, device_id); index (user_id, key_fingerprint). **One row per install** — each browser/device generates its own random `device_id` (stored locally as `deviceId:<userId>` in IndexedDB) and upserts only that row. Never hard-code `device_id = 1`: that was the single-slot bug where every login overwrote the one published key and orphaned history. RLS: owner can manage own rows; any authenticated user can read (needed to encrypt to a peer's devices). Codified in `00027_create_devices.sql`; `key_fingerprint` added in `00029_multi_device_envelopes.sql`; `platform`/`session_id` and the revoke path in `00035_device_management.sql`. In the `supabase_realtime` publication (since 00035) so a revoked device can react instantly.
 
 **`notes` table:** `id, user_id, conversation_id, title, content, created_at, updated_at` — RLS: `user_id = auth.uid()` (owner only).
 
@@ -366,6 +401,7 @@ created_at      timestamptz
 **`user_blocks` table:** `blocker_id, blocked_id, created_at`, PK (blocker_id, blocked_id). Directed. RLS restricts SELECT/INSERT/DELETE to `blocker_id = auth.uid()`, so **the blocked user can never see the row** — they get no signal, their sends simply fail.
 
 **Key RPCs:**
+- `revoke_device(p_device_id int)` — signs one of the **caller's own** devices out. Security definer, because `auth.sessions` is unreachable from `authenticated`; the `auth.uid()` filter inside is the only thing separating a caller from someone else's session, so it must never take a user id from its arguments. Deletes the `devices` row **and** the matching `auth.sessions` row (which cascades `auth.refresh_tokens`). See the device revocation section for why the client-side half is equally load-bearing.
 - `find_or_create_direct_conversation(target_user_id uuid)` — finds or creates a direct DM, inserts both members correctly. Security definer. Always use this instead of manual inserts for direct chats. Raises `blocked` if either party blocked the other, and `cannot message yourself`. On create the recipient's `request_state` is `'accepted'` if the pair are friends, else `'pending'` (a message request). If the caller had previously declined an existing thread, reaching this RPC is an explicit intent to talk and resets **their own** side to `'accepted'`.
 - `send_message_with_envelopes(p_conversation_id, p_content, p_iv, p_envelopes jsonb, p_type, p_reply_to_id, p_thread_id, p_media_url, p_media_mime)` — inserts an `enc_v = 2` message **and** all its `message_envelopes` rows in one transaction. Security definer; **rejects an empty envelope array or a NULL iv**, so a v2 message can never exist without envelopes. Gates on `can_send_in_conversation()` (raises `cannot send in this conversation`). Always use this for encrypted sends; the plain `messages` insert is only for phase-1/system/media rows.
 - `create_group_conversation(p_name, p_member_ids)` / `add_group_member(p_conversation_id, p_user_id)` — both raise `can only add friends to groups` for a non-friend.
@@ -442,6 +478,7 @@ Two separate consent mechanisms that are easy to conflate — they are not the s
 | **Settings page** (tier 5) | `src/routes/settings.tsx` — full replacement for the old `ProfileModal` popup. Tabs: Account (name, unique username, avatar upload to `avatars` bucket, bio, birthdate, email-auth-only password change, danger-zone account deletion via the `delete-account` Edge Function), Billing/Privacy Policy/Terms of Service (sample content), Help (FAQ accordion), Report a Problem (known-issues list + a form that emails the developer via the `report-problem` Edge Function, see below). `src/features/settings/components/`. |
 | Shared `Avatar` component | `src/components/Avatar.tsx` — single source of truth for avatar rendering app-wide; shows the real photo or a neutral person-silhouette placeholder (never initials) when `avatar_url` is null. |
 | **Friends system** (tier 6) | `src/routes/friends.tsx` (`/friends` — tabs: Friends, Requests, Sent, Discover, Blocked, plus a people search that takes over the panel), `src/features/friends/` (`api/friends.ts`, `hooks/useFriends.ts`, components incl. `ProfileModal`, `FriendActionButton`, `MessageRequestBar`, `UserRow`, `ConfirmDialog`). DB: `friendships`, `user_blocks`, `conversation_members.request_state` (migration 00033). Entry point: Users icon + pending badge in the `ConversationList` header. |
+| **Device management** (rename + revoke) | `src/features/pairing/api/devices.ts`, `src/features/pairing/hooks/useDeviceRevocation.ts` (mounted in `routes/chat.tsx`), `src/lib/deviceName.ts`, Settings → Devices. RPC `revoke_device`; migration `00035_device_management.sql`. |
 | **Live device pairing** (history sync) | `packages/crypto/src/pairing.ts`, `src/features/pairing/` (`hooks/useDevicePairing.ts`, `components/PairingQr.tsx`, `components/QrScanner.tsx`), `src/features/settings/components/DevicePairingSettings.tsx` (Settings → Devices), `src/routes/link.tsx`. Migration `00034_pairing_channel_authorization.sql`. Deps: `qrcode`, `jsqr`. |
 | **User profile view** | `src/features/friends/components/ProfileModal.tsx` — the app's only profile card, opened from the `ChatView` header avatar and every friends list. Shows public profile fields only (never email/account data). |
 | **Message requests** | Non-friend DMs land in the "Message requests" section of `ConversationList`; `ChatView` swaps `MessageInput` for `MessageRequestBar` (Accept / Decline / Block) while `requestState === 'pending'`. |
@@ -487,6 +524,17 @@ belong in this repo:
   - Editing (when built): re-seal with a new message key and replace all
     envelopes in one transaction; never reuse the old key.
   - Per-user in-memory caches only — never a single-slot-plus-owner-check.
+- **Device naming & revocation** — see the Device management section above.
+  iOS must: write `platform = 'ios'` and a generated `device_name` (e.g.
+  `iPhone 15 (App)`) **only on first registration**, never on later logins;
+  record the access token's `session_id` claim on its `devices` row so
+  `revoke_device` can kill that session; call `revoke_device(p_device_id)`
+  rather than deleting the row directly (a plain DELETE leaves the auth session
+  alive); and run the same **orphan check** at startup — a locally stored
+  `device_id` with no matching row means this install was revoked, so wipe all
+  local keys and register fresh. Skipping the orphan check lets a revoked
+  device republish its old identity and silently undo the revocation. Never
+  treat a *failed* lookup as "revoked".
 - **Live device pairing** — see the Live device pairing section above for the
   full protocol. The contract iOS must reproduce exactly:
   - Code alphabet Crockford base32 (no I/L/O/U), 8 chars, displayed `XXXX-XXXX`;

@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   Laptop,
   Loader2,
+  Pencil,
   QrCode as QrCodeIcon,
   ScanLine,
   ShieldCheck,
   Smartphone,
   Copy,
+  Trash2,
+  X,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import * as Dialog from '@radix-ui/react-dialog'
 import { formatPairingCode, normalizePairingCode } from '@yaply/crypto'
 import { getMyFingerprint } from '@/features/chat/hooks/useEncryption'
 import { useDevicePairing } from '@/features/pairing/hooks/useDevicePairing'
 import type { TrustRole } from '@/features/pairing/hooks/useDevicePairing'
+import { fetchDevices, renameDevice, revokeDevice } from '@/features/pairing/api/devices'
+import type { DeviceRow } from '@/features/pairing/api/devices'
 import PairingQr from '@/features/pairing/components/PairingQr'
 import QrScanner, { hasCamera } from '@/features/pairing/components/QrScanner'
 
@@ -22,14 +28,6 @@ interface Props {
   userId: string
   /** Code arriving from a scanned QR deep link (/link#c=…), if any. */
   initialCode?: string
-}
-
-interface DeviceRow {
-  device_id: number
-  key_fingerprint: string | null
-  device_name: string | null
-  last_active_at: string | null
-  created_at: string
 }
 
 // 'pick' → choose a trust role; 'rendezvous' → choose show-vs-enter; 'active'
@@ -46,20 +44,58 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
   const [scanning, setScanning] = useState(false)
   const [cameraAvailable, setCameraAvailable] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [renamingId, setRenamingId] = useState<number | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [pendingRevoke, setPendingRevoke] = useState<DeviceRow | null>(null)
+  const [isRevoking, setIsRevoking] = useState(false)
+  const [deviceError, setDeviceError] = useState<string | null>(null)
 
   const { phase, role, code, sas, error, importedCount, start, confirmAndSend, cancel } =
     useDevicePairing(userId)
 
+  const reloadDevices = useCallback(() => {
+    void fetchDevices(userId)
+      .then(setDevices)
+      .catch((err: unknown) => console.error('[yaply:devices] load failed', err))
+  }, [userId])
+
   useEffect(() => {
     void hasCamera().then(setCameraAvailable)
     void getMyFingerprint(userId).then(setMyFp)
-    void supabase
-      .from('devices')
-      .select('device_id, key_fingerprint, device_name, last_active_at, created_at')
-      .eq('user_id', userId)
-      .order('last_active_at', { ascending: false })
-      .then(({ data }) => setDevices((data ?? []) as DeviceRow[]))
-  }, [userId])
+    reloadDevices()
+  }, [userId, reloadDevices])
+
+  const isThisDevice = (d: DeviceRow) => !!d.key_fingerprint && d.key_fingerprint === myFp
+
+  const saveRename = async (d: DeviceRow) => {
+    setRenamingId(null)
+    if (renameDraft.trim() === (d.device_name ?? '')) return
+    try {
+      await renameDevice(userId, d.device_id, renameDraft)
+      reloadDevices()
+    } catch (err) {
+      console.error('[yaply:devices] rename failed', err)
+      setDeviceError('Could not rename that device.')
+    }
+  }
+
+  const confirmRevoke = async () => {
+    if (!pendingRevoke) return
+    setIsRevoking(true)
+    setDeviceError(null)
+    try {
+      // Revoking the device you're sitting at signs you out here and now, so
+      // there is no list left to refresh.
+      const { wasCurrentDevice } = await revokeDevice(pendingRevoke.device_id)
+      setPendingRevoke(null)
+      if (!wasCurrentDevice) reloadDevices()
+    } catch (err) {
+      console.error('[yaply:devices] revoke failed', err)
+      setDeviceError('Could not sign that device out. Try again.')
+    } finally {
+      setIsRevoking(false)
+    }
+  }
 
   const beginEntrant = useCallback(
     (raw: string) => {
@@ -119,26 +155,59 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
               key={d.device_id}
               className="rounded-xl border border-border bg-tint px-3 py-2.5 flex items-center justify-between gap-3"
             >
-              <div className="min-w-0">
-                <p className="text-sm text-text truncate">
-                  {d.device_name ?? `Device ${d.device_id}`}
-                  {d.key_fingerprint && d.key_fingerprint === myFp && (
-                    <span className="ml-2 text-xs text-accent-mint">this device</span>
-                  )}
-                </p>
+              <div className="min-w-0 flex-1">
+                {renamingId === d.device_id ? (
+                  <input
+                    autoFocus
+                    value={renameDraft}
+                    onChange={(e) => setRenameDraft(e.target.value)}
+                    onBlur={() => void saveRename(d)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void saveRename(d)
+                      if (e.key === 'Escape') setRenamingId(null)
+                    }}
+                    maxLength={60}
+                    placeholder={`Device ${d.device_id}`}
+                    className="w-full px-2 py-1 rounded-lg bg-surface border border-border text-sm text-text outline-none focus:ring-1 focus:ring-[#5b8def]/50 transition"
+                  />
+                ) : (
+                  <p className="text-sm text-text truncate">
+                    {d.device_name ?? `Device ${d.device_id}`}
+                    {isThisDevice(d) && (
+                      <span className="ml-2 text-xs text-accent-mint">this device</span>
+                    )}
+                  </p>
+                )}
                 <p className="text-xs text-text-subtle">
                   Last active{' '}
                   {d.last_active_at ? new Date(d.last_active_at).toLocaleDateString() : 'unknown'}
                 </p>
               </div>
-              <span className="text-[10px] font-mono text-text-subtle truncate max-w-[6rem]">
-                {d.key_fingerprint?.slice(0, 8)}
-              </span>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  onClick={() => {
+                    setRenamingId(d.device_id)
+                    setRenameDraft(d.device_name ?? '')
+                  }}
+                  title="Rename"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-text-subtle hover:bg-surface hover:text-text transition-colors"
+                >
+                  <Pencil size={13} />
+                </button>
+                <button
+                  onClick={() => setPendingRevoke(d)}
+                  title="Sign out this device"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-text-subtle hover:bg-danger-tint hover:text-danger transition-colors"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
             </div>
           ))}
           {devices.length === 0 && (
             <p className="text-xs text-text-subtle">No devices registered yet.</p>
           )}
+          {deviceError && <p className="text-xs text-danger">{deviceError}</p>}
         </div>
       </div>
 
@@ -356,6 +425,45 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
           </div>
         )}
       </div>
+
+      <Dialog.Root open={!!pendingRevoke} onOpenChange={(o) => !o && setPendingRevoke(null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(26rem,calc(100vw-2rem))] rounded-2xl bg-surface border border-border p-5 z-50 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="w-8 h-8 flex items-center justify-center rounded-full bg-danger-tint flex-shrink-0">
+                <AlertTriangle size={14} className="text-danger" />
+              </span>
+              <div className="min-w-0">
+                <Dialog.Title className="text-sm font-semibold text-text">
+                  Sign out {pendingRevoke?.device_name ?? `Device ${pendingRevoke?.device_id ?? ''}`}?
+                </Dialog.Title>
+                <Dialog.Description className="text-xs text-text-subtle mt-1.5">
+                  {pendingRevoke && isThisDevice(pendingRevoke)
+                    ? 'This is the device you are using. You will be signed out immediately and will need to sign in and pair again to read your message history here.'
+                    : 'That device is signed out and stops receiving new messages. To use it again, you will need to sign in on it and pair it again to restore its message history.'}
+                </Dialog.Description>
+              </div>
+              <Dialog.Close className="ml-auto text-text-subtle hover:text-text transition-colors">
+                <X size={15} />
+              </Dialog.Close>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <Dialog.Close className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium text-text-muted hover:bg-tint transition-colors">
+                Cancel
+              </Dialog.Close>
+              <button
+                onClick={() => void confirmRevoke()}
+                disabled={isRevoking}
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-danger hover:opacity-90 text-sm font-medium text-white transition-opacity disabled:opacity-40"
+              >
+                {isRevoking ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                Sign out
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       <p className="flex items-start gap-2 text-xs text-text-subtle">
         <Smartphone size={13} className="mt-0.5 flex-shrink-0" />

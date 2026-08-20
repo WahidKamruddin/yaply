@@ -204,6 +204,8 @@ export interface Database {
           key_fingerprint: string | null
           signed_prekey: Json | null
           device_name: string | null
+          platform: string | null
+          session_id: string | null
           push_subscription: Json | null
           last_active_at: string | null
           created_at: string
@@ -216,6 +218,8 @@ export interface Database {
           key_fingerprint?: string | null
           signed_prekey?: Json | null
           device_name?: string | null
+          platform?: string | null
+          session_id?: string | null
           push_subscription?: Json | null
           last_active_at?: string | null
           created_at?: string
@@ -223,6 +227,9 @@ export interface Database {
         Update: {
           identity_key?: string | null
           key_fingerprint?: string | null
+          device_name?: string | null
+          platform?: string | null
+          session_id?: string | null
           last_active_at?: string | null
         }
         Relationships: []
@@ -405,6 +412,10 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
+      revoke_device: {
+        Args: { p_device_id: number }
+        Returns: undefined
+      }
       find_direct_conversation: {
         Args: { user_a: string; user_b: string }
         Returns: string | null
