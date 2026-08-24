@@ -19,3 +19,6 @@ todos.json
 yaply-ios/
 yaply-android/
 yaply-native/
+
+# Local scratch output, not part of the app
+brag-output/
