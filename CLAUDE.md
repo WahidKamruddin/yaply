@@ -279,7 +279,7 @@ E2E here means **text message content is encrypted between a user's active devic
 - **Push previews / reactions leak:** notification content routes through a push provider outside E2E; reactions are stored in plaintext.
 - **Search:** no server-side search over ciphertext; client-side search only covers already-decrypted, loaded messages.
 - **Fan-out scaling:** envelope rows = messages × recipients × devices, bounded only by the 90-day `last_active_at` filter; large groups are heavy on writes/storage.
-- **Cross-platform interop window:** until yaply-ios implements the v2 envelope format, mixed web/iOS conversations can't read each other's v2 messages.
+- **Cross-platform interop:** web and iOS both implement wire format v2, live pairing, and device revocation. Any change to the SAS formula, transfer payload shape, pairing channel topic, or envelope wire format must land on both at once or mixed conversations silently break.
 - **Browser-E2E trust:** the app *ships the JavaScript that does the crypto*, so whoever controls delivery could exfiltrate keys/plaintext via a malicious update. This is an *active* attack (detectable via open-source/audits) and can't retroactively recover messages sealed to a key that was never captured — but it means "the server can't read it" is not the same as "the operator physically cannot read it."
 
 ### Packages (Monorepo)
@@ -524,19 +524,19 @@ belong in this repo:
   - Editing (when built): re-seal with a new message key and replace all
     envelopes in one transaction; never reuse the old key.
   - Per-user in-memory caches only — never a single-slot-plus-owner-check.
-- **Device naming & revocation** — see the Device management section above.
-  iOS must: write `platform = 'ios'` and a generated `device_name` (e.g.
-  `iPhone 15 (App)`) **only on first registration**, never on later logins;
-  record the access token's `session_id` claim on its `devices` row so
-  `revoke_device` can kill that session; call `revoke_device(p_device_id)`
-  rather than deleting the row directly (a plain DELETE leaves the auth session
-  alive); and run the same **orphan check** at startup — a locally stored
-  `device_id` with no matching row means this install was revoked, so wipe all
-  local keys and register fresh. Skipping the orphan check lets a revoked
-  device republish its old identity and silently undo the revocation. Never
-  treat a *failed* lookup as "revoked".
-- **Live device pairing** — see the Live device pairing section above for the
-  full protocol. The contract iOS must reproduce exactly:
+- **Device naming & revocation** — **implemented on both platforms.** See the
+  Device management section above; iOS mirrors it in
+  `Features/Devices/` (`DeviceRepository`, `DeviceRevocationWatcher`,
+  `DeviceName`) with the orphan check in `EncryptionRegistrar`. The rules that
+  must not drift: name written on **first registration only**; `session_id`
+  claim recorded on the row; revoke via `revoke_device(p_device_id)` and never a
+  direct DELETE (that leaves the auth session alive); orphan check at startup;
+  and a *failed* lookup is never treated as "revoked".
+- **Live device pairing** — **implemented on both platforms** (iOS:
+  `Features/Devices/DevicePairingCrypto.swift`, `DevicePairingViewModel.swift`,
+  `PairingQRView` via CoreImage, `QRScannerView` via AVFoundation). See the Live
+  device pairing section above for the full protocol. The contract that must
+  stay byte-identical:
   - Code alphabet Crockford base32 (no I/L/O/U), 8 chars, displayed `XXXX-XXXX`;
     normalise leniently (case-insensitive, strip dashes/spaces, `O→0`, `I,L→1`).
   - Channel topic `pairing:<userId>:<code>`, opened **private** (`isPrivate = true`
@@ -552,9 +552,9 @@ belong in this repo:
   - Handshake events `ready` / `hello {ephPub}` / `ack {ephPub}` /
     `payload {iv, ciphertext}` / `done`, with the receiver re-sending `hello` on
     `ready`; abort on a second, different `ephPub`.
-  - **iOS is most often the *sender* to a desktop receiver**, so it must ship the
-    presenter-with-typed-code path (show an 8-char code), not just QR scanning.
-    Never gate pairing behind the camera.
+  - **iOS is most often the *sender* to a desktop receiver**, so the
+    presenter-with-typed-code path (show an 8-char code) is mandatory, not just
+    QR scanning. Never gate pairing behind the camera.
   - Adopted keys are decrypt-only: never publish them to `devices`, never seal
     new messages to them, and merge (don't overwrite) on a second pairing.
 - **Events availability slot keys** — each slot key is the **UTC ISO string** of
