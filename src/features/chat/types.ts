@@ -40,7 +40,7 @@ export interface DbMessage {
   content: string         // base64(AES-GCM ciphertext+tag) or plain base64 for phase-1
   iv: string | null       // base64(nonce[12]); null = phase-1 fallback (plain base64)
   enc_v: number | null    // 2 = envelope-encrypted (message_envelopes); null = phase-1
-  type: string            // 'text' | 'image' | 'gif' | 'sticker' | 'file' | 'system' | 'ai'
+  type: string            // 'text' | 'image' | 'gif' | 'sticker' | 'file' | 'voice' | 'system' | 'ai'
   media_url: string | null
   media_mime: string | null
   reply_to_id: string | null

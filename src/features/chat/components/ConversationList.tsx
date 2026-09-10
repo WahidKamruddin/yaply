@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Search, SquarePen, MessageSquare, Users } from 'lucide-react'
+import { Search, SquarePen, MessageSquare, Users, ChevronLeft } from 'lucide-react'
 import { useAtom } from 'jotai'
 import { useNavigate } from '@tanstack/react-router'
-import { activeConversationIdAtom } from '@/features/chat/store/chat.atoms'
+import { activeConversationIdAtom, sidebarCollapsedAtom } from '@/features/chat/store/chat.atoms'
 import { useConversations } from '@/features/chat/hooks/useConversations'
 import { useFriendRequests } from '@/features/friends/hooks/useFriends'
 import ConversationItem from './ConversationItem'
@@ -20,6 +20,7 @@ export default function ConversationList({ currentUserId }: Props) {
   const [showNew, setShowNew] = useState(false)
   const [showRequests, setShowRequests] = useState(false)
   const [activeId, setActiveId] = useAtom(activeConversationIdAtom)
+  const [, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
   const navigate = useNavigate()
   const { data: conversations = [], isLoading, isError } = useConversations(currentUserId)
   const { pendingCount } = useFriendRequests(currentUserId)
@@ -37,7 +38,7 @@ export default function ConversationList({ currentUserId }: Props) {
   const requests = visible.filter((c) => c.requestState === 'pending')
 
   return (
-    <div className="flex flex-col h-full bg-surface border-r border-border">
+    <div className="flex flex-col h-full w-full md:w-72 md:flex-shrink-0 bg-surface border-r border-border">
       {/* Header */}
       <div className="px-4 pb-3 border-b border-border" style={{ paddingTop: `max(1.25rem, var(--safe-top))` }}>
         <div className="flex items-center justify-between mb-3">
@@ -48,7 +49,7 @@ export default function ConversationList({ currentUserId }: Props) {
             <button
               onClick={() => void navigate({ to: '/friends' })}
               aria-label="Friends"
-              className="relative w-8 h-8 flex items-center justify-center text-white [.light_&]:text-primary hover:brightness-110 transition-all"
+              className="relative w-8 h-8 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
             >
               <Users size={18} strokeWidth={2.5} />
               {pendingCount > 0 && (
@@ -60,9 +61,16 @@ export default function ConversationList({ currentUserId }: Props) {
             <button
               onClick={() => setShowNew(true)}
               aria-label="New conversation"
-              className="w-8 h-8 flex items-center justify-center text-white [.light_&]:text-primary hover:brightness-110 transition-all"
+              className="w-8 h-8 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
             >
               <SquarePen size={18} strokeWidth={2.5} />
+            </button>
+            <button
+              onClick={() => setSidebarCollapsed(true)}
+              aria-label="Collapse sidebar"
+              className="hidden md:flex w-8 h-8 items-center justify-center rounded-full border border-border text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
+            >
+              <ChevronLeft size={16} strokeWidth={2.5} />
             </button>
           </div>
         </div>

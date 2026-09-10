@@ -40,6 +40,29 @@ export async function uploadMediaFile(
   return { storageRef, publicUrl: data.publicUrl }
 }
 
+// Upload a file verbatim — no image compression, original MIME and extension
+// preserved. Used for arbitrary file attachments and voice messages (audio/*).
+// Bucket is `media`; the URL is public (media is never E2E encrypted).
+export async function uploadRawFile(
+  file: File | Blob,
+  userId: string,
+): Promise<{ storageRef: string; publicUrl: string }> {
+  const name = file instanceof File ? file.name : ''
+  const extFromName = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : ''
+  const extFromMime = file.type ? file.type.split('/')[1]?.split(';')[0] : ''
+  const ext = (extFromName || extFromMime || 'bin').toLowerCase()
+  const storageRef = `${userId}/${Date.now()}.${ext}`
+
+  const { error } = await supabase.storage.from(BUCKET).upload(storageRef, file, {
+    contentType: file.type || 'application/octet-stream',
+    upsert: false,
+  })
+  if (error) throw error
+
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(storageRef)
+  return { storageRef, publicUrl: data.publicUrl }
+}
+
 export async function uploadStickerFile(
   blob: Blob,
   userId: string,

@@ -17,6 +17,8 @@ function previewText(m: DecryptedMessage): string {
   if (m.type === 'sticker') return 'Sticker'
   if (m.type === 'gif') return 'GIF'
   if (m.type === 'image') return '📷 Photo'
+  if (m.type === 'voice') return '🎤 Voice message'
+  if (m.type === 'file') return '📎 File'
   if (m.decryptFailed) return '🔒 Encrypted message'
   return m.content
 }

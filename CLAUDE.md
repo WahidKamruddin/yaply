@@ -349,7 +349,7 @@ request_state    text   ('accepted' | 'pending' | 'declined') default 'accepted'
 id              uuid
 conversation_id uuid
 sender_id       uuid
-type            text   ('text' | 'image' | 'gif' | 'sticker' | 'file' | 'system' | 'ai')
+type            text   ('text' | 'image' | 'gif' | 'sticker' | 'file' | 'voice' | 'system' | 'ai')  — 'voice' added in migration 00037; iOS records it, web renders <audio>. Media types (image/gif/sticker/file/voice) are never E2E encrypted.
 content         text   — base64(AES-GCM ciphertext+tag) or plain base64 (phase-1)
 iv              text   — base64(nonce[12]); NULL = phase-1 fallback
 enc_v           smallint — 2 = envelope-encrypted (see message_envelopes); NULL = phase-1
@@ -447,6 +447,7 @@ Two separate consent mechanisms that are easy to conflate — they are not the s
 |---------|-------|
 | Auth (sign in / sign up) | `src/routes/auth.tsx`, `src/lib/auth.ts`, `src/lib/passwordStrength.ts` — signup requires a password meeting all 5 checks (8+ chars, upper, lower, number, symbol) shown live via a strength meter + checklist (`isPasswordStrongEnough` gates the submit button); password/confirm-password fields have a show/hide toggle. Email/password signups require clicking an emailed confirmation link before `signInWithPassword` succeeds — Google OAuth accounts are exempt since Google already verifies the address. **This is enforced by the Supabase project's "Confirm email" toggle (Dashboard → Authentication → Sign In / Providers → Email), not by app code** — no migration/RLS/Edge Function can set it, only the Dashboard or the Management API with a personal access token. The client handles an unconfirmed-login attempt by surfacing a "Resend confirmation email" action (`supabase.auth.resend({ type: 'signup', email })`). |
 | Conversation list | `src/features/chat/components/ConversationList.tsx`, `src/features/chat/hooks/useConversations.ts` |
+| Collapsible sidebar (desktop) | `sidebarCollapsedAtom` (`atomWithStorage`, `yaply-sidebar-collapsed`). circled `ChevronLeft` button in the `ConversationList` header collapses; a `PanelLeft` button expands it — in the `ChatView` header when a chat is open, and at the top of the `Dashboard` otherwise. `routes/chat.tsx` animates the column `md:w-72` ↔ `md:w-0` (`transition-[width]`, `motion-reduce` safe). `md+` only; mobile is unaffected. |
 | Direct messaging | `src/features/chat/components/ChatView.tsx` |
 | Group conversations | `createGroupConversation` in `src/features/chat/api/conversations.ts` |
 | Message pagination (50/page) | `src/features/chat/hooks/useMessages.ts` |
@@ -457,7 +458,8 @@ Two separate consent mechanisms that are easy to conflate — they are not the s
 | Delete message confirmation modal | Radix UI Dialog in `MessageBubble.tsx` |
 | Reply quotation with deleted-message handling | Reply block in `MessageBubble.tsx` |
 | Message reply | `replyToMessageIdAtom`, `ReplyStrip` in `MessageInput` |
-| Mute conversations | `muteConversation` in conversations API; `muted_until` column in `conversation_members` |
+| Mute conversations | `muteConversation` in conversations API; `muted_until` column in `conversation_members`. Reachable from the `ConversationItem` swipe menu **and** the Chat settings modal (below). |
+| **Chat settings modal** | Tapping the `ChatView` header title/avatar opens it (no longer navigates to a profile, and there's no separate Info button). Groups → `GroupInfoModal.tsx` (retitled "Chat settings"); DMs → `DmSettingsModal.tsx`. Both show: a **Members** list (each row → `/profile/$username`), a **Mute notifications** toggle (`muteConversation`, JS-max-Date sentinel), and a self-only leave/delete — "Leave group" / "Delete chat" (`deleteConversation` on the caller's own `conversation_members` row; `trg_delete_empty_conversation` finishes cleanup). DM adds **Block user** (`blockUser` RPC → close conversation). Group keeps its admin controls + "Delete group for everyone" danger zone. |
 | Mark conversations read | `markConversationRead` in conversations API |
 | Conversation swipe-to-delete | `ConversationItem.tsx` |
 | Delete conversation (self-only) | `deleteConversation` in `src/features/chat/api/conversations.ts` |
@@ -482,16 +484,19 @@ Two separate consent mechanisms that are easy to conflate — they are not the s
 | **Friends system** (tier 6) | `src/routes/friends.tsx` (`/friends` — tabs: Friends, Requests, Sent, Discover, Blocked, plus a people search that takes over the panel), `src/features/friends/` (`api/friends.ts`, `hooks/useFriends.ts`, components incl. `ProfileModal`, `FriendActionButton`, `MessageRequestBar`, `UserRow`, `ConfirmDialog`). DB: `friendships`, `user_blocks`, `conversation_members.request_state` (migration 00033). Entry point: Users icon + pending badge in the `ConversationList` header. |
 | **Device management** (rename + revoke) | `src/features/pairing/api/devices.ts`, `src/features/pairing/hooks/useDeviceRevocation.ts` (mounted in `routes/chat.tsx`), `src/lib/deviceName.ts`, Settings → Devices. RPC `revoke_device`; migration `00035_device_management.sql`. |
 | **Live device pairing** (history sync) | `packages/crypto/src/pairing.ts`, `src/features/pairing/` (`hooks/useDevicePairing.ts`, `components/PairingQr.tsx`, `components/QrScanner.tsx`), `src/features/settings/components/DevicePairingSettings.tsx` (Settings → Devices), `src/routes/link.tsx`. Migration `00034_pairing_channel_authorization.sql`. Deps: `qrcode`, `jsqr`. |
-| **User profile view** | `src/features/friends/components/ProfileModal.tsx` — the app's only profile card, opened from the `ChatView` header avatar and every friends list. Shows public profile fields only (never email/account data). |
+| **User profile view** | `src/features/friends/components/ProfileModal.tsx` — the app's only profile card, opened from every friends list; the `/profile/$username` route is also reachable from the member rows inside the Chat settings modal (the `ChatView` header avatar now opens Chat settings instead of navigating straight to a profile). Shows public profile fields only (never email/account data). |
 | **Message requests** | Non-friend DMs land in the "Message requests" section of `ConversationList`; `ChatView` swaps `MessageInput` for `MessageRequestBar` (Accept / Decline / Block) while `requestState === 'pending'`. |
-| **GIF picker (Giphy)** | `src/features/media/` (`api/gifs.ts`, `hooks/useGifSearch.ts`, `components/GifPicker.tsx`), reached via the paperclip → `MediaPicker` GIF tab. `searchGifs`/`getTrendingGifs` hit `api.giphy.com/v1/gifs` (`rating=g`, `bundle=messaging_non_clips`) and send a `downsized` rendition, not `original`. Sent as `type='gif'`, `content=''`, `iv=null`, `enc_v=NULL`, `media_url` = the Giphy URL — **not E2E encrypted** (media never is). `ChatView.sendMedia` renders it optimistically like a text send. GIFs and stickers render **frameless** in `MessageBubble` (`isFrameless` — no bubble background/border/padding, like a sticker in iMessage); images keep the thin frame. The picker grid is a CSS `columns-2` masonry that preserves each GIF's aspect ratio. Requires `VITE_GIPHY_API_KEY`; `hasGiphyKey` gates the picker and shows a config hint (treating the `.env.example` placeholder as unset). CSP already allows `*.giphy.com` for `img-src`/`media-src` and `api.giphy.com` for `connect-src`. |
-| Image / sticker send | Paperclip → `MediaPicker` Image tab (device upload via `uploadMediaFile` → `media` Storage bucket) and Sticker tab; both go through `ChatView.sendMedia` with optimistic render. |
+| **Composer (expanding attachment menu + expression picker + voice)** | `MessageInput.tsx` — a `Plus` toggle (rotates 45° into an X when open) reveals a row of 4 round icon buttons between the toggle and the textarea: **File · Camera · Voice message · Image**. The row auto-collapses on textarea focus or first keystroke, and on explicit toggle. An in-field emoji button (right-aligned inside the textarea's rounded container) opens the **expression picker**. New optional props (all default to no-ops): `onPickFile`, `onPickCamera`, `onPickImage`, `onStartVoice`, `onExpression`, plus `showAttachments?: boolean` (default `true`) which hides the toggle + emoji button for plain hosts. Row animation respects `prefers-reduced-motion`. Wiring lives in `ChatView`: Image/Camera → hidden `<input type="file" accept="image/*" [capture]>` → `handleImageSelect`; File → hidden `<input type="file">` → `handleFileSelect` (`uploadRawFile` → `sendMedia({ type: 'file', … })`); Voice → swaps the whole composer for `VoiceRecorderBar` (mirrors the `MessageRequestBar` swap) → `handleVoiceSend`. |
+| **Expression picker** | `src/features/media/components/ExpressionPicker.tsx` (replaced `MediaPicker`) — tabs **GIFs** (`GifPicker`, live) · **Stickers** (`StickerPicker`, live — web has a sticker library, unlike iOS) · **Voice notes** (reusable saved voice clips — "coming soon"). Opened by the composer's in-field emoji button; selections route through `ChatView.sendMedia`. |
+| **GIF picker (Giphy)** | `src/features/media/` (`api/gifs.ts`, `hooks/useGifSearch.ts`, `components/GifPicker.tsx`), reached via the composer emoji button → `ExpressionPicker` GIFs tab. `searchGifs`/`getTrendingGifs` hit `api.giphy.com/v1/gifs` (`rating=g`, `bundle=messaging_non_clips`) and send a `downsized` rendition, not `original`. Sent as `type='gif'`, `content=''`, `iv=null`, `enc_v=NULL`, `media_url` = the Giphy URL — **not E2E encrypted** (media never is). `ChatView.sendMedia` renders it optimistically like a text send. GIFs and stickers render **frameless** in `MessageBubble` (`isFrameless` — no bubble background/border/padding, like a sticker in iMessage); images keep the thin frame. The picker grid is a CSS `columns-2` masonry that preserves each GIF's aspect ratio. Requires `VITE_GIPHY_API_KEY`; `hasGiphyKey` gates the picker and shows a config hint (treating the `.env.example` placeholder as unset). CSP already allows `*.giphy.com` for `img-src`/`media-src` and `api.giphy.com` for `connect-src`. |
+| Image / file / sticker / voice send | Composer attachment menu → `handleImageSelect` (`uploadMediaFile`, image-compressed) / `handleFileSelect` + `handleVoiceSend` (`uploadRawFile` — original MIME + extension preserved, no compression) → `media` Storage bucket. Sticker tab of `ExpressionPicker`. All go through `ChatView.sendMedia` with optimistic render; none are E2E encrypted (`content: ''`, `iv: null`, `enc_v = NULL`). `type='file'` renders as a download link and `type='voice'` as `<audio controls>` in `MessageBubble`; previews are "📎 File" / "🎤 Voice message". `VoiceRecorderBar.tsx` records via `MediaRecorder` (`audio/mp4` when supported, else `audio/webm`), stops all tracks on cancel/send/unmount, and surfaces mic-permission denial as a `sendError`. |
 
 ### Not yet integrated
 
 | Feature | Status |
 |---------|--------|
-| Standalone drag-drop image zone | `DragDropZone` component built but not mounted; the MediaPicker Image tab is the live path |
+| Standalone drag-drop image zone | `DragDropZone` component built but not mounted; the composer's Image button is the live path |
+| Reusable saved voice notes | "Voice notes" tab of `ExpressionPicker` is a "coming soon" placeholder; one-off voice messages (record → send) are live via `VoiceRecorderBar` |
 | AI conversations | Schema migrated; no UI or AI API integration |
 
 ---
@@ -616,6 +621,14 @@ belong in this repo:
   an `<img>`, so it round-trips with no web change. A transparent image pasted /
   dropped on iOS is treated as a sticker (rendered bubble-free), an opaque one as
   a photo.
+- **Voice messages (`type='voice'`)** — iOS composer records AAC `.m4a` to the
+  `media` bucket and sends `type='voice'`, `media_mime='audio/mp4'`,
+  `content=''`, `iv=null` (not E2E, like all media). Enum value added in
+  migration `00037_voice_message_type.sql`; web `MessageBubble` renders a plain
+  `<audio controls>` and previews it as "🎤 Voice message". Web records via
+  `VoiceRecorderBar` + `MediaRecorder` (`audio/mp4` when the browser supports it,
+  `audio/webm` otherwise — Chrome/Firefox produce webm, which both platforms play
+  fine). Any change to the container/mime must land on both platforms.
 - **Splitwise** — REST API `https://secure.splitwise.com/api/v3.0/`, OAuth2 client
   credentials; when adding an expense the payer's `paid_share` maps by index in the
   members array (not always index 0); `simplified_debts` may be null.
@@ -641,7 +654,7 @@ yaply/
 │   │   │   └── handlers/          # remindHandler, muteHandler, threadHandler, createHandler
 │   │   └── media/                 # GIF, image, sticker media
 │   │       ├── api/               # gifs.ts (Giphy), upload.ts (Supabase Storage)
-│   │       ├── components/        # GifPicker, StickerPicker, MediaPicker, DragDropZone
+│   │       ├── components/        # GifPicker, StickerPicker, ExpressionPicker, DragDropZone
 │   │       └── hooks/             # useGifSearch, useStickers, useUpload
 │   │   └── settings/               # Settings page tabs (Account, Billing, Privacy, Terms, Help, Report)
 │   │       └── components/

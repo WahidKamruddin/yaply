@@ -1,10 +1,9 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import { flushSync } from 'react-dom'
-import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Phone, Video, Info, ChevronDown, ArrowLeft, Search, X, PanelRight } from 'lucide-react'
+import { Phone, Video, ChevronDown, ArrowLeft, Search, X, PanelRight, PanelLeft } from 'lucide-react'
 import { useAtom, useSetAtom } from 'jotai'
-import { activeConversationIdAtom, replyToMessageIdAtom, conversationPanelOpenAtom, conversationPanelTabAtom } from '@/features/chat/store/chat.atoms'
+import { activeConversationIdAtom, replyToMessageIdAtom, conversationPanelOpenAtom, conversationPanelTabAtom, sidebarCollapsedAtom } from '@/features/chat/store/chat.atoms'
 import { useConversations } from '@/features/chat/hooks/useConversations'
 import { useMessages } from '@/features/chat/hooks/useMessages'
 import { useSendMessage } from '@/features/chat/hooks/useSendMessage'
@@ -18,6 +17,7 @@ import { markConversationRead } from '@/features/chat/api/conversations'
 import { deleteMessage, fetchThreadCounts, fetchEnvelopesForMessages } from '@/features/chat/api/messages'
 import { useReadReceipts } from '@/features/chat/hooks/useReadReceipts'
 import GroupInfoModal from './GroupInfoModal'
+import DmSettingsModal from './DmSettingsModal'
 import ConversationPanel from './ConversationPanel'
 import { useReminderNotifications } from '@/features/chat/hooks/useReminders'
 import {
@@ -27,15 +27,16 @@ import {
   removeReaction,
   type ReactionGroup,
 } from '@/features/chat/api/reactions'
-import { uploadMediaFile } from '@/features/media/api/upload'
+import { uploadMediaFile, uploadRawFile } from '@/features/media/api/upload'
 import type { GifResult } from '@/features/media/api/gifs'
 import { supabase } from '@/lib/supabase'
 import type { DecryptedMessage, ConversationListItem } from '@/features/chat/types'
 import MessageBubble from './MessageBubble'
 import MessageInput from './MessageInput'
+import VoiceRecorderBar from './VoiceRecorderBar'
 import PinnedBanner from './PinnedBanner'
 import Avatar from '@/components/Avatar'
-import MediaPicker from '@/features/media/components/MediaPicker'
+import ExpressionPicker from '@/features/media/components/ExpressionPicker'
 import ThreadView from './ThreadView'
 import Dashboard from './dashboard/Dashboard'
 import MessageRequestBar from '@/features/friends/components/MessageRequestBar'
@@ -58,10 +59,10 @@ function DateSeparator({ date }: { date: string }) {
 
 export default function ChatView({ currentUserId }: Props) {
   const queryClient = useQueryClient()
-  const navigate = useNavigate()
   const [activeId, setActiveId] = useAtom(activeConversationIdAtom)
   const [replyId, setReplyId] = useAtom(replyToMessageIdAtom)
   const [panelOpen, setPanelOpen] = useAtom(conversationPanelOpenAtom)
+  const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
   const setPanelTab = useSetAtom(conversationPanelTabAtom)
 
   useReminderNotifications(currentUserId)
@@ -69,7 +70,8 @@ export default function ChatView({ currentUserId }: Props) {
   const [newMsgCount, setNewMsgCount] = useState(0)
   const [decrypted, setDecrypted] = useState<DecryptedMessage[]>([])
   const [reactionsMap, setReactionsMap] = useState<Record<string, ReactionGroup[]>>({})
-  const [showMedia, setShowMedia] = useState(false)
+  const [showExpression, setShowExpression] = useState(false)
+  const [recordingVoice, setRecordingVoice] = useState(false)
   const [mediaUploading, setMediaUploading] = useState(false)
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const [pendingMessages, setPendingMessages] = useState<DecryptedMessage[]>([])
@@ -78,13 +80,16 @@ export default function ChatView({ currentUserId }: Props) {
   const [threadViewRoot, setThreadViewRoot] = useState<DecryptedMessage | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [showGroupInfo, setShowGroupInfo] = useState(false)
+  const [showChatSettings, setShowChatSettings] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
 
   const { data: currentUserProfile } = useProfile(currentUserId)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const initialScrollRef = useRef(true)
   const isNearBottomRef = useRef(true)
   const decryptedIdsRef = useRef<string[]>([])
@@ -545,7 +550,6 @@ export default function ChatView({ currentUserId }: Props) {
 
   const handleImageSelect = useCallback(async (file: File) => {
     if (!activeId) return
-    setShowMedia(false)
     setMediaUploading(true)
     try {
       const { publicUrl } = await uploadMediaFile(file, currentUserId)
@@ -556,13 +560,38 @@ export default function ChatView({ currentUserId }: Props) {
     setMediaUploading(false)
   }, [activeId, currentUserId, sendMedia])
 
+  const handleFileSelect = useCallback(async (file: File) => {
+    if (!activeId) return
+    setMediaUploading(true)
+    try {
+      const { publicUrl } = await uploadRawFile(file, currentUserId)
+      sendMedia({ type: 'file', mediaUrl: publicUrl, mediaMime: file.type || 'application/octet-stream' })
+    } catch {
+      setSendError('File upload failed. Please try again.')
+    }
+    setMediaUploading(false)
+  }, [activeId, currentUserId, sendMedia])
+
+  const handleVoiceSend = useCallback(async (blob: Blob, mime: string) => {
+    setRecordingVoice(false)
+    if (!activeId) return
+    setMediaUploading(true)
+    try {
+      const { publicUrl } = await uploadRawFile(blob, currentUserId)
+      sendMedia({ type: 'voice', mediaUrl: publicUrl, mediaMime: mime })
+    } catch {
+      setSendError('Voice message upload failed. Please try again.')
+    }
+    setMediaUploading(false)
+  }, [activeId, currentUserId, sendMedia])
+
   const handleGifSelect = useCallback((gif: GifResult) => {
-    setShowMedia(false)
+    setShowExpression(false)
     sendMedia({ type: 'gif', mediaUrl: gif.url, mediaMime: 'image/gif' })
   }, [sendMedia])
 
   const handleStickerSelect = useCallback((url: string) => {
-    setShowMedia(false)
+    setShowExpression(false)
     sendMedia({ type: 'sticker', mediaUrl: url })
   }, [sendMedia])
 
@@ -602,10 +631,18 @@ export default function ChatView({ currentUserId }: Props) {
         <button onClick={() => setActiveId(null)} className="md:hidden -ml-1 w-10 h-10 flex items-center justify-center rounded-full text-text-subtle active:bg-tint transition-colors">
           <ArrowLeft size={22} />
         </button>
+        {sidebarCollapsed && (
+          <button
+            onClick={() => setSidebarCollapsed(false)}
+            aria-label="Expand sidebar"
+            className="hidden md:flex -ml-1 w-9 h-9 items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
+          >
+            <PanelLeft size={18} />
+          </button>
+        )}
         <button
-          onClick={() => { if (otherMember && !conversation.isGroup) void navigate({ to: '/profile/$username', params: { username: otherMember.profile.username } }) }}
-          disabled={conversation.isGroup || !otherMember}
-          className="flex items-center gap-3 flex-1 min-w-0 text-left disabled:cursor-default"
+          onClick={() => setShowChatSettings(true)}
+          className="flex items-center gap-3 flex-1 min-w-0 text-left"
         >
           <Avatar
             src={avatarSrc}
@@ -631,27 +668,12 @@ export default function ChatView({ currentUserId }: Props) {
           >
             <Search size={16} />
           </button>
-          {conversation.isGroup && (
-            <button
-              onClick={() => setShowGroupInfo(true)}
-              className="w-8 h-8 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
-            >
-              <Info size={16} />
-            </button>
-          )}
           <button
             onClick={() => setPanelOpen((v) => !v)}
             className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${panelOpen ? 'bg-[#5b8def] text-white' : 'text-text-subtle hover:text-primary-text hover:bg-primary-tint'}`}
             title="Conversation details"
           >
             <PanelRight size={16} />
-          </button>
-          <div className="w-px h-4 bg-border mx-1" />
-          <button
-            onClick={() => void navigate({ to: '/settings' })}
-            className="rounded-full hover:ring-2 hover:ring-[#5b8def]/40 transition-all flex-shrink-0"
-          >
-            <Avatar src={currentUserProfile?.avatar_url} alt="You" size={32} />
           </button>
         </div>
       </div>
@@ -803,26 +825,58 @@ export default function ChatView({ currentUserId }: Props) {
           senderName={displayName}
           senderUserId={otherMember?.userId ?? null}
         />
+      ) : recordingVoice ? (
+        <VoiceRecorderBar
+          onSend={(blob, mime) => void handleVoiceSend(blob, mime)}
+          onCancel={() => setRecordingVoice(false)}
+          onError={(msg) => setSendError(msg)}
+        />
       ) : (
         <MessageInput
           onSend={(text) => { void handleSend(text); notifyStopTyping() }}
-          onAttachment={() => setShowMedia(true)}
           onTyping={notifyTyping}
           onStopTyping={notifyStopTyping}
+          onPickFile={() => fileInputRef.current?.click()}
+          onPickCamera={() => cameraInputRef.current?.click()}
+          onPickImage={() => imageInputRef.current?.click()}
+          onStartVoice={() => setRecordingVoice(true)}
+          onExpression={() => setShowExpression(true)}
           replyMessage={replyMessage}
           disabled={!activeId || mediaUploading || isOrphanedDM}
           placeholder={isOrphanedDM ? 'This person deleted their account' : undefined}
         />
       )}
 
-      {/* Media picker */}
-      {showMedia && (
-        <MediaPicker
+      {/* Hidden attachment inputs driven by the composer's expanding menu */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleImageSelect(f); e.target.value = '' }}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleImageSelect(f); e.target.value = '' }}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFileSelect(f); e.target.value = '' }}
+      />
+
+      {/* Expression picker (GIFs · Stickers · Voice notes) */}
+      {showExpression && (
+        <ExpressionPicker
           userId={currentUserId}
-          onImageSelect={(file) => void handleImageSelect(file)}
           onGifSelect={handleGifSelect}
           onStickerSelect={handleStickerSelect}
-          onClose={() => setShowMedia(false)}
+          onClose={() => setShowExpression(false)}
         />
       )}
 
@@ -837,14 +891,24 @@ export default function ChatView({ currentUserId }: Props) {
         />
       )}
 
-      {/* Group info modal */}
-      {showGroupInfo && conversation.isGroup && (
-        <GroupInfoModal
-          conversation={conversation}
-          currentUserId={currentUserId}
-          onClose={() => setShowGroupInfo(false)}
-          onDeleted={() => setActiveId(null)}
-        />
+      {/* Chat settings modal — group-info for groups, DM equivalent for DMs.
+          Opened by tapping the header title/avatar. */}
+      {showChatSettings && (
+        conversation.isGroup ? (
+          <GroupInfoModal
+            conversation={conversation}
+            currentUserId={currentUserId}
+            onClose={() => setShowChatSettings(false)}
+            onDeleted={() => setActiveId(null)}
+          />
+        ) : (
+          <DmSettingsModal
+            conversation={conversation}
+            currentUserId={currentUserId}
+            onClose={() => setShowChatSettings(false)}
+            onDeleted={() => setActiveId(null)}
+          />
+        )
       )}
 
     </div>
