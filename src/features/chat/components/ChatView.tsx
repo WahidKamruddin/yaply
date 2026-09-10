@@ -236,6 +236,7 @@ export default function ChatView({ currentUserId }: Props) {
           decryptFailed,
           type: msg.type,
           mediaUrl: msg.media_url,
+          mediaMime: msg.media_mime,
           replyToId: msg.reply_to_id,
           threadId: msg.thread_id,
           editedAt: msg.edited_at,
@@ -468,28 +469,92 @@ export default function ChatView({ currentUserId }: Props) {
     }
   }, [reactionsMap, currentUserId])
 
+  // Optimistically render a media message (image / gif / sticker) the same way
+  // handleSend does for text: it shows immediately, then the real row replaces
+  // it once send() resolves. Media is never encrypted (media_url is a public
+  // URL), so there's no encrypt() step — content stays '' and iv null.
+  const sendMedia = useCallback((params: { type: string; mediaUrl: string; mediaMime?: string }) => {
+    if (!activeId) return
+    const tempId = crypto.randomUUID()
+    const tempMsg: DecryptedMessage = {
+      id: tempId,
+      conversationId: activeId,
+      senderId: currentUserId,
+      content: '',
+      type: params.type,
+      mediaUrl: params.mediaUrl,
+      mediaMime: params.mediaMime ?? null,
+      replyToId: null,
+      threadId: null,
+      editedAt: null,
+      deletedAt: null,
+      createdAt: new Date().toISOString(),
+      senderProfile: currentUserProfile ?? undefined,
+    }
+    flushSync(() => {
+      setPendingMessages((prev) => [...prev, tempMsg])
+      setPreAnimIds((prev) => new Set([...prev, tempId]))
+    })
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+    requestAnimationFrame(() => {
+      setPreAnimIds((prev) => { const n = new Set(prev); n.delete(tempId); return n })
+      setAnimatingIds((prev) => new Set([...prev, tempId]))
+      setTimeout(() => {
+        setAnimatingIds((prev) => { const n = new Set(prev); n.delete(tempId); return n })
+      }, 500)
+    })
+    send(
+      {
+        conversationId: activeId,
+        senderId: currentUserId,
+        content: '',
+        iv: null,
+        type: params.type,
+        mediaUrl: params.mediaUrl,
+        mediaMime: params.mediaMime,
+      },
+      {
+        onSuccess: (data) => {
+          pendingConfirmedRef.current.set(tempId, data.id)
+          setSendError(null)
+        },
+        onError: (err) => {
+          setPendingMessages((prev) => prev.filter((m) => m.id !== tempId))
+          const message = err instanceof Error ? err.message : ''
+          setSendError(
+            message.includes('cannot send in this conversation')
+              ? "You can't message this person right now."
+              : 'Message not sent. Please try again.',
+          )
+        },
+      },
+    )
+  }, [activeId, currentUserId, currentUserProfile, send])
+
   const handleImageSelect = useCallback(async (file: File) => {
     if (!activeId) return
     setShowMedia(false)
     setMediaUploading(true)
     try {
       const { publicUrl } = await uploadMediaFile(file, currentUserId)
-      send({ conversationId: activeId, senderId: currentUserId, content: '', iv: null, type: 'image', mediaUrl: publicUrl, mediaMime: file.type })
-    } catch { /* silent */ }
+      sendMedia({ type: 'image', mediaUrl: publicUrl, mediaMime: file.type })
+    } catch {
+      setSendError('Image upload failed. Please try again.')
+    }
     setMediaUploading(false)
-  }, [activeId, currentUserId, send])
+  }, [activeId, currentUserId, sendMedia])
 
   const handleGifSelect = useCallback((gif: GifResult) => {
-    if (!activeId) return
     setShowMedia(false)
-    send({ conversationId: activeId, senderId: currentUserId, content: '', iv: null, type: 'gif', mediaUrl: gif.url })
-  }, [activeId, currentUserId, send])
+    sendMedia({ type: 'gif', mediaUrl: gif.url, mediaMime: 'image/gif' })
+  }, [sendMedia])
 
   const handleStickerSelect = useCallback((url: string) => {
-    if (!activeId) return
     setShowMedia(false)
-    send({ conversationId: activeId, senderId: currentUserId, content: '', iv: null, type: 'sticker', mediaUrl: url })
-  }, [activeId, currentUserId, send])
+    sendMedia({ type: 'sticker', mediaUrl: url })
+  }, [sendMedia])
 
   if (!activeId || !conversation) {
     return (

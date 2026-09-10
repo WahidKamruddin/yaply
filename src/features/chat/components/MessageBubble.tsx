@@ -73,6 +73,10 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
     : undefined
 
   const isMedia = ['image', 'gif', 'sticker'].includes(message.type)
+  // GIFs and stickers render standalone — no bubble background, border, or
+  // padding — the way a sticker reads in Messenger/iMessage. Images keep the
+  // thin frame so a photo still looks like an attachment.
+  const isFrameless = message.type === 'gif' || message.type === 'sticker'
   const isSystem = message.type === 'system'
   const time = formatMessageTime(message.createdAt)
 
@@ -242,16 +246,24 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
             <div
               onClick={() => setShowTime((v) => !v)}
               className={`relative rounded-2xl cursor-pointer ${
-                isOwn
-                  ? 'bg-gradient-to-br from-primary to-primary-dark text-white rounded-br-sm'
-                  : 'bg-card text-text rounded-bl-sm border border-border-soft'
-              } ${isMedia && message.mediaUrl ? 'p-1' : 'px-3 py-2'}`}
+                isFrameless && message.mediaUrl
+                  ? ''
+                  : isOwn
+                    ? 'bg-gradient-to-br from-primary to-primary-dark text-white rounded-br-sm'
+                    : 'bg-card text-text rounded-bl-sm border border-border-soft'
+              } ${
+                !(isMedia && message.mediaUrl)
+                  ? 'px-3 py-2'
+                  : isFrameless
+                    ? ''
+                    : 'p-1'
+              }`}
             >
               {isMedia && message.mediaUrl ? (
                 <img
                   src={message.mediaUrl}
                   alt=""
-                  className="max-w-[240px] max-h-[300px] rounded-xl object-contain"
+                  className={`max-w-[260px] max-h-[340px] object-contain ${message.type === 'sticker' ? '' : 'rounded-xl'}`}
                   loading="lazy"
                 />
               ) : message.type === 'file' && message.mediaUrl ? (

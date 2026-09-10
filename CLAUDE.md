@@ -482,13 +482,14 @@ Two separate consent mechanisms that are easy to conflate — they are not the s
 | **Live device pairing** (history sync) | `packages/crypto/src/pairing.ts`, `src/features/pairing/` (`hooks/useDevicePairing.ts`, `components/PairingQr.tsx`, `components/QrScanner.tsx`), `src/features/settings/components/DevicePairingSettings.tsx` (Settings → Devices), `src/routes/link.tsx`. Migration `00034_pairing_channel_authorization.sql`. Deps: `qrcode`, `jsqr`. |
 | **User profile view** | `src/features/friends/components/ProfileModal.tsx` — the app's only profile card, opened from the `ChatView` header avatar and every friends list. Shows public profile fields only (never email/account data). |
 | **Message requests** | Non-friend DMs land in the "Message requests" section of `ConversationList`; `ChatView` swaps `MessageInput` for `MessageRequestBar` (Accept / Decline / Block) while `requestState === 'pending'`. |
+| **GIF picker (Giphy)** | `src/features/media/` (`api/gifs.ts`, `hooks/useGifSearch.ts`, `components/GifPicker.tsx`), reached via the paperclip → `MediaPicker` GIF tab. `searchGifs`/`getTrendingGifs` hit `api.giphy.com/v1/gifs` (`rating=g`, `bundle=messaging_non_clips`) and send a `downsized` rendition, not `original`. Sent as `type='gif'`, `content=''`, `iv=null`, `enc_v=NULL`, `media_url` = the Giphy URL — **not E2E encrypted** (media never is). `ChatView.sendMedia` renders it optimistically like a text send. GIFs and stickers render **frameless** in `MessageBubble` (`isFrameless` — no bubble background/border/padding, like a sticker in iMessage); images keep the thin frame. The picker grid is a CSS `columns-2` masonry that preserves each GIF's aspect ratio. Requires `VITE_GIPHY_API_KEY`; `hasGiphyKey` gates the picker and shows a config hint (treating the `.env.example` placeholder as unset). CSP already allows `*.giphy.com` for `img-src`/`media-src` and `api.giphy.com` for `connect-src`. |
+| Image / sticker send | Paperclip → `MediaPicker` Image tab (device upload via `uploadMediaFile` → `media` Storage bucket) and Sticker tab; both go through `ChatView.sendMedia` with optimistic render. |
 
 ### Not yet integrated
 
 | Feature | Status |
 |---------|--------|
-| Media upload (images, files) | Service and drag-drop zone built; picker shown as "Phase 3" placeholder in ChatView |
-| GIF picker (Giphy) | `src/features/media/` — UI exists, wired as phase 3 placeholder |
+| Standalone drag-drop image zone | `DragDropZone` component built but not mounted; the MediaPicker Image tab is the live path |
 | AI conversations | Schema migrated; no UI or AI API integration |
 
 ---
@@ -593,7 +594,13 @@ belong in this repo:
     raw: `blocked`, `cannot send in this conversation`,
     `can only add friends to groups`, `friend request already exists`.
 - **Stickers / media are not encrypted** — `media_url` is a public Storage URL;
-  render directly, no decryption.
+  render directly, no decryption. iOS has no yaply sticker library: it lets the
+  user drop / paste / (iOS 18) keyboard-insert a *system* sticker (Stickers
+  drawer, Memoji, Markup, Genmoji), uploads it as a transparent PNG to the
+  `media` bucket, and sends `type='sticker'` — which the web already renders as
+  an `<img>`, so it round-trips with no web change. A transparent image pasted /
+  dropped on iOS is treated as a sticker (rendered bubble-free), an opaque one as
+  a photo.
 - **Splitwise** — REST API `https://secure.splitwise.com/api/v3.0/`, OAuth2 client
   credentials; when adding an expense the payer's `paid_share` maps by index in the
   members array (not always index 0); `simplified_debts` may be null.

@@ -43,9 +43,15 @@ export default function ConversationItem({ conversation, currentUserId, isActive
   const lastContent = conversation.lastMessage
     ? conversation.lastMessage.deletedAt
       ? 'Message deleted'
-      : ['image', 'gif', 'sticker', 'file'].includes(conversation.lastMessage.type)
-        ? '📷 Image'
-        : conversation.lastMessage.decryptFailed
+      : conversation.lastMessage.type === 'gif'
+        ? '🎞️ GIF'
+        : conversation.lastMessage.type === 'sticker'
+          ? '💟 Sticker'
+          : conversation.lastMessage.type === 'file'
+            ? '📎 File'
+            : conversation.lastMessage.type === 'image'
+              ? '📷 Photo'
+              : conversation.lastMessage.decryptFailed
           ? '🔒 Encrypted message'
           : conversation.lastMessage.content.slice(0, 60)
     : 'No messages yet'
