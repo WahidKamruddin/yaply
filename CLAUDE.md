@@ -366,7 +366,7 @@ created_at      timestamptz
 
 **`message_envelopes` table:** `id, message_id (FK → messages ON DELETE CASCADE), recipient_user_id (FK → profiles), recipient_fp (text — JWK x.y of the recipient device key), eph_pub (text — JSON-stringified JWK of the per-message ephemeral public key), key_iv (text — base64 nonce[12]), wrapped_key (text — base64(AES-GCM(KEK, raw 32-byte message key) + tag)), created_at`. UNIQUE(message_id, recipient_user_id, recipient_fp); index (recipient_user_id, message_id). RLS: SELECT for the recipient or the message's sender; INSERT/DELETE for the message's sender only. Migration `00029_multi_device_envelopes.sql`.
 
-**`pinned_messages` table:** `conversation_id (FK → conversations ON DELETE CASCADE), message_id (FK → messages ON DELETE CASCADE), pinned_by (FK → profiles ON DELETE SET NULL), pinned_at timestamptz`, PK `(conversation_id, message_id)`; index `(conversation_id, pinned_at desc)`. Any conversation member can pin/unpin (RLS is membership-scoped for SELECT/INSERT/DELETE); `pinned_by` must equal `auth.uid()` on insert. A separate table rather than a `messages.pinned_at` column **on purpose** — the `messages` UPDATE policy is deliberately narrow (sender-only soft delete) and widening it just to toggle a pin would also expose `content`. In the `supabase_realtime` publication. Migration `00036_pinned_messages.sql`. **iOS-only UI so far** (long-press a message → More → Pin; a banner at the top of the conversation shows the newest pin). Web has the table but no pin UI yet.
+**`pinned_messages` table:** `conversation_id (FK → conversations ON DELETE CASCADE), message_id (FK → messages ON DELETE CASCADE), pinned_by (FK → profiles ON DELETE SET NULL), pinned_at timestamptz`, PK `(conversation_id, message_id)`; index `(conversation_id, pinned_at desc)`. Any conversation member can pin/unpin (RLS is membership-scoped for SELECT/INSERT/DELETE); `pinned_by` must equal `auth.uid()` on insert. A separate table rather than a `messages.pinned_at` column **on purpose** — the `messages` UPDATE policy is deliberately narrow (sender-only soft delete) and widening it just to toggle a pin would also expose `content`. In the `supabase_realtime` publication. Migration `00036_pinned_messages.sql`. **Implemented on both platforms.** Web: `src/features/chat/api/pins.ts` (`fetchPins` / `pinMessage` / `unpinMessage`), `hooks/usePins.ts` (`usePins` query + `useTogglePin` optimistic mutation — insert-at-front / remove on `['pins', conversationId]`, rollback by refetch on error), `components/PinnedBanner.tsx` (rendered in `ChatView` below the search bar, above the message list — previews the newest pin that's currently loaded; "{n} pinned messages" when >1). Pin/Unpin is a hover-action button in `MessageBubble` (all members, any message). `useRealtimeMessages` also subscribes to `pinned_messages` (`event: '*'`, `conversation_id` filter) and invalidates `['pins', …]` — payload never parsed.
 
 **`profiles` table:** id, username (`unique` DB constraint — the actual source of truth), display_name, avatar_url, bio, birthdate (date, nullable — migration `00032_add_profile_birthdate.sql`), public_key, is_online, last_seen_at, created_at, updated_at.
 
@@ -602,9 +602,12 @@ belong in this repo:
   `delete … where message_id = ? and user_id = ?` then insert). Web still allows
   multiple; if the two ever need to match, add the `(message_id, user_id)`
   constraint in a migration and update both clients.
-- **Pinned messages** — see `pinned_messages` above. iOS is the only client with
-  pin UI today; both must use the table + membership RLS, never a `messages`
-  column.
+- **Pinned messages** — see `pinned_messages` above. Implemented on web and iOS.
+  Both must use the table + membership RLS (never a `messages` column), keep pins
+  ordered most-recently-pinned first, make pin idempotent (upsert on
+  `conversation_id,message_id`), let **any** member unpin, and treat every
+  realtime `pinned_messages` event as a refetch trigger. The banner previews only
+  a pin whose message is currently loaded in the list.
 - **Stickers / media are not encrypted** — `media_url` is a public Storage URL;
   render directly, no decryption. iOS has no yaply sticker library: it lets the
   user drop / paste / (iOS 18) keyboard-insert a *system* sticker (Stickers

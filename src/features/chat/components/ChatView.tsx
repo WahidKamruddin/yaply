@@ -9,6 +9,7 @@ import { useConversations } from '@/features/chat/hooks/useConversations'
 import { useMessages } from '@/features/chat/hooks/useMessages'
 import { useSendMessage } from '@/features/chat/hooks/useSendMessage'
 import { useRealtimeMessages } from '@/features/chat/hooks/useRealtimeMessages'
+import { usePins, useTogglePin } from '@/features/chat/hooks/usePins'
 import { useTypingIndicator } from '@/features/chat/hooks/useTypingIndicator'
 import { useEncryption, getCandidateFingerprints, decodePhase1 } from '@/features/chat/hooks/useEncryption'
 import type { DbEnvelope } from '@/features/chat/hooks/useEncryption'
@@ -32,6 +33,7 @@ import { supabase } from '@/lib/supabase'
 import type { DecryptedMessage, ConversationListItem } from '@/features/chat/types'
 import MessageBubble from './MessageBubble'
 import MessageInput from './MessageInput'
+import PinnedBanner from './PinnedBanner'
 import Avatar from '@/components/Avatar'
 import MediaPicker from '@/features/media/components/MediaPicker'
 import ThreadView from './ThreadView'
@@ -108,6 +110,14 @@ export default function ChatView({ currentUserId }: Props) {
   const { encrypt, decryptV2 } = useEncryption(currentUserId)
 
   useRealtimeMessages(activeId)
+
+  const { data: pins = [] } = usePins(activeId)
+  const pinSet = useMemo(() => new Set(pins), [pins])
+  const { mutate: mutatePin } = useTogglePin(activeId ?? '', currentUserId)
+  const togglePin = useCallback(
+    (messageId: string) => mutatePin({ messageId, pinned: pinSet.has(messageId) }),
+    [mutatePin, pinSet],
+  )
 
   const currentUsername = currentUserProfile?.display_name ?? currentUserProfile?.username ?? 'You'
   const { typingUsers, notifyTyping, notifyStopTyping } = useTypingIndicator(activeId, currentUserId, currentUsername)
@@ -671,6 +681,14 @@ export default function ChatView({ currentUserId }: Props) {
         </div>
       )}
 
+      {/* Pinned message banner — previews the newest currently-loaded pin */}
+      <PinnedBanner
+        pins={pins}
+        messages={decrypted}
+        onJump={handleQuotationClick}
+        onUnpin={(id) => mutatePin({ messageId: id, pinned: true })}
+      />
+
       {/* Messages */}
       <div
         ref={scrollRef}
@@ -716,6 +734,8 @@ export default function ChatView({ currentUserId }: Props) {
                 reactions={reactionsMap[msg.id] ?? []}
                 onReact={handleReact}
                 onOpenPanel={handleOpenPanel}
+                isPinned={pinSet.has(msg.id)}
+                onTogglePin={!msg.deletedAt && !pendingIdSet.has(msg.id) ? togglePin : undefined}
               />
             </div>
           )

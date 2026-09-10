@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { CheckCheck, Reply, Trash2, AlertCircle, Smile, MessageSquarePlus, MessageSquare, BookImage, Lock } from 'lucide-react'
+import { CheckCheck, Reply, Trash2, AlertCircle, Smile, MessageSquarePlus, MessageSquare, BookImage, Lock, Pin, PinOff } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { DecryptedMessage } from '@/features/chat/types'
 import type { ReactionGroup } from '@/features/chat/api/reactions'
@@ -30,6 +30,10 @@ interface Props {
   reactions?: ReactionGroup[]
   onReact?: (messageId: string, emoji: string) => void
   onOpenPanel?: (tab: string) => void
+  isPinned?: boolean
+  // Any conversation member can pin/unpin any message. Undefined = not a
+  // pinnable context (e.g. thread view).
+  onTogglePin?: (messageId: string) => void
 }
 
 const SYSTEM_TAB_MAP: Array<[RegExp, string]> = [
@@ -58,7 +62,7 @@ const TAB_LABELS: Record<string, string> = {
   reminders: 'Reminders',
 }
 
-export default function MessageBubble({ message, isOwn, isRead, replyMessage, threadCount = 0, conversationId, currentUserId, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact, onOpenPanel }: Props) {
+export default function MessageBubble({ message, isOwn, isRead, replyMessage, threadCount = 0, conversationId, currentUserId, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact, onOpenPanel, isPinned = false, onTogglePin }: Props) {
   const [hovered, setHovered] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showTime, setShowTime] = useState(false)
@@ -195,6 +199,15 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
               >
                 <MessageSquarePlus size={13} />
               </button>
+              {onTogglePin && (
+                <button
+                  onClick={() => onTogglePin(message.id)}
+                  className={`w-7 h-7 flex items-center justify-center rounded-full bg-tint hover:bg-tint-strong transition-colors ${isPinned ? 'text-primary-text' : 'text-text-muted hover:text-text'}`}
+                  title={isPinned ? 'Unpin message' : 'Pin message'}
+                >
+                  {isPinned ? <PinOff size={13} /> : <Pin size={13} />}
+                </button>
+              )}
               {message.type === 'image' && message.mediaUrl && conversationId && currentUserId && (
                 <button
                   onClick={() => setShowAddToAlbum(true)}
@@ -216,6 +229,12 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
           )}
 
           <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} gap-0.5`}>
+            {isPinned && (
+              <span className="flex items-center gap-1 px-1 text-[10px] font-medium text-primary-text">
+                <Pin size={9} className="rotate-45" />
+                Pinned
+              </span>
+            )}
             {/* Quotation preview — floats above the bubble, Messenger-style */}
             {replyMessage && (
               <button
