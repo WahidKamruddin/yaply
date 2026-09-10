@@ -366,6 +366,8 @@ created_at      timestamptz
 
 **`message_envelopes` table:** `id, message_id (FK → messages ON DELETE CASCADE), recipient_user_id (FK → profiles), recipient_fp (text — JWK x.y of the recipient device key), eph_pub (text — JSON-stringified JWK of the per-message ephemeral public key), key_iv (text — base64 nonce[12]), wrapped_key (text — base64(AES-GCM(KEK, raw 32-byte message key) + tag)), created_at`. UNIQUE(message_id, recipient_user_id, recipient_fp); index (recipient_user_id, message_id). RLS: SELECT for the recipient or the message's sender; INSERT/DELETE for the message's sender only. Migration `00029_multi_device_envelopes.sql`.
 
+**`pinned_messages` table:** `conversation_id (FK → conversations ON DELETE CASCADE), message_id (FK → messages ON DELETE CASCADE), pinned_by (FK → profiles ON DELETE SET NULL), pinned_at timestamptz`, PK `(conversation_id, message_id)`; index `(conversation_id, pinned_at desc)`. Any conversation member can pin/unpin (RLS is membership-scoped for SELECT/INSERT/DELETE); `pinned_by` must equal `auth.uid()` on insert. A separate table rather than a `messages.pinned_at` column **on purpose** — the `messages` UPDATE policy is deliberately narrow (sender-only soft delete) and widening it just to toggle a pin would also expose `content`. In the `supabase_realtime` publication. Migration `00036_pinned_messages.sql`. **iOS-only UI so far** (long-press a message → More → Pin; a banner at the top of the conversation shows the newest pin). Web has the table but no pin UI yet.
+
 **`profiles` table:** id, username (`unique` DB constraint — the actual source of truth), display_name, avatar_url, bio, birthdate (date, nullable — migration `00032_add_profile_birthdate.sql`), public_key, is_online, last_seen_at, created_at, updated_at.
 
 **Username uniqueness check (pre-save, both places a username is set):** `src/features/chat/hooks/useUsernameAvailability.ts` debounces a `select id from profiles where username = candidate` (excluding the caller's own id when editing) so the UI can block Save *before* attempting a write, rather than only reacting to the Postgres `23505` unique-violation after a failed insert/update. Both call sites still catch `23505` on the actual write as a last-resort guard against a race between the check and the save — the DB constraint remains the real enforcement, the live check is UX. Used by `UsernameSetupModal.tsx` (first-login username prompt) and `AccountSettings.tsx` (Settings → Account username field).
@@ -593,6 +595,16 @@ belong in this repo:
   - Expect these RPC errors and map them to human text rather than surfacing
     raw: `blocked`, `cannot send in this conversation`,
     `can only add friends to groups`, `friend request already exists`.
+- **Message reactions** — `message_reactions` PK is `(message_id, user_id, emoji)`,
+  so the DB allows a user to hold several reactions on one message. iOS's
+  long-press menu enforces **one reaction per user** client-side (Messenger /
+  Instagram style — a new pick clears the old via a
+  `delete … where message_id = ? and user_id = ?` then insert). Web still allows
+  multiple; if the two ever need to match, add the `(message_id, user_id)`
+  constraint in a migration and update both clients.
+- **Pinned messages** — see `pinned_messages` above. iOS is the only client with
+  pin UI today; both must use the table + membership RLS, never a `messages`
+  column.
 - **Stickers / media are not encrypted** — `media_url` is a public Storage URL;
   render directly, no decryption. iOS has no yaply sticker library: it lets the
   user drop / paste / (iOS 18) keyboard-insert a *system* sticker (Stickers
