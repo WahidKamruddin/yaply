@@ -195,6 +195,27 @@ export interface Database {
         Update: Record<string, never>
         Relationships: []
       }
+      pinned_messages: {
+        Row: {
+          conversation_id: string
+          message_id: string
+          pinned_by: string | null
+          pinned_at: string
+        }
+        Insert: {
+          conversation_id: string
+          message_id: string
+          pinned_by?: string | null
+          pinned_at?: string
+        }
+        Update: {
+          conversation_id?: string
+          message_id?: string
+          pinned_by?: string | null
+          pinned_at?: string
+        }
+        Relationships: []
+      }
       devices: {
         Row: {
           id: string
