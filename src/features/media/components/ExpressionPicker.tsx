@@ -1,26 +1,29 @@
 import { useState } from 'react'
-import { X, Image, Smile } from 'lucide-react'
+import { X, Smile, Mic } from 'lucide-react'
 import GifPicker from './GifPicker'
 import StickerPicker from './StickerPicker'
 import type { GifResult } from '../api/gifs'
 
 interface Props {
   userId: string
-  onImageSelect: (file: File) => void
   onGifSelect: (gif: GifResult) => void
   onStickerSelect: (url: string) => void
   onClose: () => void
 }
 
-type Tab = 'gif' | 'image' | 'sticker'
+type Tab = 'gif' | 'sticker' | 'voice'
 
-export default function MediaPicker({ userId, onImageSelect, onGifSelect, onStickerSelect, onClose }: Props) {
+// The sheet opened by the emoji / expression button inside the composer text
+// field. GIFs and Stickers are live (web has a sticker library, unlike iOS);
+// "Voice notes" — reusable saved voice clips — is shown as coming soon so the
+// surface is discoverable.
+export default function ExpressionPicker({ userId, onGifSelect, onStickerSelect, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('gif')
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'gif', label: 'GIF', icon: <span className="text-xs font-bold">GIF</span> },
-    { id: 'image', label: 'Image', icon: <Image size={13} /> },
-    { id: 'sticker', label: 'Sticker', icon: <Smile size={13} /> },
+    { id: 'gif', label: 'GIFs', icon: <span className="text-xs font-bold">GIF</span> },
+    { id: 'sticker', label: 'Stickers', icon: <Smile size={13} /> },
+    { id: 'voice', label: 'Voice notes', icon: <Mic size={13} /> },
   ]
 
   return (
@@ -39,9 +42,7 @@ export default function MediaPicker({ userId, onImageSelect, onGifSelect, onStic
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  tab === t.id
-                    ? 'bg-[#5b8def] text-white shadow-sm'
-                    : 'text-text-muted hover:text-text'
+                  tab === t.id ? 'bg-[#5b8def] text-white shadow-sm' : 'text-text-muted hover:text-text'
                 }`}
               >
                 {t.icon}
@@ -54,29 +55,21 @@ export default function MediaPicker({ userId, onImageSelect, onGifSelect, onStic
           </button>
         </div>
 
-        {tab === 'image' && (
-          <label className="flex flex-col items-center justify-center h-40 border-2 border-dashed border-border hover:border-[#5b8def] rounded-xl cursor-pointer transition-colors bg-tint">
-            <Image size={28} className="text-text-subtle mb-2" />
-            <span className="text-sm text-text-muted">Click to select image</span>
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) { onImageSelect(f); onClose() }
-              }}
-            />
-          </label>
-        )}
-
         {tab === 'gif' && <GifPicker onSelect={(gif) => { onGifSelect(gif); onClose() }} />}
 
         {tab === 'sticker' && (
-          <StickerPicker
-            userId={userId}
-            onSelect={(url) => { onStickerSelect(url); onClose() }}
-          />
+          <StickerPicker userId={userId} onSelect={(url) => { onStickerSelect(url); onClose() }} />
+        )}
+
+        {tab === 'voice' && (
+          <div className="flex flex-col items-center justify-center gap-2 h-64 text-center px-6">
+            <Mic size={28} className="text-text-subtle" />
+            <p className="text-sm font-medium text-text">Custom voice notes are coming</p>
+            <p className="text-xs text-text-subtle">
+              Record short reusable voice clips to send with a tap. This is still being built — for
+              now, tap the microphone in the attachment menu to record a one-off voice message.
+            </p>
+          </div>
         )}
       </div>
     </div>

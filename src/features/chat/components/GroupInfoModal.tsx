@@ -1,9 +1,9 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { X, UserPlus, Trash2, Search, Crown, ShieldCheck, AlertTriangle } from 'lucide-react'
+import { X, UserPlus, Trash2, Search, Crown, ShieldCheck, AlertTriangle, Bell, BellOff, LogOut } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useQueryClient } from '@tanstack/react-query'
-import { addGroupMember, removeGroupMember, promoteMemberToAdmin, deleteGroupForEveryone } from '@/features/chat/api/conversations'
+import { addGroupMember, removeGroupMember, promoteMemberToAdmin, deleteGroupForEveryone, muteConversation, deleteConversation } from '@/features/chat/api/conversations'
 import { useFriends } from '@/features/friends/hooks/useFriends'
 import Avatar from '@/components/Avatar'
 import type { ConversationListItem, Profile } from '@/features/chat/types'
@@ -29,6 +29,10 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [muted, setMuted] = useState(conversation.isMuted)
+  const [muting, setMuting] = useState(false)
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
+  const [leaving, setLeaving] = useState(false)
 
   const currentMember = conversation.members.find((m) => m.userId === currentUserId)
   const isAdminOrOwner = currentMember?.isAdmin ?? false
@@ -94,6 +98,34 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
     setPromoting(null)
   }, [conversation.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const toggleMute = useCallback(async () => {
+    const next = !muted
+    setMuted(next)
+    setMuting(true)
+    try {
+      // JS max Date = "muted forever", matching the ConversationItem convention.
+      await muteConversation(conversation.id, currentUserId, next ? new Date(8640000000000000) : null)
+      refresh()
+    } catch (err) {
+      setMuted(!next)
+      setActionError(err instanceof Error ? err.message : 'Failed to update notifications')
+    }
+    setMuting(false)
+  }, [muted, conversation.id, currentUserId])
+
+  const handleLeave = useCallback(async () => {
+    setLeaving(true)
+    try {
+      await deleteConversation(conversation.id, currentUserId)
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] })
+      onClose()
+      onDeleted?.()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to leave group')
+    }
+    setLeaving(false)
+  }, [conversation.id, currentUserId, queryClient, onClose, onDeleted])
+
   const handleDeleteForEveryone = useCallback(async () => {
     setDeleting(true)
     try {
@@ -113,7 +145,7 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-sm font-semibold text-text">Group info</h2>
+          <h2 className="text-sm font-semibold text-text">Chat settings</h2>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full text-text-subtle hover:text-text hover:bg-tint transition-colors">
             <X size={15} />
           </button>
@@ -179,6 +211,29 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
               )}
             </div>
           ))}
+        </div>
+
+        {/* Settings */}
+        <div className="border-t border-border px-3 py-2">
+          <p className="px-2 pt-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-subtle">Settings</p>
+          <button
+            onClick={() => void toggleMute()}
+            disabled={muting}
+            className="w-full flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-tint transition-colors disabled:opacity-50"
+          >
+            {muted ? <BellOff size={15} className="text-text-subtle" /> : <Bell size={15} className="text-text-subtle" />}
+            <span className="text-sm text-text flex-1 text-left">Mute notifications</span>
+            <span className={`relative w-9 h-5 rounded-full transition-colors ${muted ? 'bg-[#5b8def]' : 'bg-border'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${muted ? 'left-4' : 'left-0.5'}`} />
+            </span>
+          </button>
+          <button
+            onClick={() => setShowLeaveConfirm(true)}
+            className="w-full flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-red-500/10 transition-colors"
+          >
+            <LogOut size={15} className="text-red-500" />
+            <span className="text-sm text-red-500 flex-1 text-left">Leave group</span>
+          </button>
         </div>
 
         {/* Add member */}
@@ -325,6 +380,40 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
                   className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-medium text-white transition-colors disabled:opacity-50"
                 >
                   Remove
+                </button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Leave group confirmation dialog */}
+      <Dialog.Root open={showLeaveConfirm} onOpenChange={setShowLeaveConfirm}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60]" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-sm bg-card rounded-2xl shadow-xl border border-border p-6">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
+                <LogOut size={22} className="text-red-500" />
+              </div>
+              <div>
+                <Dialog.Title className="text-base font-semibold text-text">Leave "{conversation.name ?? 'Group'}"?</Dialog.Title>
+                <Dialog.Description className="mt-1 text-sm text-text-subtle">
+                  You'll lose access to this group and its messages. You can be re-added by a member.
+                </Dialog.Description>
+              </div>
+              <div className="flex gap-3 w-full mt-1">
+                <Dialog.Close asChild>
+                  <button className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium text-text-muted hover:bg-tint transition-colors">
+                    Cancel
+                  </button>
+                </Dialog.Close>
+                <button
+                  onClick={() => void handleLeave()}
+                  disabled={leaving}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-medium text-white transition-colors disabled:opacity-50"
+                >
+                  {leaving ? 'Leaving…' : 'Leave'}
                 </button>
               </div>
             </div>

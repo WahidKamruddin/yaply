@@ -49,6 +49,8 @@ export default function ConversationItem({ conversation, currentUserId, isActive
           ? '💟 Sticker'
           : conversation.lastMessage.type === 'file'
             ? '📎 File'
+            : conversation.lastMessage.type === 'voice'
+            ? '🎤 Voice message'
             : conversation.lastMessage.type === 'image'
               ? '📷 Photo'
               : conversation.lastMessage.decryptFailed

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
-import { Bell, Calendar, Users, Plus, Map as MapIcon, MessageSquare, Clock } from 'lucide-react'
+import { Bell, Calendar, Users, Plus, Map as MapIcon, MessageSquare, Clock, PanelLeft } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useAtom } from 'jotai'
+import { sidebarCollapsedAtom } from '@/features/chat/store/chat.atoms'
 import Avatar from '@/components/Avatar'
 import { useDashboardReminders, useDashboardEvents } from '@/features/chat/hooks/useDashboard'
 import { useFriends } from '@/features/friends/hooks/useFriends'
@@ -30,6 +32,7 @@ function relativeTime(iso: string) {
 export default function Dashboard({ currentUserId, currentUserName, conversations, onOpenConversation }: Props) {
   const qc = useQueryClient()
   const [creating, setCreating] = useState<'reminder' | 'event' | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
 
   const { data: reminders = [], isLoading: remindersLoading } = useDashboardReminders(currentUserId)
   const { data: events = [], isLoading: eventsLoading } = useDashboardEvents(currentUserId)
@@ -77,7 +80,16 @@ export default function Dashboard({ currentUserId, currentUserName, conversation
   }
 
   return (
-    <div className="flex-1 h-full overflow-y-auto bg-background">
+    <div className="relative flex-1 h-full overflow-y-auto bg-background">
+      {sidebarCollapsed && (
+        <button
+          onClick={() => setSidebarCollapsed(false)}
+          aria-label="Expand sidebar"
+          className="hidden md:flex absolute top-4 left-4 z-10 w-9 h-9 items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
+        >
+          <PanelLeft size={18} />
+        </button>
+      )}
       <div className="max-w-3xl mx-auto px-6 py-8 md:py-10">
         <div className="mb-8">
           <h1 className="text-2xl font-display font-semibold text-text">

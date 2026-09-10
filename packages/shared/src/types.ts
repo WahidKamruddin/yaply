@@ -46,6 +46,7 @@ export type MessageType =
   | 'gif'
   | 'sticker'
   | 'file'
+  | 'voice'
   | 'system'
   | 'ai'
 

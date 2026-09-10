@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, type KeyboardEvent } from 'react'
-import { Paperclip, Smile, Send, X, Terminal } from 'lucide-react'
+import { Plus, FileText, Camera, Mic, Image as ImageIcon, Smile, Send, X, Terminal } from 'lucide-react'
 import { useAtom } from 'jotai'
 import { replyToMessageIdAtom, commandFeedbackAtom } from '@/features/chat/store/chat.atoms'
 import type { DecryptedMessage } from '@/features/chat/types'
@@ -7,23 +7,50 @@ import { COMMANDS } from '@yaply/shared/constants/commands'
 
 interface Props {
   onSend: (text: string) => void
-  onAttachment?: () => void
   onTyping?: () => void
   onStopTyping?: () => void
   replyMessage?: DecryptedMessage | null
   disabled?: boolean
   placeholder?: string
+  // Expanding attachment menu actions (Messenger / Instagram style). Default to
+  // no-ops so lightweight hosts can omit them.
+  onPickFile?: () => void
+  onPickCamera?: () => void
+  onPickImage?: () => void
+  onStartVoice?: () => void
+  // Emoji / expression button that lives inside the text field.
+  onExpression?: () => void
+  // Hides the attachment toggle + emoji button entirely (e.g. thread replies).
+  showAttachments?: boolean
 }
+
+const noop = () => {}
 
 const ALL_COMMANDS = [
   ...COMMANDS,
   { name: 'help' as const, description: 'Show all commands', usage: '/help', category: 'utility' as const },
 ]
 
-export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyping, replyMessage, disabled, placeholder }: Props) {
+export default function MessageInput({
+  onSend,
+  onTyping,
+  onStopTyping,
+  replyMessage,
+  disabled,
+  placeholder,
+  onPickFile = noop,
+  onPickCamera = noop,
+  onPickImage = noop,
+  onStartVoice = noop,
+  onExpression = noop,
+  showAttachments = true,
+}: Props) {
   const [text, setText] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(-1)
+  const [menuExpanded, setMenuExpanded] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const collapseMenu = useCallback(() => setMenuExpanded(false), [])
   const [, setReplyId] = useAtom(replyToMessageIdAtom)
   const [feedback, setFeedback] = useAtom(commandFeedbackAtom)
 
@@ -70,8 +97,12 @@ export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyp
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value
     setText(value)
-    if (value) onTyping?.()
-    else onStopTyping?.()
+    if (value) {
+      onTyping?.()
+      setMenuExpanded(false)
+    } else {
+      onStopTyping?.()
+    }
 
     // Auto-resize
     const el = textareaRef.current
@@ -230,29 +261,70 @@ export default function MessageInput({ onSend, onAttachment, onTyping, onStopTyp
       )}
 
       <div className="flex items-end gap-2">
-        <button
-          onClick={onAttachment}
-          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
-        >
-          <Paperclip size={18} />
-        </button>
+        {showAttachments && (
+          <button
+            onClick={() => setMenuExpanded((v) => !v)}
+            disabled={disabled}
+            aria-label={menuExpanded ? 'Collapse attachments' : 'Attachments'}
+            className="flex-shrink-0 self-center w-9 h-9 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors disabled:opacity-50"
+          >
+            <Plus
+              size={20}
+              className={`transition-transform duration-200 ease-out motion-reduce:transition-none ${menuExpanded ? 'rotate-45' : ''}`}
+            />
+          </button>
+        )}
 
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder ?? 'Message...'}
-          disabled={disabled}
-          rows={1}
-          className="flex-1 resize-none bg-tint border border-border rounded-2xl px-4 py-2.5 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition max-h-40 leading-relaxed disabled:opacity-50"
-        />
+        {showAttachments && (
+          <div
+            className={`flex items-center self-center gap-1 flex-shrink-0 overflow-hidden transition-all duration-200 ease-out motion-reduce:transition-none ${
+              menuExpanded ? 'max-w-[180px] opacity-100' : 'max-w-0 opacity-0'
+            }`}
+            aria-hidden={!menuExpanded}
+          >
+            {[
+              { key: 'file', Icon: FileText, label: 'File', run: onPickFile },
+              { key: 'camera', Icon: Camera, label: 'Camera', run: onPickCamera },
+              { key: 'voice', Icon: Mic, label: 'Voice message', run: onStartVoice },
+              { key: 'image', Icon: ImageIcon, label: 'Image', run: onPickImage },
+            ].map(({ key, Icon, label, run }) => (
+              <button
+                key={key}
+                onClick={() => { run(); collapseMenu() }}
+                disabled={disabled}
+                tabIndex={menuExpanded ? 0 : -1}
+                aria-label={label}
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-tint text-primary-text hover:bg-primary-tint transition-colors disabled:opacity-50"
+              >
+                <Icon size={17} />
+              </button>
+            ))}
+          </div>
+        )}
 
-        <button
-          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
-        >
-          <Smile size={18} />
-        </button>
+        <div className="flex-1 relative">
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            onFocus={collapseMenu}
+            placeholder={placeholder ?? 'Message...'}
+            disabled={disabled}
+            rows={1}
+            className={`w-full resize-none bg-tint border border-border rounded-2xl py-2.5 pl-4 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition max-h-40 leading-relaxed disabled:opacity-50 ${showAttachments ? 'pr-11' : 'pr-4'}`}
+          />
+          {showAttachments && (
+            <button
+              onClick={onExpression}
+              disabled={disabled}
+              aria-label="GIFs, stickers and more"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors disabled:opacity-50"
+            >
+              <Smile size={18} />
+            </button>
+          )}
+        </div>
 
         <button
           onClick={submit}

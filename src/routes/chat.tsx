@@ -14,7 +14,7 @@ import { useConversations } from '@/features/chat/hooks/useConversations'
 import { usePresence } from '@/features/chat/hooks/usePresence'
 import { usePushNotifications } from '@/features/chat/hooks/usePushNotifications'
 import { useDeviceRevocation } from '@/features/pairing/hooks/useDeviceRevocation'
-import { activeConversationIdAtom } from '@/features/chat/store/chat.atoms'
+import { activeConversationIdAtom, sidebarCollapsedAtom } from '@/features/chat/store/chat.atoms'
 import { uploadMediaFile } from '@/features/media/api/upload'
 import { sendMessage } from '@/features/chat/api/messages'
 import LoadingScreen from '@/components/LoadingScreen'
@@ -32,6 +32,7 @@ export const Route = createFileRoute('/chat')({
 function ChatPage() {
   const [user, setUser] = useState<User | null>(null)
   const [activeConvId, setActiveId] = useAtom(activeConversationIdAtom)
+  const [sidebarCollapsed] = useAtom(sidebarCollapsedAtom)
   const navigate = useNavigate()
 
   const { data: conversations = [] } = useConversations(user?.id ?? '')
@@ -102,7 +103,11 @@ function ChatPage() {
             the desktop layout (the wrapper kept `w-full` at the md breakpoint with no
             override, collapsing the chat pane to zero width). The hook is kept in
             src/features/chat/hooks/useSidebarWidth.ts for a future retry. */}
-        <div className={`flex-col h-full w-full md:w-72 md:flex-shrink-0 ${activeConvId ? 'hidden md:flex' : 'flex'}`}>
+        <div
+          className={`flex-col h-full w-full md:flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none ${
+            activeConvId ? 'hidden md:flex' : 'flex'
+          } ${sidebarCollapsed ? 'md:w-0' : 'md:w-72'}`}
+        >
           <ConversationList currentUserId={user.id} />
         </div>
 
