@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { searchGifs, getTrendingGifs } from '../api/gifs'
+import { searchGifs, getTrendingGifs, hasGiphyKey } from '../api/gifs'
 
 export function useGifSearch(query: string) {
   return useQuery({
@@ -7,5 +7,7 @@ export function useGifSearch(query: string) {
     queryFn: () => (query ? searchGifs(query) : getTrendingGifs()),
     placeholderData: (prev) => prev,
     staleTime: 60_000,
+    enabled: hasGiphyKey,
+    retry: 1,
   })
 }

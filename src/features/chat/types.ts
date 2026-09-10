@@ -63,6 +63,7 @@ export interface DecryptedMessage {
   decryptFailed?: boolean
   type: string
   mediaUrl: string | null
+  mediaMime?: string | null
   replyToId: string | null
   threadId: string | null
   editedAt: string | null
