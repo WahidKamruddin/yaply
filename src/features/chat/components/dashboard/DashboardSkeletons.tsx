@@ -20,3 +20,7 @@ export function DashboardFriendSkeleton({ delay = 0 }: { delay?: number }) {
     </div>
   )
 }
+
+export function DashboardStickerSkeleton({ delay = 0 }: { delay?: number }) {
+  return <Skeleton className="aspect-square rounded-xl" style={{ animationDelay: `${delay}ms` }} />
+}

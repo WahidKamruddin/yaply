@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import { flushSync } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Phone, Video, ChevronDown, ArrowLeft, Search, X, PanelRight, PanelLeft } from 'lucide-react'
+import { Phone, Video, ChevronDown, ArrowLeft, Search, X, PanelRight, ChevronRight } from 'lucide-react'
 import { useAtom, useSetAtom } from 'jotai'
 import { activeConversationIdAtom, replyToMessageIdAtom, conversationPanelOpenAtom, conversationPanelTabAtom, sidebarCollapsedAtom } from '@/features/chat/store/chat.atoms'
 import { useConversations } from '@/features/chat/hooks/useConversations'
@@ -64,6 +64,10 @@ export default function ChatView({ currentUserId }: Props) {
   const [panelOpen, setPanelOpen] = useAtom(conversationPanelOpenAtom)
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
   const setPanelTab = useSetAtom(conversationPanelTabAtom)
+
+  // Switching conversations or closing the chat (activeId -> null) should
+  // never leave a reply from the previous conversation armed.
+  useEffect(() => { setReplyId(null) }, [activeId, setReplyId])
 
   useReminderNotifications(currentUserId)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
@@ -625,7 +629,9 @@ export default function ChatView({ currentUserId }: Props) {
 
   return (
     <div className="flex-1 flex flex-row h-full overflow-hidden">
-    <div className="flex-1 flex flex-col h-full bg-background overflow-hidden relative">
+    <div
+      className="flex-1 flex flex-col h-full bg-background overflow-hidden relative"
+    >
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-surface" style={{ paddingTop: `max(0.75rem, var(--safe-top))` }}>
         <button onClick={() => setActiveId(null)} className="md:hidden -ml-1 w-10 h-10 flex items-center justify-center rounded-full text-text-subtle active:bg-tint transition-colors">
@@ -635,9 +641,9 @@ export default function ChatView({ currentUserId }: Props) {
           <button
             onClick={() => setSidebarCollapsed(false)}
             aria-label="Expand sidebar"
-            className="hidden md:flex -ml-1 w-9 h-9 items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
+            className="hidden md:flex -ml-1 w-8 h-8 items-center justify-center rounded-full border border-border text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
           >
-            <PanelLeft size={18} />
+            <ChevronRight size={18} />
           </button>
         )}
         <button

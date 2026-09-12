@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { X, Bell, Calendar, Check, MessageSquare, Users } from 'lucide-react'
+import { X, Bell, Calendar, FileText, Check, MessageSquare, Users } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import type { ConversationListItem } from '@/features/chat/types'
 
-type CreateType = 'reminder' | 'event'
+type CreateType = 'reminder' | 'event' | 'note'
 
 interface Props {
   type: CreateType
@@ -74,7 +74,7 @@ export default function DashboardCreateModal({ type, conversations, currentUserI
         if (insertError) throw insertError
         void qc.invalidateQueries({ queryKey: ['dashboard-reminders'] })
         void qc.invalidateQueries({ queryKey: ['reminders'] })
-      } else {
+      } else if (type === 'event') {
         const startsAt = when ? new Date(when).toISOString() : null
         const rows = ids.map((conversationId) => ({
           conversation_id: conversationId,
@@ -89,6 +89,19 @@ export default function DashboardCreateModal({ type, conversations, currentUserI
         if (insertError) throw insertError
         void qc.invalidateQueries({ queryKey: ['dashboard-events'] })
         void qc.invalidateQueries({ queryKey: ['events'] })
+      } else {
+        const rows = ids.map((conversationId) => ({
+          conversation_id: conversationId,
+          user_id: currentUserId,
+          title,
+          content: description || '',
+        }))
+        const { error: insertError } = await supabase.from('notes').insert(rows)
+        if (insertError) throw insertError
+        void qc.invalidateQueries({ queryKey: ['dashboard-notes'] })
+        for (const conversationId of ids) {
+          void qc.invalidateQueries({ queryKey: ['notes', conversationId] })
+        }
       }
       onCreated()
     } catch {
@@ -103,8 +116,14 @@ export default function DashboardCreateModal({ type, conversations, currentUserI
       <div className="bg-card border border-border rounded-2xl shadow-2xl shadow-black/40 w-full max-w-md max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
           <h2 className="text-base font-semibold text-text flex items-center gap-2">
-            {type === 'reminder' ? <Bell size={18} className="text-primary" /> : <Calendar size={18} className="text-primary" />}
-            {type === 'reminder' ? 'New Reminder' : 'New Event'}
+            {type === 'reminder' ? (
+              <Bell size={18} className="text-primary" />
+            ) : type === 'event' ? (
+              <Calendar size={18} className="text-primary" />
+            ) : (
+              <FileText size={18} className="text-primary" />
+            )}
+            {type === 'reminder' ? 'New Reminder' : type === 'event' ? 'New Event' : 'New Note'}
           </h2>
           <button onClick={onClose} className="text-text-subtle hover:text-text transition-colors">
             <X size={20} />
@@ -115,7 +134,7 @@ export default function DashboardCreateModal({ type, conversations, currentUserI
           <input
             required
             type="text"
-            placeholder={type === 'reminder' ? 'Remind me to...' : 'Event name'}
+            placeholder={type === 'reminder' ? 'Remind me to...' : type === 'event' ? 'Event name' : 'Note title'}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="w-full px-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40"
@@ -140,18 +159,30 @@ export default function DashboardCreateModal({ type, conversations, currentUserI
             </>
           )}
 
-          <div>
-            <label className="text-xs text-text-subtle mb-1.5 block">
-              {type === 'reminder' ? 'When *' : 'Date & time (leave blank for a plan)'}
-            </label>
-            <input
-              required={type === 'reminder'}
-              type="datetime-local"
-              value={when}
-              onChange={(e) => setWhen(e.target.value)}
-              className="w-full px-3 py-2 bg-tint rounded-lg text-sm text-text outline-none focus:ring-1 focus:ring-primary/40"
+          {type === 'note' && (
+            <textarea
+              placeholder="Note content (optional)"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={4}
+              className="w-full px-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40 resize-none"
             />
-          </div>
+          )}
+
+          {type !== 'note' && (
+            <div>
+              <label className="text-xs text-text-subtle mb-1.5 block">
+                {type === 'reminder' ? 'When *' : 'Date & time (leave blank for a plan)'}
+              </label>
+              <input
+                required={type === 'reminder'}
+                type="datetime-local"
+                value={when}
+                onChange={(e) => setWhen(e.target.value)}
+                className="w-full px-3 py-2 bg-tint rounded-lg text-sm text-text outline-none focus:ring-1 focus:ring-primary/40"
+              />
+            </div>
+          )}
 
           <div>
             <div className="flex items-center justify-between mb-1.5">

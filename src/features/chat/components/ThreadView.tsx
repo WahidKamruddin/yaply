@@ -167,6 +167,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
           <MessageBubble
             message={rootMessage}
             isOwn={rootMessage.senderId === currentUserId}
+            currentUserId={currentUserId}
             onReply={() => {}}
             onDelete={() => {}}
           />
@@ -184,6 +185,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
                 key={msg.id}
                 message={msg}
                 isOwn={msg.senderId === currentUserId}
+                currentUserId={currentUserId}
                 replyMessage={replyMessageFor(msg)}
                 onReply={() => {}}
                 onDelete={() => {}}

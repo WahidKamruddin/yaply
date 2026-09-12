@@ -20,7 +20,7 @@ export default function ConversationList({ currentUserId }: Props) {
   const [showNew, setShowNew] = useState(false)
   const [showRequests, setShowRequests] = useState(false)
   const [activeId, setActiveId] = useAtom(activeConversationIdAtom)
-  const [, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
+  const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
   const navigate = useNavigate()
   const { data: conversations = [], isLoading, isError } = useConversations(currentUserId)
   const { pendingCount } = useFriendRequests(currentUserId)
@@ -66,11 +66,17 @@ export default function ConversationList({ currentUserId }: Props) {
               <SquarePen size={18} strokeWidth={2.5} />
             </button>
             <button
-              onClick={() => setSidebarCollapsed(true)}
-              aria-label="Collapse sidebar"
+              onClick={() => setSidebarCollapsed((v) => !v)}
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               className="hidden md:flex w-8 h-8 items-center justify-center rounded-full border border-border text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
             >
-              <ChevronLeft size={16} strokeWidth={2.5} />
+              <ChevronLeft
+                size={16}
+                strokeWidth={2.5}
+                className={`transition-transform duration-200 motion-reduce:transition-none ${
+                  sidebarCollapsed ? 'rotate-180' : ''
+                }`}
+              />
             </button>
           </div>
         </div>

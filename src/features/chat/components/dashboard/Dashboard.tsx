@@ -1,21 +1,24 @@
 import { useMemo, useState } from 'react'
-import { Bell, Calendar, Users, Plus, Map as MapIcon, MessageSquare, Clock, PanelLeft } from 'lucide-react'
+import { Bell, Calendar, Users, Plus, Map as MapIcon, MessageSquare, Clock, ChevronRight, Sticker, FileText, Trash2 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAtom } from 'jotai'
 import { sidebarCollapsedAtom } from '@/features/chat/store/chat.atoms'
 import Avatar from '@/components/Avatar'
-import { useDashboardReminders, useDashboardEvents } from '@/features/chat/hooks/useDashboard'
+import { useDashboardReminders, useDashboardEvents, useDashboardNotes } from '@/features/chat/hooks/useDashboard'
 import { useFriends } from '@/features/friends/hooks/useFriends'
 import { createDirectConversation } from '@/features/chat/api/conversations'
+import { useStickers, useDeleteSticker, useCreateSticker } from '@/features/media/hooks/useStickers'
+import { getMediaPublicUrl } from '@/features/media/api/upload'
 import type { ConversationListItem } from '@/features/chat/types'
 import DashboardCreateModal from './DashboardCreateModal'
-import { DashboardRowSkeleton, DashboardFriendSkeleton } from './DashboardSkeletons'
+import StickerCreateModal from './StickerCreateModal'
+import { DashboardRowSkeleton, DashboardFriendSkeleton, DashboardStickerSkeleton } from './DashboardSkeletons'
 
 interface Props {
   currentUserId: string
   currentUserName: string
   conversations: ConversationListItem[]
-  onOpenConversation: (conversationId: string, tab?: 'reminders' | 'events') => void
+  onOpenConversation: (conversationId: string, tab?: 'reminders' | 'events' | 'notes') => void
 }
 
 function relativeTime(iso: string) {
@@ -31,11 +34,16 @@ function relativeTime(iso: string) {
 
 export default function Dashboard({ currentUserId, currentUserName, conversations, onOpenConversation }: Props) {
   const qc = useQueryClient()
-  const [creating, setCreating] = useState<'reminder' | 'event' | null>(null)
+  const [creating, setCreating] = useState<'reminder' | 'event' | 'note' | null>(null)
+  const [creatingSticker, setCreatingSticker] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
 
   const { data: reminders = [], isLoading: remindersLoading } = useDashboardReminders(currentUserId)
   const { data: events = [], isLoading: eventsLoading } = useDashboardEvents(currentUserId)
+  const { data: notes = [], isLoading: notesLoading } = useDashboardNotes(currentUserId)
+  const { data: stickers = [], isLoading: stickersLoading } = useStickers(currentUserId)
+  const { mutateAsync: deleteSticker } = useDeleteSticker(currentUserId)
+  const { mutateAsync: createSticker } = useCreateSticker(currentUserId)
 
   const upcomingEvents = useMemo(
     () => events.filter((e) => e.status === 'planning' || (e.starts_at && new Date(e.starts_at).getTime() > Date.now())).slice(0, 6),
@@ -85,9 +93,9 @@ export default function Dashboard({ currentUserId, currentUserName, conversation
         <button
           onClick={() => setSidebarCollapsed(false)}
           aria-label="Expand sidebar"
-          className="hidden md:flex absolute top-4 left-4 z-10 w-9 h-9 items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
+          className="hidden md:flex absolute top-4 left-4 z-10 w-8 h-8 items-center justify-center rounded-full border border-border text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors"
         >
-          <PanelLeft size={18} />
+          <ChevronRight size={18} />
         </button>
       )}
       <div className="max-w-3xl mx-auto px-6 py-8 md:py-10">
@@ -114,6 +122,19 @@ export default function Dashboard({ currentUserId, currentUserName, conversation
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-tint hover:bg-tint-strong text-text text-sm font-medium border border-border transition-colors"
           >
             <Plus size={14} /> Event
+          </button>
+          <button
+            onClick={() => setCreating('note')}
+            disabled={conversations.length === 0}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-tint hover:bg-tint-strong text-text text-sm font-medium border border-border disabled:opacity-40 transition-colors"
+          >
+            <Plus size={14} /> Note
+          </button>
+          <button
+            onClick={() => setCreatingSticker(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-tint hover:bg-tint-strong text-text text-sm font-medium border border-border transition-colors"
+          >
+            <Plus size={14} /> Sticker
           </button>
         </div>
 
@@ -227,12 +248,132 @@ export default function Dashboard({ currentUserId, currentUserName, conversation
               </div>
             )}
           </section>
+
+          {/* Snippets — the user's own reusable custom stuff, not scoped to a
+              single chat: stickers (created in the composer's expression
+              picker) and notes (created in any conversation's Notes tab).
+              Voice-note snippets aren't part of this yet — that "Voice notes"
+              tab is still a coming-soon placeholder with no saved-clips table. */}
+          <section className="bg-card border border-border rounded-2xl p-4 md:col-span-2">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-7 h-7 rounded-lg bg-primary-tint flex items-center justify-center">
+                <Sticker size={14} className="text-primary" />
+              </div>
+              <h2 className="text-sm font-semibold text-text">Your snippets</h2>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4 sm:gap-0 divide-y sm:divide-y-0 sm:divide-x divide-border">
+              {/* Stickers */}
+              <div className="sm:pr-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] font-medium text-text-subtle uppercase tracking-wide">Stickers</p>
+                  {stickers.length > 0 && (
+                    <button
+                      onClick={() => setCreatingSticker(true)}
+                      aria-label="Create sticker"
+                      className="text-text-subtle hover:text-primary-text transition-colors"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  )}
+                </div>
+                {stickersLoading ? (
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <DashboardStickerSkeleton key={i} delay={i * 60} />
+                    ))}
+                  </div>
+                ) : stickers.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center gap-2 py-4">
+                    <button
+                      onClick={() => setCreatingSticker(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-tint hover:bg-tint-strong text-text text-xs font-medium border border-border transition-colors"
+                    >
+                      <Plus size={12} /> Create a sticker
+                    </button>
+                    <p className="text-[11px] text-text-subtle">or use the emoji button in any chat</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {stickers.slice(0, 8).map((s) => {
+                      const url = getMediaPublicUrl(s.storage_path)
+                      return (
+                        <div key={s.id} className="relative group aspect-square">
+                          <img src={url} alt={s.name} className="w-full h-full object-cover rounded-xl" loading="lazy" />
+                          <button
+                            onClick={() => void deleteSticker(s.id)}
+                            aria-label={`Delete sticker ${s.name}`}
+                            className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center bg-black/60 rounded-full text-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash2 size={10} />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Notes */}
+              <div className="pt-4 sm:pt-0 sm:pl-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] font-medium text-text-subtle uppercase tracking-wide">Notes</p>
+                  {notes.filter((n) => n.conversation_id).length > 0 && (
+                    <button
+                      onClick={() => setCreating('note')}
+                      aria-label="Create note"
+                      disabled={conversations.length === 0}
+                      className="text-text-subtle hover:text-primary-text disabled:opacity-40 disabled:hover:text-text-subtle transition-colors"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  )}
+                </div>
+                {notesLoading ? (
+                  <div className="space-y-0.5">
+                    {Array.from({ length: 2 }).map((_, i) => (
+                      <DashboardRowSkeleton key={i} delay={i * 60} />
+                    ))}
+                  </div>
+                ) : notes.filter((n) => n.conversation_id).length === 0 ? (
+                  <div className="flex flex-col items-center justify-center gap-2 py-4">
+                    <button
+                      onClick={() => setCreating('note')}
+                      disabled={conversations.length === 0}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-tint hover:bg-tint-strong text-text text-xs font-medium border border-border disabled:opacity-40 transition-colors"
+                    >
+                      <Plus size={12} /> Create a note
+                    </button>
+                    <p className="text-[11px] text-text-subtle">or add one from a chat's Notes tab</p>
+                  </div>
+                ) : (
+                  <div className="space-y-0.5">
+                    {notes
+                      .filter((n) => n.conversation_id)
+                      .slice(0, 5)
+                      .map((n) => (
+                        <button
+                          key={n.id}
+                          onClick={() => n.conversation_id && onOpenConversation(n.conversation_id, 'notes')}
+                          className="w-full flex items-start gap-2.5 px-1 py-2 rounded-lg hover:bg-tint transition-colors text-left"
+                        >
+                          <FileText size={12} className="text-text-subtle mt-1 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-text truncate">{n.title || 'Untitled note'}</p>
+                            <p className="text-[11px] text-text-subtle mt-0.5 truncate">
+                              {conversationLabel(n.conversation_id!)}
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
         </div>
 
-        <div className="flex items-center gap-1.5 mt-6 text-text-subtle text-xs">
-          <MessageSquare size={12} />
-          <span>Pick a chat from the sidebar to jump back into a conversation</span>
-        </div>
+       
       </div>
 
       {creating && (
@@ -245,9 +386,19 @@ export default function Dashboard({ currentUserId, currentUserName, conversation
             setCreating(null)
             void qc.invalidateQueries({ queryKey: ['dashboard-reminders'] })
             void qc.invalidateQueries({ queryKey: ['dashboard-events'] })
+            void qc.invalidateQueries({ queryKey: ['dashboard-notes'] })
           }}
         />
       )}
+
+      <StickerCreateModal
+        open={creatingSticker}
+        onClose={() => setCreatingSticker(false)}
+        onCreated={async (blob, name) => {
+          await createSticker({ blob, name })
+          setCreatingSticker(false)
+        }}
+      />
     </div>
   )
 }

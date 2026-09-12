@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { Reminder } from './useReminders'
 import type { Event } from './useEvents'
+import type { Note } from './useNotes'
 
 // Dashboard-wide queries intentionally omit a conversation_id filter — RLS
 // ("members can view") already scopes rows to conversations the user belongs
@@ -20,6 +21,23 @@ export function useDashboardReminders(userId: string | undefined) {
         .limit(20)
       if (error) throw error
       return data as Reminder[]
+    },
+    enabled: !!userId,
+    staleTime: 30_000,
+  })
+}
+
+export function useDashboardNotes(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['dashboard-notes', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('notes')
+        .select('*, creator:profiles!notes_user_id_fkey(display_name, username)')
+        .order('updated_at', { ascending: false })
+        .limit(20)
+      if (error) throw error
+      return data as Note[]
     },
     enabled: !!userId,
     staleTime: 30_000,
