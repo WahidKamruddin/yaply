@@ -190,11 +190,13 @@ export default function MessageInput({
 
   return (
     <div className="border-t border-border bg-surface px-4 pt-3" style={{ paddingBottom: `max(0.75rem, var(--safe-bottom))` }}>
-      {/* Reply strip */}
+      {/* Reply strip — plain text, no highlight/accent bar */}
       {replyMessage && (
-        <div className="flex items-center justify-between mb-2 px-3 py-2 bg-primary-tint rounded-lg border-l-2 border-[#5b8def]">
+        <div className="flex items-center justify-between mb-2 px-1">
           <div className="min-w-0">
-            <p className="text-xs text-primary-text font-medium">Replying to {replyMessage.senderProfile?.username ?? 'message'}</p>
+            <p className="text-xs text-primary-text font-medium">
+              Replying to {replyMessage.senderProfile?.display_name ?? replyMessage.senderProfile?.username ?? 'message'}
+            </p>
             <p className="text-xs text-text-muted truncate">{replyMessage.content}</p>
           </div>
           <button onClick={() => setReplyId(null)} className="text-text-subtle hover:text-text-muted ml-2 flex-shrink-0">

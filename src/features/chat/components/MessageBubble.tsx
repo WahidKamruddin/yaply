@@ -14,6 +14,48 @@ function formatMessageTime(dateStr: string): string {
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉']
 
+function replyPreviewText(replyMessage: DecryptedMessage): string {
+  if (replyMessage.deletedAt) return 'Message deleted'
+  if (replyMessage.type === 'image' || replyMessage.type === 'sticker') return '📷 Photo'
+  if (replyMessage.type === 'gif') return 'GIF'
+  if (replyMessage.type === 'voice') return '🎤 Voice message'
+  if (replyMessage.type === 'file') return '📎 File'
+  if (replyMessage.decryptFailed) return '🔒 Encrypted message'
+  return replyMessage.content.slice(0, 80)
+}
+
+// Quote-bubble color — the original pill's colors (same regardless of
+// isOwn), which read well in both themes: a light primary tint with a
+// border, darkening slightly on hover, and muted body text.
+const REPLY_QUOTE_COLORS = {
+  bg: 'bg-primary-tint border border-border hover:bg-primary-tint-strong',
+  text: 'text-text-muted',
+  textDeleted: 'text-text-subtle',
+}
+
+// Messenger-style "X replied to Y" label above the quoted bubble.
+function replyLabel(
+  message: DecryptedMessage,
+  replyMessage: DecryptedMessage,
+  isOwn: boolean,
+  currentUserId?: string,
+): string {
+  const subject = isOwn
+    ? 'You'
+    : message.senderProfile?.display_name ?? message.senderProfile?.username ?? 'Deleted user'
+
+  let object: string
+  if (currentUserId && replyMessage.senderId === currentUserId) {
+    object = isOwn ? 'yourself' : 'you'
+  } else if (!isOwn && replyMessage.senderId === message.senderId) {
+    object = 'themselves'
+  } else {
+    object = replyMessage.senderProfile?.display_name ?? replyMessage.senderProfile?.username ?? 'Deleted user'
+  }
+
+  return `${subject} replied to ${object}`
+}
+
 interface Props {
   message: DecryptedMessage
   isOwn: boolean
@@ -83,6 +125,11 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
   const isFrameless = message.type === 'gif' || message.type === 'sticker'
   const isSystem = message.type === 'system'
   const time = formatMessageTime(message.createdAt)
+  // Frameless media (GIFs/stickers) has no solid background to hide the
+  // quote bubble's bottom edge behind, so it keeps the old floating pill
+  // instead of the underlap treatment.
+  const replyCanUnderlap = !(isFrameless && message.mediaUrl)
+  const replyColors = REPLY_QUOTE_COLORS
 
   if (isSystem) {
     // System messages with a past deletedAt are expired — render nothing.
@@ -235,80 +282,105 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                 Pinned
               </span>
             )}
-            {/* Quotation preview — floats above the bubble, Messenger-style */}
+            {/* Reply header — who's who is said here, so the quote below
+                skips the sender name. */}
             {replyMessage && (
+              <span className="flex items-center gap-1 px-1 text-[10px] text-text-subtle">
+                <Reply size={9} className="flex-shrink-0" />
+                {replyLabel(message, replyMessage, isOwn, currentUserId)}
+              </span>
+            )}
+
+            {/* Frameless media (GIF/sticker) has no solid background to hide
+                behind, so its quote stays a plain pill above the bubble. No
+                fixed max-width — it sizes like a normal bubble, capped only
+                by the outer max-w-[65%] container. */}
+            {replyMessage && !replyCanUnderlap && (
               <button
                 onClick={() => onQuotationClick?.(replyMessage.id)}
-                className="flex items-stretch max-w-[220px] bg-primary-tint border border-border rounded-2xl hover:bg-primary-tint-strong active:scale-[0.98] transition-all text-left cursor-pointer"
+                className={`mb-1 rounded-2xl px-3 py-2 text-left cursor-pointer active:scale-[0.98] transition-all ${replyColors.bg}`}
               >
-                <div className="w-0.5 bg-[#5b8def] rounded-full flex-shrink-0 mx-2 my-2" />
-                <div className="py-2 pr-3 min-w-0">
-                  <p className="text-[10px] font-semibold text-primary-text mb-0.5 truncate">
-                    {replyMessage.senderProfile?.display_name ?? replyMessage.senderProfile?.username ?? 'Deleted user'}
-                  </p>
-                  <p className={`text-[11px] truncate ${replyMessage.deletedAt ? 'italic text-text-subtle' : 'text-text-muted'}`}>
-                    {replyMessage.deletedAt
-                      ? 'Message deleted'
-                      : replyMessage.type === 'image' || replyMessage.type === 'sticker'
-                      ? '📷 Photo'
-                      : replyMessage.type === 'gif'
-                      ? 'GIF'
-                      : replyMessage.type === 'voice'
-                      ? '🎤 Voice message'
-                      : replyMessage.type === 'file'
-                      ? '📎 File'
-                      : replyMessage.decryptFailed
-                      ? '🔒 Encrypted message'
-                      : replyMessage.content.slice(0, 80)}
-                  </p>
-                </div>
+                <p className={`text-xs truncate ${replyMessage.deletedAt ? `italic ${replyColors.textDeleted}` : replyColors.text}`}>
+                  {replyPreviewText(replyMessage)}
+                </p>
               </button>
             )}
 
-            {/* Main message bubble */}
-            <div
-              onClick={() => setShowTime((v) => !v)}
-              className={`relative rounded-2xl cursor-pointer ${
-                isFrameless && message.mediaUrl
-                  ? ''
-                  : isOwn
-                    ? 'bg-gradient-to-br from-primary to-primary-dark text-white rounded-br-sm'
-                    : 'bg-card text-text rounded-bl-sm border border-border-soft'
-              } ${
-                !(isMedia && message.mediaUrl)
-                  ? 'px-3 py-2'
-                  : isFrameless
-                    ? ''
-                    : 'p-1'
-              }`}
-            >
-              {isMedia && message.mediaUrl ? (
-                <img
-                  src={message.mediaUrl}
-                  alt=""
-                  className={`max-w-[260px] max-h-[340px] object-contain ${message.type === 'sticker' ? '' : 'rounded-xl'}`}
-                  loading="lazy"
-                />
-              ) : message.type === 'file' && message.mediaUrl ? (
-                <a
-                  href={message.mediaUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`flex items-center gap-2 text-sm underline underline-offset-2 ${isOwn ? 'text-white' : 'text-primary-text'}`}
+            {/* Quote bubble + main bubble share one positioned wrapper so the
+                quote can sit absolutely behind the main bubble — the
+                original pill's opaque colors (never translucent — a
+                translucent fill reads fine over the bubble it overlaps but
+                goes invisible over the light-mode page background where it
+                peeks out). It's anchored to the same tail-side edge as the
+                main bubble (right for own, left for received) but sizes to
+                its own content up to max-w-[220px] — it should read as long
+                as its own text needs, not stretch to match the main
+                bubble's width. pt-2/pb-10 give the quote's text room to
+                breathe before the cutoff, and the main bubble's mt-8 sits at
+                exactly half the quote's resulting height — the underlap
+                Messenger uses. Absolute positioning (rather than a negative
+                margin on a flex sibling) keeps this predictable regardless
+                of the parent's flex gap. */}
+            <div className="relative">
+              {replyMessage && replyCanUnderlap && (
+                <button
+                  onClick={() => onQuotationClick?.(replyMessage.id)}
+                  className={`absolute top-0 z-0 max-w-[220px] rounded-2xl px-3 pt-2 pb-10 text-left cursor-pointer active:scale-[0.98] transition-all ${
+                    isOwn ? 'right-0' : 'left-0'
+                  } ${replyColors.bg}`}
                 >
-                  📎 Download file
-                </a>
-              ) : message.type === 'voice' && message.mediaUrl ? (
-                <audio controls src={message.mediaUrl} className="max-w-[240px]" />
-              ) : message.decryptFailed ? (
-                <span className={`flex items-center gap-1.5 text-xs italic ${isOwn ? 'text-white/70' : 'text-text-subtle'}`}>
-                  <Lock size={12} className="flex-shrink-0" />
-                  Couldn't decrypt this message
-                </span>
-              ) : (
-                <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{message.content}</p>
+                  <p className={`text-xs leading-4 truncate ${replyMessage.deletedAt ? `italic ${replyColors.textDeleted}` : replyColors.text}`}>
+                    {replyPreviewText(replyMessage)}
+                  </p>
+                </button>
               )}
 
+              {/* Main message bubble */}
+              <div
+                onClick={() => setShowTime((v) => !v)}
+                className={`relative rounded-2xl cursor-pointer ${
+                  replyMessage && replyCanUnderlap ? 'z-10 mt-8' : ''
+                } ${
+                  isFrameless && message.mediaUrl
+                    ? ''
+                    : isOwn
+                      ? 'bg-gradient-to-br from-primary to-primary-dark text-white rounded-br-sm'
+                      : 'bg-card text-text rounded-bl-sm border border-border-soft'
+                } ${
+                  !(isMedia && message.mediaUrl)
+                    ? 'px-3 py-2'
+                    : isFrameless
+                      ? ''
+                      : 'p-1'
+                }`}
+              >
+                {isMedia && message.mediaUrl ? (
+                  <img
+                    src={message.mediaUrl}
+                    alt=""
+                    className={`max-w-[260px] max-h-[340px] object-contain ${message.type === 'sticker' ? '' : 'rounded-xl'}`}
+                    loading="lazy"
+                  />
+                ) : message.type === 'file' && message.mediaUrl ? (
+                  <a
+                    href={message.mediaUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex items-center gap-2 text-sm underline underline-offset-2 ${isOwn ? 'text-white' : 'text-primary-text'}`}
+                  >
+                    📎 Download file
+                  </a>
+                ) : message.type === 'voice' && message.mediaUrl ? (
+                  <audio controls src={message.mediaUrl} className="max-w-[240px]" />
+                ) : message.decryptFailed ? (
+                  <span className={`flex items-center gap-1.5 text-xs italic ${isOwn ? 'text-white/70' : 'text-text-subtle'}`}>
+                    <Lock size={12} className="flex-shrink-0" />
+                    Couldn't decrypt this message
+                  </span>
+                ) : (
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{message.content}</p>
+                )}
+              </div>
             </div>
             {(showTime || (isOwn && isRead !== undefined)) && (
               <div className={`flex items-center gap-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
