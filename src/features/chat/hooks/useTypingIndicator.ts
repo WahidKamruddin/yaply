@@ -9,6 +9,8 @@ export function useTypingIndicator(
   currentUserId: string,
   currentUsername: string,
 ) {
+  // Holds user ids (not display names) so callers can reliably look up the
+  // typing member's profile — display names collide and aren't unique keys.
   const [typingUsers, setTypingUsers] = useState<string[]>([])
   const channelRef = useRef<RealtimeChannel | null>(null)
   const timeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -21,7 +23,7 @@ export function useTypingIndicator(
     const channel = supabase
       .channel(`typing:${conversationId}`)
       .on('broadcast', { event: 'typing' }, ({ payload }) => {
-        const { userId, username, isTyping } = payload as {
+        const { userId, isTyping } = payload as {
           userId: string
           username: string
           isTyping: boolean
@@ -34,13 +36,13 @@ export function useTypingIndicator(
         }
 
         if (isTyping) {
-          setTypingUsers((prev) => (prev.includes(username) ? prev : [...prev, username]))
+          setTypingUsers((prev) => (prev.includes(userId) ? prev : [...prev, userId]))
           timeouts.current[userId] = setTimeout(() => {
-            setTypingUsers((prev) => prev.filter((u) => u !== username))
+            setTypingUsers((prev) => prev.filter((u) => u !== userId))
             delete timeouts.current[userId]
           }, TYPING_TIMEOUT_MS)
         } else {
-          setTypingUsers((prev) => prev.filter((u) => u !== username))
+          setTypingUsers((prev) => prev.filter((u) => u !== userId))
         }
       })
       .subscribe()

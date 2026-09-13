@@ -130,9 +130,16 @@ export default function ChatView({ currentUserId }: Props) {
 
   const currentUsername = currentUserProfile?.display_name ?? currentUserProfile?.username ?? 'You'
   const { typingUsers, notifyTyping, notifyStopTyping } = useTypingIndicator(activeId, currentUserId, currentUsername)
-  const typingProfile = typingUsers.length > 0
-    ? conversation?.members.find((m) => m.profile.username === typingUsers[0])?.profile ?? null
-    : null
+  // In a DM there's only one person who could ever be typing, so use the
+  // same otherMember lookup the header avatar already relies on rather than
+  // matching the broadcast's userId against the member list — one less thing
+  // that has to line up exactly. Groups still need the id-based lookup since
+  // there's more than one possible typer.
+  const typingProfile = typingUsers.length === 0
+    ? null
+    : !conversation?.isGroup
+      ? (otherMember?.profile ?? null)
+      : (conversation.members.find((m) => m.userId === typingUsers[0])?.profile ?? null)
 
   const allDbMessages = useMemo(
     () => (data?.pages ?? []).flatMap((p) => p.messages).reverse(),
@@ -786,16 +793,16 @@ export default function ChatView({ currentUserId }: Props) {
         </button>
       )}
 
-      {/* Typing indicator — iMessage style, only visible at bottom */}
+      {/* Typing indicator — mirrors MessageBubble's received-bubble styling exactly */}
       {typingUsers.length > 0 && !showScrollBtn && (
-        <div className="px-4 py-1.5 flex items-end gap-2">
+        <div className="px-4 py-1.5 flex items-end gap-2 animate-[typingIn_0.25s_ease-out]">
           <Avatar src={typingProfile?.avatar_url} alt="" size={28} />
-          <div className="bg-card rounded-2xl rounded-bl-[4px] shadow-sm shadow-black/30 border border-border px-3 py-2.5 flex items-center gap-1.5">
+          <div className="bg-card rounded-2xl rounded-bl-sm border border-border-soft px-3.5 py-3 flex items-center gap-1">
             {[0, 1, 2].map((i) => (
               <span
                 key={i}
-                className="w-2 h-2 rounded-full bg-text-subtle"
-                style={{ animation: `typingBounce 1.2s ease-in-out ${i * 0.2}s infinite` }}
+                className="typing-dot w-[6px] h-[6px] rounded-full bg-text-subtle"
+                style={{ animationDelay: `${i * 0.16}s` }}
               />
             ))}
           </div>
