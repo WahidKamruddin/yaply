@@ -23,5 +23,5 @@ export async function fetchReadSet(
     .in('message_id', messageIds)
     .neq('user_id', currentUserId)
   if (error) throw error
-  return new Set((data ?? []).map((r) => r.message_id as string))
+  return new Set((data ?? []).map((r) => r.message_id))
 }

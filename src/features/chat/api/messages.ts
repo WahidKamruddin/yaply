@@ -87,7 +87,7 @@ export async function sendMessage(params: SendMessageParams): Promise<DbMessage>
       p_media_mime: params.mediaMime ?? undefined,
     })
     if (error) throw error
-    return data as unknown as DbMessage
+    return data
   }
 
   const { data, error } = await supabase
@@ -123,7 +123,7 @@ export async function sendMessage(params: SendMessageParams): Promise<DbMessage>
     .single()
 
   if (error) throw error
-  return data as unknown as DbMessage
+  return data
 }
 
 // Envelopes this install can open for the given enc_v = 2 messages, in one
@@ -198,7 +198,7 @@ export async function fetchThreadMessages(threadRootId: string): Promise<DbMessa
 
   return ((data ?? []) as unknown as Array<DbMessage & { profiles: DbMessage['sender_profile'] }>).map(
     (row) => ({ ...row, sender_profile: row.profiles })
-  ) as DbMessage[]
+  )
 }
 
 export async function fetchThreadCounts(conversationId: string): Promise<Record<string, number>> {

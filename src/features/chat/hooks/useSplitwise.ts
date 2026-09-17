@@ -92,7 +92,7 @@ export function useCreateSplitwiseExpense(groupId: string | null) {
         currency_code: params.currencyCode,
         group_id: Number(groupId),
         ...userFields,
-      } as Parameters<typeof client.expenses.createExpense>[0])
+      })
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['splitwise-expenses', groupId] }),
   })

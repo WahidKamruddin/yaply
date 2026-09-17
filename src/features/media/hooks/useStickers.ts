@@ -1,14 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 
-interface Sticker {
-  id: string
-  user_id: string
-  storage_path: string
-  name: string
-  created_at: string
-}
-
 export function useStickers(userId: string) {
   return useQuery({
     queryKey: ['stickers', userId],
@@ -19,7 +11,7 @@ export function useStickers(userId: string) {
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
       if (error) throw error
-      return (data ?? []) as unknown as Sticker[]
+      return data ?? []
     },
     enabled: !!userId,
   })

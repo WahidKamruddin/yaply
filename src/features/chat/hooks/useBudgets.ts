@@ -47,7 +47,7 @@ export function useBudgets(conversationId: string | null) {
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
       if (error) throw error
-      return data as Budget[]
+      return data
     },
     enabled: !!conversationId,
     staleTime: 30_000,
@@ -65,7 +65,7 @@ export function useExpenses(budgetId: string | null) {
         .eq('budget_id', budgetId)
         .order('created_at', { ascending: false })
       if (error) throw error
-      return data as Expense[]
+      return data
     },
     enabled: !!budgetId,
     staleTime: 30_000,
@@ -79,7 +79,7 @@ export function useBudgetSummary(budgetId: string | null) {
       if (!budgetId) return []
       const { data, error } = await supabase.rpc('get_budget_summary', { p_budget_id: budgetId })
       if (error) throw error
-      return data as BudgetSummaryRow[]
+      return data
     },
     enabled: !!budgetId,
     staleTime: 30_000,

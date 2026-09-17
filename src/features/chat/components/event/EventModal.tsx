@@ -97,7 +97,7 @@ function LinkPicker({
         <button
           key={item.id}
           onClick={() => {
-            link({ table: type as 'notes' | 'albums' | 'budgets', itemId: item.id, eventId })
+            link({ table: type, itemId: item.id, eventId })
             setOpen(false)
           }}
           className="w-full text-left px-3 py-2 text-xs text-text hover:bg-tint transition-colors border-b border-border-soft last:border-0"

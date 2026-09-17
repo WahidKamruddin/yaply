@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback, useEffect, useMemo, type KeyboardEvent } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import type { KeyboardEvent } from 'react'
 import { Plus, FileText, Camera, Mic, Image as ImageIcon, Smile, Send, X, Terminal } from 'lucide-react'
 import { useAtom } from 'jotai'
 import { replyToMessageIdAtom, commandFeedbackAtom } from '@/features/chat/store/chat.atoms'

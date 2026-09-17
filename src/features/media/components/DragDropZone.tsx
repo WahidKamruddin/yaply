@@ -1,4 +1,5 @@
-import { useState, useCallback, type ReactNode } from 'react'
+import { useState, useCallback } from 'react'
+import type { ReactNode } from 'react'
 
 interface Props {
   onFileDrop: (file: File) => void

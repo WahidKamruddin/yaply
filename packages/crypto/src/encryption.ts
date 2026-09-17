@@ -171,7 +171,7 @@ export async function unwrapAndDecrypt(
     const mkRaw = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: fromB64(envelope.keyIv) as BufferSource },
       kek,
-      fromB64(envelope.wrappedKey) as BufferSource,
+      fromB64(envelope.wrappedKey),
     )
     const mk = await crypto.subtle.importKey('raw', mkRaw, { name: 'AES-GCM' }, false, ['decrypt'])
     const plain = await decryptMessage(mk, content, iv)
