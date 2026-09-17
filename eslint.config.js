@@ -15,6 +15,8 @@ export default [
     },
   },
   {
-    ignores: ['eslint.config.js', 'prettier.config.js'],
+    // Deno source, excluded from tsconfig, so the type-aware parser cannot
+    // resolve it. Linted by `deno lint` if at all, never by the web config.
+    ignores: ['eslint.config.js', 'prettier.config.js', 'supabase/functions/**', 'src/lib/database.types.ts'],
   },
 ]
