@@ -70,7 +70,7 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
     try {
       let id: string
       if (selected.length === 1) {
-        id = await createDirectConversation(currentUserId, selected[0]!.id)
+        id = await createDirectConversation(selected[0]!.id)
       } else {
         id = await createGroupConversation(currentUserId, selected.map((p) => p.id), groupName || 'Group')
       }

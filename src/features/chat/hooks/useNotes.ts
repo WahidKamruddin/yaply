@@ -25,7 +25,7 @@ export function useNotes(conversationId: string | null) {
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
       if (error) throw error
-      return data as Note[]
+      return data
     },
     enabled: !!conversationId,
     staleTime: 30_000,

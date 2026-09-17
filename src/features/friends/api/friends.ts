@@ -35,7 +35,7 @@ async function fetchFriendshipRows(): Promise<FriendshipRow[]> {
     .order('created_at', { ascending: false })
 
   if (error) throw error
-  return data as unknown as FriendshipRow[]
+  return data
 }
 
 export async function fetchFriends(userId: string): Promise<Friend[]> {

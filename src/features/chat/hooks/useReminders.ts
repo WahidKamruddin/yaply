@@ -33,7 +33,7 @@ export function useReminders(conversationId: string | null) {
         .gt('remind_at', cutoff)
         .order('remind_at', { ascending: true })
       if (error) throw error
-      return data as Reminder[]
+      return data
     },
     enabled: !!conversationId,
     staleTime: 30_000,

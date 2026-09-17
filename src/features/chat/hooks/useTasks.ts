@@ -29,7 +29,7 @@ export function useTasks(conversationId: string | null) {
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
       if (error) throw error
-      return data as Task[]
+      return data
     },
     enabled: !!conversationId,
     staleTime: 30_000,
