@@ -276,7 +276,7 @@ E2E here means **text message content is encrypted between a user's active devic
 - **Media is NOT encrypted:** images, files, and stickers live at public Storage URLs. Encryption covers text content only.
 - **Device management: partial.** Users can list, rename and revoke devices (Settings → Devices). Revoking kills the device's auth session and forces it to re-pair. Still missing: a one-tap "log out everywhere", and server-side pruning of stale rows — the `devices` table only grows. Revocation of a device that is **offline** takes effect when it next comes online (via the orphan check); until then it simply can't reach the API with a dead refresh token.
 - **Group membership changes unhandled:** new members can't read pre-join history; removed members aren't cryptographically cut off (no group re-keying).
-- **Push previews / reactions leak:** notification content routes through a push provider outside E2E; reactions are stored in plaintext.
+- **Push payloads transit Apple as ciphertext.** Message pushes ship `content` (the AES-GCM ciphertext) plus that device's `wrapped_key` through APNs, and a Notification Service Extension decrypts them on-device — the server never can. This is still end to end: the KEK requires the device's P-256 private key, which never leaves the Keychain. But sealed message bytes now sit in Apple's push infrastructure for up to `apns-expiration` (24h), which is a real threat-model change versus having no pushes at all, and it means a future APNs compromise would hold ciphertext it could not open rather than nothing. The non-message pushes (friend requests, task assignments, confirmed events, reminders) are **plaintext** — the underlying columns are unencrypted anyway. Reactions are also stored in plaintext.
 - **Search:** no server-side search over ciphertext; client-side search only covers already-decrypted, loaded messages.
 - **Fan-out scaling:** envelope rows = messages × recipients × devices, bounded only by the 90-day `last_active_at` filter; large groups are heavy on writes/storage.
 - **Cross-platform interop:** web and iOS both implement wire format v2, live pairing, and device revocation. Any change to the SAS formula, transfer payload shape, pairing channel topic, or envelope wire format must land on both at once or mixed conversations silently break.
@@ -372,7 +372,16 @@ created_at      timestamptz
 
 **Username uniqueness check (pre-save, both places a username is set):** `src/features/chat/hooks/useUsernameAvailability.ts` debounces a `select id from profiles where username = candidate` (excluding the caller's own id when editing) so the UI can block Save *before* attempting a write, rather than only reacting to the Postgres `23505` unique-violation after a failed insert/update. Both call sites still catch `23505` on the actual write as a last-resort guard against a race between the check and the save — the DB constraint remains the real enforcement, the live check is UX. Used by `UsernameSetupModal.tsx` (first-login username prompt) and `AccountSettings.tsx` (Settings → Account username field).
 
-**`devices` table:** user_id, device_id (int), identity_key (text — JSON-stringified JWK public key), key_fingerprint (text — JWK `x.y`, matches `message_envelopes.recipient_fp`), signed_prekey, device_name (user-editable; auto-generated once at first registration, e.g. `Chrome on macOS (Web)`), platform (`web` | `ios` | `android`), session_id (uuid — the `session_id` claim of the access token this install signed in with; nullable for rows written before migration 00035), push_subscription, last_active_at, created_at. UNIQUE(user_id, device_id); index (user_id, key_fingerprint). **One row per install** — each browser/device generates its own random `device_id` (stored locally as `deviceId:<userId>` in IndexedDB) and upserts only that row. Never hard-code `device_id = 1`: that was the single-slot bug where every login overwrote the one published key and orphaned history. RLS: owner can manage own rows; any authenticated user can read (needed to encrypt to a peer's devices). Codified in `00027_create_devices.sql`; `key_fingerprint` added in `00029_multi_device_envelopes.sql`; `platform`/`session_id` and the revoke path in `00035_device_management.sql`. In the `supabase_realtime` publication (since 00035) so a revoked device can react instantly.
+**`devices` table:** user_id, device_id (int), identity_key (text — JSON-stringified JWK public key), key_fingerprint (text — JWK `x.y`, matches `message_envelopes.recipient_fp`), signed_prekey, device_name (user-editable; auto-generated once at first registration, e.g. `Chrome on macOS (Web)`), platform (`web` | `ios` | `android`), session_id (uuid — the `session_id` claim of the access token this install signed in with; nullable for rows written before migration 00035), last_active_at, created_at. UNIQUE(user_id, device_id); index (user_id, key_fingerprint). (The unused `push_subscription` jsonb column was dropped in `00038_push_tokens.sql`: `devices` is world-readable, so a push token must never live here — see `push_tokens` below.) **One row per install** — each browser/device generates its own random `device_id` (stored locally as `deviceId:<userId>` in IndexedDB) and upserts only that row. Never hard-code `device_id = 1`: that was the single-slot bug where every login overwrote the one published key and orphaned history. RLS: owner can manage own rows; any authenticated user can read (needed to encrypt to a peer's devices). Codified in `00027_create_devices.sql`; `key_fingerprint` added in `00029_multi_device_envelopes.sql`; `platform`/`session_id` and the revoke path in `00035_device_management.sql`. In the `supabase_realtime` publication (since 00035) so a revoked device can react instantly.
+
+**`push_tokens` table:** `id, user_id, device_id (int), token (the APNs device token), platform ('ios'|'android'), environment ('sandbox'|'production'), fail_count, last_success_at, created_at, updated_at`. UNIQUE(user_id, device_id); composite FK `(user_id, device_id) → devices ON DELETE CASCADE`. RLS: owner-only `for all`, and deliberately **no** world-readable select — unlike `devices`, a token is a capability to push content to someone's phone, not a public key. Migration `00038_push_tokens.sql`.
+
+Three things about this table are load-bearing:
+- **The cascade is a security property.** `revoke_device` deletes the `devices` row; a revoked-but-not-yet-wiped install still holds its P-256 private key, and the push payload carries ciphertext plus that device's `wrapped_key`. Without the cascade, revocation would keep handing a revoked device readable content.
+- **`environment` is per row, not per deployment.** Xcode debug builds get sandbox tokens and TestFlight/App Store builds get production ones; the wrong APNs host returns `400 BadDeviceToken`, which the sender treats as a hard prune. iOS reads it from the `aps-environment` entitlement in `embedded.mobileprovision`, **not** `#if DEBUG` — the two diverge for ad-hoc and enterprise builds.
+- **A token identifies an install, not a user.** Sign out of A and into B on the same phone and Apple reissues the same token, so a trigger deletes any other row holding it. Skipping that leaves A receiving B's messages.
+
+`push_subscriptions` (migration 00019) is now Web Push (VAPID) only, enforced by a `platform = 'web'` check constraint. The web client half (`usePushNotifications.ts`, `public/sw.js`) is written but the VAPID sender is not built.
 
 **`notes` table:** `id, user_id, conversation_id, title, content, created_at, updated_at` — RLS: `user_id = auth.uid()` (owner only).
 
@@ -698,6 +707,40 @@ VITE_GIPHY_API_KEY=        # From Giphy Developer Dashboard
 
 - **`report-problem`** — relays the Settings → Report a Problem form to the developer's email via [Resend](https://resend.com), so that address never appears in client code. Requires the secret `RESEND_API_KEY` (`supabase secrets set RESEND_API_KEY=...`) — **not** a `VITE_*` client env var, and not in `.env.example`. Sends from Resend's shared `onboarding@resend.dev` test address unless/until a verified sending domain is configured.
 - **`delete-account`** — permanently deletes the caller's own account (Settings → Account → Danger zone, confirmed via a "type delete to confirm" dialog). Client-side code cannot delete an `auth.users` row directly — only the service role can — so the function identifies the caller from **their own JWT** (`auth.getUser()` on a client built with the forwarded `Authorization` header) and never accepts a user id from the request body, which is what guarantees a caller can only ever delete their own account, not someone else's. It then uses a **separate** service-role client (`SUPABASE_SERVICE_ROLE_KEY`, auto-provided to every Edge Function — not a secret you set yourself) to best-effort remove the user's `avatars` storage objects and call `auth.admin.deleteUser(userId)`. Deleting the `auth.users` row cascades through `profiles` (`profiles_id_fkey ... on delete cascade`) and from there through every other table via the `profiles(id)`-referencing FKs — see the FK cascade note below; this is why `profiles` intentionally has **no DELETE RLS policy** (only `SELECT`/`UPDATE`) — row deletion is never exposed to PostgREST/the client directly, it only ever happens as a cascade side effect of the admin API call.
+- **`send-push`** — the APNs sender. See **Push notifications** below. It is the only function deployed with `verify_jwt = false` (declared in `supabase/config.toml`), because a database trigger invokes it and has no user JWT to present.
+
+---
+
+## Push notifications
+
+A database trigger enqueues, an Edge Function fans out, and iOS decrypts the preview on-device.
+
+```
+messages INSERT
+  └─ trg messages_notify_push → notify_new_message()            [00040]
+       └─ enqueue_push() → pg_net net.http_post (fire-and-forget, x-push-secret)
+            └─ send-push
+                 ├─ push_message_context(id)      [00039]  shared metadata
+                 └─ push_targets_for_message(id)  [00039]  one row per (token × its envelope)
+                      → POST api.push.apple.com/3/device/<token>
+                           payload = metadata + ciphertext + THAT device's envelope
+                                     + mutable-content: 1
+                                        └─ iOS Notification Service Extension decrypts
+```
+
+**The payload is per device, not per message.** Each token gets the one `message_envelopes` row whose `recipient_fp` matches its `devices.key_fingerprint` — that is the whole reason `push_tokens` carries a `device_id`. `aps.alert.body` is always a safe placeholder ("New message", or "📷 Photo" for media); the extension overwrites it, and every failure path leaves the placeholder rather than surfacing ciphertext.
+
+**Suppression is server-side and must mirror the clients exactly:** never the sender, never `request_state <> 'accepted'`, never a conversation muted per the project-wide convention (`muted_until > now()`), never across a block, and never `type = 'system'`. An `enc_v = 2` message with no envelope for a device is dropped rather than pushed — that device registered after the send and could never resolve the body. `ConversationListViewModel.handleIncomingMessage` on iOS applies the same filters so the in-app banner and the lock screen never disagree.
+
+**APNs limits:** 4096-byte payload cap, which leaves room for roughly 2,100 characters of plaintext. Over that the server drops `content`/`iv`/`envelope` and sets `needs_fetch: true` — never a truncated ciphertext, since AES-GCM is all-or-nothing and a partial blob is indistinguishable from tampering. `apns-collapse-id` is the message id so a retried trigger resolves to one banner; grouping is `thread-id` (the conversation id) at the display layer.
+
+**Secrets.** `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID` (`wahid.yaply`), `APNS_PRIVATE_KEY` (the `.p8`) and `PUSH_WEBHOOK_SECRET` go in `supabase secrets` — use `--env-file`, since a multiline `.p8` mangled through a shell is the usual cause of a permanent `403 InvalidProviderToken`. The function URL and the shared secret also go in **Vault** (`push_fn_url`, `push_webhook_secret`), read by the SECURITY DEFINER `push_config()`; until both Vault rows exist `enqueue_push` is a no-op, so the triggers are inert and harmless.
+
+> ⚠️ Deno's `crypto.subtle.sign` with ECDSA returns IEEE P1363 `r||s` — **already** the JOSE encoding. Do not DER-decode; porting a Node example here is what produces a permanent `InvalidProviderToken`.
+
+**Testing without a device:** `send-push` accepts `dry_run: true` (runs the whole fanout and payload builder, returns the exact JSON per target instead of calling Apple) and `kind: "jwt_check"` (mints a provider token and returns its prefix). Both need the `x-push-secret` header.
+
+**Other kinds** — `friend_request`, `friend_accepted`, `task_assigned`, `event_confirmed` (migration `00041`) and `reminder` (a pg_cron job, migration `00042`) all route through the same function, resolved by `push_simple_notification(kind, payload)`. These are plaintext: no envelope, no `mutable-content`, so the extension never runs for them. Reminder dispatch is exactly-once by construction — `status = 'pending'` is both the work queue and the lock (`for update skip locked` plus an atomic flip to `'sent'` in the same transaction as the enqueue), which fails toward loss rather than duplication.
 
 ---
 
