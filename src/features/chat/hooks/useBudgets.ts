@@ -1,5 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import type { Database } from '@/lib/database.types'
+
+type ExpenseCategory = Database['public']['Enums']['expense_category']
 
 export interface Budget {
   id: string
@@ -125,7 +128,7 @@ export function useLockBudget() {
 export function useAddExpense(budgetId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (expense: { paid_by: string; description: string; amount: number; category?: string; split_between?: string[] }) => {
+    mutationFn: async (expense: { paid_by: string; description: string; amount: number; category?: ExpenseCategory; split_between?: string[] }) => {
       const { error } = await supabase.from('expenses').insert({
         budget_id: budgetId,
         paid_by: expense.paid_by,

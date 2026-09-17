@@ -54,7 +54,6 @@ function SplitwiseBudgetDetail({
   group,
   onBack,
   onDelete,
-  currentUserId,
   canDelete,
   creatorName,
 }: {
@@ -118,7 +117,7 @@ function SplitwiseBudgetDetail({
       <p className="text-xs text-text-subtle mb-3">Linked to: <span className="text-text-muted font-medium">{group.name}</span></p>
 
       {/* Balance summary */}
-      {group.simplified_debts?.length > 0 && (
+      {(group.simplified_debts?.length ?? 0) > 0 && (
         <div className="mb-3 p-2.5 bg-tint rounded-xl space-y-1">
           <p className="text-xs font-medium text-text-muted mb-1">Balances</p>
           {(group.simplified_debts ?? []).map((d, i) => {
@@ -432,7 +431,7 @@ export default function BudgetList({ conversationId, currentUserId, isCurrentUse
   const { mutate: linkToEvent } = useLinkToEvent()
   const [selected, setSelected] = useState<Budget | null>(null)
   const [creating, setCreating] = useState(false)
-  const splitwiseEnabled = useSplitwiseEnabled()
+  useSplitwiseEnabled()
 
   if (selected) return <BudgetDetail budget={selected} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} onBack={() => setSelected(null)} />
 

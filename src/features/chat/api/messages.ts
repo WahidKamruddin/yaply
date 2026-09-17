@@ -81,10 +81,10 @@ export async function sendMessage(params: SendMessageParams): Promise<DbMessage>
         wrapped_key: e.wrappedKey,
       })),
       p_type: params.type ?? 'text',
-      p_reply_to_id: params.replyToId ?? null,
-      p_thread_id: params.threadId ?? null,
-      p_media_url: params.mediaUrl ?? null,
-      p_media_mime: params.mediaMime ?? null,
+      p_reply_to_id: params.replyToId ?? undefined,
+      p_thread_id: params.threadId ?? undefined,
+      p_media_url: params.mediaUrl ?? undefined,
+      p_media_mime: params.mediaMime ?? undefined,
     })
     if (error) throw error
     return data as unknown as DbMessage
