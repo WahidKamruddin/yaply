@@ -19,9 +19,9 @@ export function buildReactionGroups(
   const map: Record<string, Record<string, { count: number; reactedByMe: boolean }>> = {}
   for (const r of reactions) {
     if (!map[r.messageId]) map[r.messageId] = {}
-    if (!map[r.messageId]![r.emoji]) map[r.messageId]![r.emoji] = { count: 0, reactedByMe: false }
-    map[r.messageId]![r.emoji]!.count++
-    if (r.userId === currentUserId) map[r.messageId]![r.emoji]!.reactedByMe = true
+    if (!map[r.messageId][r.emoji]) map[r.messageId][r.emoji] = { count: 0, reactedByMe: false }
+    map[r.messageId][r.emoji].count++
+    if (r.userId === currentUserId) map[r.messageId][r.emoji].reactedByMe = true
   }
   return Object.fromEntries(
     Object.entries(map).map(([msgId, emojiMap]) => [

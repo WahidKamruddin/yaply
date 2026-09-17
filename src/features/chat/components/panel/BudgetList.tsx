@@ -3,14 +3,12 @@ import { DollarSign, ArrowLeft, Plus, Link2, X, Trash2, Lock, Unlock } from 'luc
 import * as Dialog from '@radix-ui/react-dialog'
 import type { Budget } from '../../hooks/useBudgets'
 import { useBudgets, useExpenses, useAddExpense, useCreateBudget, useDeleteBudget, useLockBudget } from '../../hooks/useBudgets'
-import {
-  useSplitwiseEnabled,
+import { useSplitwiseEnabled,
   useSplitwiseGroups,
   useSplitwiseExpenses,
   useLinkSplitwiseGroup,
-  useCreateSplitwiseExpense,
-  type SplitwiseGroup,
-} from '../../hooks/useSplitwise'
+  useCreateSplitwiseExpense } from '../../hooks/useSplitwise'
+import type { SplitwiseGroup } from '../../hooks/useSplitwise'
 import { useEvents, useLinkToEvent } from '../../hooks/useEvents'
 
 // ─── Link panel ──────────────────────────────────────────────────────────────

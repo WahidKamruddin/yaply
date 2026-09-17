@@ -20,13 +20,11 @@ import GroupInfoModal from './GroupInfoModal'
 import DmSettingsModal from './DmSettingsModal'
 import ConversationPanel from './ConversationPanel'
 import { useReminderNotifications } from '@/features/chat/hooks/useReminders'
-import {
-  fetchReactions,
+import { fetchReactions,
   buildReactionGroups,
   addReaction,
-  removeReaction,
-  type ReactionGroup,
-} from '@/features/chat/api/reactions'
+  removeReaction } from '@/features/chat/api/reactions'
+import type { ReactionGroup } from '@/features/chat/api/reactions'
 import { uploadMediaFile, uploadRawFile } from '@/features/media/api/upload'
 import type { GifResult } from '@/features/media/api/gifs'
 import { supabase } from '@/lib/supabase'

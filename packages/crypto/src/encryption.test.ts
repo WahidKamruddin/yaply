@@ -138,6 +138,6 @@ describe('publicKeyFingerprint', () => {
   })
 
   it('rejects a private or malformed JWK', async () => {
-    expect(() => publicKeyFingerprint({} as JsonWebKey)).toThrow()
+    expect(() => publicKeyFingerprint({})).toThrow()
   })
 })

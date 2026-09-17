@@ -20,7 +20,7 @@ export function parseDuration(str: string): Date | null {
   const match = str.match(/^(\d+)([mhdw])$/)
   if (!match) return null
   const [, num, unit] = match
-  const n = parseInt(num!, 10)
+  const n = parseInt(num, 10)
   const now = Date.now()
   const ms = unit === 'm' ? n * 60_000
     : unit === 'h' ? n * 3_600_000
@@ -43,9 +43,9 @@ export function parseDateTimeArgs(dateStr: string, timeStr: string): Date | null
   } else {
     const dateMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
     if (!dateMatch) return null
-    m = parseInt(dateMatch[1]!, 10)
-    d = parseInt(dateMatch[2]!, 10)
-    y = parseInt(dateMatch[3]!, 10)
+    m = parseInt(dateMatch[1], 10)
+    d = parseInt(dateMatch[2], 10)
+    y = parseInt(dateMatch[3], 10)
     if (m < 1 || m > 12 || d < 1 || d > 31) return null
   }
 
@@ -53,7 +53,7 @@ export function parseDateTimeArgs(dateStr: string, timeStr: string): Date | null
   const timeMatch = timeStr.toLowerCase().match(/^(\d{1,2})(?::(\d{2}))?(am|pm)?$/)
   if (!timeMatch) return null
   const [, h, min, ampm] = timeMatch
-  let hour = parseInt(h!, 10)
+  let hour = parseInt(h, 10)
   const minute = parseInt(min ?? '0', 10)
   if (ampm === 'pm' && hour < 12) hour += 12
   if (ampm === 'am' && hour === 12) hour = 0
@@ -78,7 +78,7 @@ export function parseDateTime(str: string): Date | null {
   const tomorrowMatch = lower.match(/^tomorrow\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/)
   if (tomorrowMatch) {
     const [, h, m, ampm] = tomorrowMatch
-    let hour = parseInt(h!, 10)
+    let hour = parseInt(h, 10)
     const min = parseInt(m ?? '0', 10)
     if (ampm === 'pm' && hour < 12) hour += 12
     if (ampm === 'am' && hour === 12) hour = 0
@@ -92,7 +92,7 @@ export function parseDateTime(str: string): Date | null {
   if (timeMatch) {
     const [, h, m] = timeMatch
     const d = new Date(now)
-    d.setHours(parseInt(h!, 10), parseInt(m!, 10), 0, 0)
+    d.setHours(parseInt(h, 10), parseInt(m, 10), 0, 0)
     if (d <= now) d.setDate(d.getDate() + 1)
     return d
   }

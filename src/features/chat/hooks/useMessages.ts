@@ -5,7 +5,7 @@ export function useMessages(conversationId: string | null) {
   return useInfiniteQuery({
     queryKey: ['messages', conversationId],
     queryFn: ({ pageParam }) =>
-      fetchMessages(conversationId!, pageParam as string | undefined),
+      fetchMessages(conversationId!, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: !!conversationId,

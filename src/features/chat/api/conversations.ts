@@ -225,7 +225,7 @@ export async function createDirectConversation(otherUserId: string): Promise<str
     target_user_id: otherUserId,
   })
   if (error) throw error
-  return data as string
+  return data
 }
 
 export async function createGroupConversation(
@@ -239,7 +239,7 @@ export async function createGroupConversation(
     p_member_ids: otherMembers,
   })
   if (error) throw error
-  return data as string
+  return data
 }
 
 /**
@@ -301,8 +301,8 @@ export async function deleteConversation(conversationId: string, userId: string)
 }
 
 export async function promoteMemberToAdmin(conversationId: string, targetUserId: string): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase.from('conversation_members') as any)
+  const { error } = await supabase
+    .from('conversation_members')
     .update({ role: 'admin' })
     .eq('conversation_id', conversationId)
     .eq('user_id', targetUserId)

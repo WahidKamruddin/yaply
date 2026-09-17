@@ -40,7 +40,7 @@ export function useAlbums(conversationId: string | null) {
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
       if (error) throw error
-      return data as Album[]
+      return data
     },
     enabled: !!conversationId,
     staleTime: 30_000,
@@ -58,7 +58,7 @@ export function useAlbumMedia(albumId: string | null) {
         .eq('album_id', albumId)
         .order('created_at', { ascending: true })
       if (error) throw error
-      return data as AlbumMedia[]
+      return data
     },
     enabled: !!albumId,
     staleTime: 30_000,
