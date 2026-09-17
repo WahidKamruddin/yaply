@@ -163,10 +163,24 @@ export function buildPayload(ctx: MessageContext, target: Target): BuiltPayload 
   const bytes = byteLength(json)
   if (bytes <= APNS_MAX_BYTES) return { json, bytes, degraded: false }
 
-  // Too large for APNs. Never ship partial ciphertext — AES-GCM is
-  // all-or-nothing and a truncated blob fails the tag check, which is
-  // indistinguishable from tampering. Drop the sealed content entirely and let
-  // the extension fetch it, falling back to the placeholder if it is offline.
-  const degradedJson = JSON.stringify({ ...base, decryptable: false, needs_fetch: true })
+  // Too large for APNs. Never ship partial ciphertext — AES-GCM is all-or-nothing,
+  // so a truncated blob fails the tag check and is indistinguishable from tampering.
+  //
+  // Drop the ciphertext but KEEP the envelope. It carries the wrapped message key
+  // and costs ~360 bytes, which means the extension only has to fetch `content` and
+  // `iv` and can then decrypt with what it already holds — no second round trip for
+  // key material. sender_avatar_url and sender_username go too; the extension never
+  // reads them and the avatar URL is the largest metadata field.
+  const lean: Record<string, unknown> = { ...base }
+  delete lean.sender_avatar_url
+  delete lean.sender_username
+
+  const degradedJson = JSON.stringify({
+    ...lean,
+    decryptable: false,
+    needs_fetch: true,
+    enc_v: ctx.enc_v,
+    envelope: full.envelope,
+  })
   return { json: degradedJson, bytes: byteLength(degradedJson), degraded: true }
 }
