@@ -95,7 +95,7 @@ export function buildPayload(ctx: MessageContext, target: Target): BuiltPayload 
   // Media is never encrypted, so its body is final and the extension has
   // nothing to do. Text is a placeholder the extension replaces.
   const mediaBody = MEDIA_BODY[ctx.type]
-  const fallbackBody = mediaBody ?? 'New message'
+  const fallbackBody = mediaBody ?? 'Sent a message'
   const canDecrypt = mediaBody === undefined && ctx.content !== null
 
   const aps: Record<string, unknown> = {
@@ -163,24 +163,28 @@ export function buildPayload(ctx: MessageContext, target: Target): BuiltPayload 
   const bytes = byteLength(json)
   if (bytes <= APNS_MAX_BYTES) return { json, bytes, degraded: false }
 
-  // Too large for APNs. Never ship partial ciphertext — AES-GCM is all-or-nothing,
-  // so a truncated blob fails the tag check and is indistinguishable from tampering.
+  // Too large for APNs. The server holds only ciphertext, and AES-GCM is
+  // all-or-nothing — slicing the bytes yields something that fails the
+  // authentication tag, indistinguishable from tampering — so there is no way to
+  // produce a shortened version here. Recovering the text would mean either the
+  // extension fetching it (Supabase hands us a 1-hour JWT, so that resolves only
+  // if the app was opened recently — useless for the case notifications exist for)
+  // or the sender sealing a second short blob at send time. Neither earns its
+  // keep for messages this long, which are rare.
   //
-  // Drop the ciphertext but KEEP the envelope. It carries the wrapped message key
-  // and costs ~360 bytes, which means the extension only has to fetch `content` and
-  // `iv` and can then decrypt with what it already holds — no second round trip for
-  // key material. sender_avatar_url and sender_username go too; the extension never
-  // reads them and the avatar URL is the largest metadata field.
-  const lean: Record<string, unknown> = { ...base }
-  delete lean.sender_avatar_url
-  delete lean.sender_username
+  // So: deliberately deliver the placeholder. The sender's name is still the
+  // title, which is the part that actually matters.
+  //
+  // mutable-content is dropped as well — there is nothing for the extension to
+  // improve, and waking it costs battery and can delay delivery.
+  const degradedAps: Record<string, unknown> = { ...aps }
+  delete degradedAps['mutable-content']
 
   const degradedJson = JSON.stringify({
-    ...lean,
+    ...base,
+    aps: degradedAps,
     decryptable: false,
-    needs_fetch: true,
-    enc_v: ctx.enc_v,
-    envelope: full.envelope,
+    needs_fetch: false,
   })
   return { json: degradedJson, bytes: byteLength(degradedJson), degraded: true }
 }
