@@ -22,3 +22,6 @@ yaply-native/
 
 # Local scratch output, not part of the app
 brag-output/
+
+# Supabase CLI local state (linked project, versions) — machine-specific
+supabase/.temp/
