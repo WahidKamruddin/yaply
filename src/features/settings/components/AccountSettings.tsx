@@ -48,7 +48,7 @@ export default function AccountSettings({ userId, userEmail }: Props) {
   useEffect(() => {
     if (!profile) return
     setDisplayName(profile.display_name ?? '')
-    setUsername(profile.username ?? '')
+    setUsername(profile.username)
     setBio(profile.bio ?? '')
     setBirthdate(profile.birthdate ?? '')
   }, [profile])
@@ -103,7 +103,7 @@ export default function AccountSettings({ userId, userEmail }: Props) {
       const { error } = await supabase
         .from('profiles')
         .update({
-          display_name: displayName.trim() || null,
+          display_name: displayName.trim(),
           username: normalizedUsername,
           username_set: true,
           bio: bio.trim() || null,

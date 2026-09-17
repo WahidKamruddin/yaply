@@ -8,7 +8,7 @@ export interface DeviceRow {
   platform: string | null
   key_fingerprint: string | null
   last_active_at: string | null
-  created_at: string
+  created_at: string | null
 }
 
 export async function fetchDevices(userId: string): Promise<DeviceRow[]> {
