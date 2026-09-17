@@ -1,0 +1,15 @@
+project_id = "yaply"
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.report-problem]
+verify_jwt = true
+
+# Invoked by a database trigger via pg_net, which has no user JWT to present.
+# The gateway check is therefore off and the function authenticates the caller
+# itself with a shared secret (x-push-secret). Note that verify_jwt = true would
+# not have been an authorization gate anyway — it accepts any valid project JWT,
+# including the public anon key.
+[functions.send-push]
+verify_jwt = false
