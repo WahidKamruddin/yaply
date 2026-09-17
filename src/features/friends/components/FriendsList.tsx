@@ -29,7 +29,7 @@ export default function FriendsList({ currentUserId, onOpenProfile, onFindFriend
 
   async function openChat(userId: string) {
     try {
-      const id = await createDirectConversation(currentUserId, userId)
+      const id = await createDirectConversation(userId)
       setActiveId(id)
       await navigate({ to: '/chat' })
     } catch {

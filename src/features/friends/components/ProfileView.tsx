@@ -53,15 +53,7 @@ export default function ProfileView({ username, currentUserId }: Props) {
         .eq('username', username)
         .maybeSingle()
       if (err) throw err
-      return data as unknown as {
-        id: string
-        username: string
-        display_name: string | null
-        avatar_url: string | null
-        bio: string | null
-        is_online: boolean
-        last_seen_at: string | null
-      } | null
+      return data
     },
     staleTime: 60_000,
   })
@@ -91,7 +83,7 @@ export default function ProfileView({ username, currentUserId }: Props) {
     setOpening(true)
     setError(null)
     try {
-      const id = await createDirectConversation(currentUserId, userId)
+      const id = await createDirectConversation(userId)
       setActiveId(id)
       await navigate({ to: '/chat' })
     } catch (err) {

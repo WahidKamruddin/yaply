@@ -220,10 +220,7 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
 }
 
 // Uses the find_or_create_direct_conversation RPC (security definer — bypasses RLS correctly).
-export async function createDirectConversation(
-  userId: string,
-  otherUserId: string,
-): Promise<string> {
+export async function createDirectConversation(otherUserId: string): Promise<string> {
   const { data, error } = await supabase.rpc('find_or_create_direct_conversation', {
     target_user_id: otherUserId,
   })

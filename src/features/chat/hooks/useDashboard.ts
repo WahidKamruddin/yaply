@@ -1,8 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import type { Reminder } from './useReminders'
-import type { Event } from './useEvents'
-import type { Note } from './useNotes'
 
 // Dashboard-wide queries intentionally omit a conversation_id filter — RLS
 // ("members can view") already scopes rows to conversations the user belongs
@@ -20,7 +17,7 @@ export function useDashboardReminders(userId: string | undefined) {
         .order('remind_at', { ascending: true })
         .limit(20)
       if (error) throw error
-      return data as Reminder[]
+      return data
     },
     enabled: !!userId,
     staleTime: 30_000,
@@ -37,7 +34,7 @@ export function useDashboardNotes(userId: string | undefined) {
         .order('updated_at', { ascending: false })
         .limit(20)
       if (error) throw error
-      return data as Note[]
+      return data
     },
     enabled: !!userId,
     staleTime: 30_000,

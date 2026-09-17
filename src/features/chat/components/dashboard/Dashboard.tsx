@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Bell, Calendar, Users, Plus, Map as MapIcon, MessageSquare, Clock, ChevronRight, Sticker, FileText, Trash2 } from 'lucide-react'
+import { Bell, Calendar, Users, Plus, Map as MapIcon, Clock, ChevronRight, Sticker, FileText, Trash2 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAtom } from 'jotai'
 import { sidebarCollapsedAtom } from '@/features/chat/store/chat.atoms'
@@ -79,7 +79,7 @@ export default function Dashboard({ currentUserId, currentUserName, conversation
       return
     }
     try {
-      const id = await createDirectConversation(currentUserId, userId)
+      const id = await createDirectConversation(userId)
       await qc.invalidateQueries({ queryKey: ['conversations'] })
       onOpenConversation(id)
     } catch (err) {
