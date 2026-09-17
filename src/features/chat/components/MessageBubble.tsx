@@ -185,11 +185,9 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
           onClick={openSenderProfile}
           disabled={!openSenderProfile}
           aria-label="View profile"
-          className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-[11px] font-semibold disabled:cursor-default"
+          className="flex-shrink-0 rounded-full disabled:cursor-default"
         >
-          {message.senderProfile?.avatar_url
-            ? <img src={message.senderProfile.avatar_url} className="w-full h-full object-cover" alt="" />
-            : (message.senderProfile?.display_name?.[0] ?? message.senderProfile?.username?.[0] ?? '?').toUpperCase()}
+          <Avatar src={message.senderProfile?.avatar_url} alt="" size={28} />
         </button>
       )}
       <div className={`flex flex-col max-w-[65%] ${isOwn ? 'items-end' : 'items-start'}`}>

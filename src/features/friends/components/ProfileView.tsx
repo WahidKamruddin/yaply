@@ -36,6 +36,9 @@ export default function ProfileView({ username, currentUserId }: Props) {
   const [confirmBlock, setConfirmBlock] = useState(false)
   const [opening, setOpening] = useState(false)
   const [photoOpen, setPhotoOpen] = useState(false)
+  // A URL that 404s still reads as truthy, so track the load failure and treat
+  // it as no photo — otherwise the enlarge button opens a broken image.
+  const [photoBroken, setPhotoBroken] = useState(false)
 
   const {
     data: profile,
@@ -128,13 +131,19 @@ export default function ProfileView({ username, currentUserId }: Props) {
     <>
       <div className="flex flex-col items-center text-center gap-3 py-6">
         {/* Only a real photo is worth enlarging — the silhouette placeholder isn't. */}
-        {profile.avatar_url ? (
+        {profile.avatar_url && !photoBroken ? (
           <button
             onClick={() => setPhotoOpen(true)}
             aria-label={`View ${name}'s profile photo`}
             className="rounded-full transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5b8def]"
           >
-            <Avatar src={profile.avatar_url} alt={name} size={88} online={profile.is_online} />
+            <Avatar
+              src={profile.avatar_url}
+              alt={name}
+              size={88}
+              online={profile.is_online}
+              onLoadError={() => { setPhotoBroken(true); setPhotoOpen(false) }}
+            />
           </button>
         ) : (
           <Avatar src={null} alt={name} size={88} online={profile.is_online} />
@@ -199,12 +208,14 @@ export default function ProfileView({ username, currentUserId }: Props) {
             <Dialog.Description className="sr-only">
               Press Escape or click outside to close.
             </Dialog.Description>
-            {profile.avatar_url && (
+            {profile.avatar_url && !photoBroken && (
               // 3x the 88px avatar, still circular. Clamped to 80vw so it can't
               // outgrow a narrow phone screen.
               <img
                 src={profile.avatar_url}
                 alt={name}
+                referrerPolicy="no-referrer"
+                onError={() => { setPhotoBroken(true); setPhotoOpen(false) }}
                 className="w-[min(264px,80vw)] h-[min(264px,80vw)] object-cover rounded-full shadow-2xl shadow-black/50"
               />
             )}
