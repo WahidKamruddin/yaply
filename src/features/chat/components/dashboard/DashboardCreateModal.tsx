@@ -4,6 +4,7 @@ import { X, Bell, Calendar, FileText, Check, MessageSquare, Users } from 'lucide
 import { supabase } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import type { ConversationListItem } from '@/features/chat/types'
+import { postItemCreated } from '@/features/chat/api/messages'
 
 type CreateType = 'reminder' | 'event' | 'note'
 
@@ -70,8 +71,11 @@ export default function DashboardCreateModal({ type, conversations, currentUserI
           remind_at: new Date(when).toISOString(),
           status: 'pending' as const,
         }))
-        const { error: insertError } = await supabase.from('reminders').insert(rows)
+        const { data, error: insertError } = await supabase.from('reminders').insert(rows).select('id, conversation_id')
         if (insertError) throw insertError
+        for (const r of data) {
+          if (r.conversation_id) void postItemCreated(r.conversation_id, currentUserId, { kind: 'reminder', id: r.id, title })
+        }
         void qc.invalidateQueries({ queryKey: ['dashboard-reminders'] })
         void qc.invalidateQueries({ queryKey: ['reminders'] })
       } else if (type === 'event') {
@@ -85,8 +89,11 @@ export default function DashboardCreateModal({ type, conversations, currentUserI
           status: startsAt ? ('confirmed' as const) : ('planning' as const),
           starts_at: startsAt,
         }))
-        const { error: insertError } = await supabase.from('events').insert(rows)
+        const { data, error: insertError } = await supabase.from('events').insert(rows).select('id, conversation_id')
         if (insertError) throw insertError
+        for (const ev of data) {
+          void postItemCreated(ev.conversation_id, currentUserId, { kind: startsAt ? 'event' : 'plan', id: ev.id, title })
+        }
         void qc.invalidateQueries({ queryKey: ['dashboard-events'] })
         void qc.invalidateQueries({ queryKey: ['events'] })
       } else {
@@ -96,8 +103,11 @@ export default function DashboardCreateModal({ type, conversations, currentUserI
           title,
           content: description || '',
         }))
-        const { error: insertError } = await supabase.from('notes').insert(rows)
+        const { data, error: insertError } = await supabase.from('notes').insert(rows).select('id, conversation_id')
         if (insertError) throw insertError
+        for (const n of data) {
+          if (n.conversation_id) void postItemCreated(n.conversation_id, currentUserId, { kind: 'note', id: n.id, title })
+        }
         void qc.invalidateQueries({ queryKey: ['dashboard-notes'] })
         for (const conversationId of ids) {
           void qc.invalidateQueries({ queryKey: ['notes', conversationId] })

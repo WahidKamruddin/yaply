@@ -3,7 +3,6 @@ import { useAtomValue, useSetAtom } from 'jotai'
 import { useQueryClient } from '@tanstack/react-query'
 import { activeConversationIdAtom, commandFeedbackAtom } from '@/features/chat/store/chat.atoms'
 import { useConversations } from '@/features/chat/hooks/useConversations'
-import { sendMessage } from '@/features/chat/api/messages'
 import { executeCommand } from '../commandRegistry'
 import CommandModal from './CommandModal'
 import HelpModal from './HelpModal'
@@ -37,18 +36,6 @@ export default function CommandProvider({ userId, children }: Props) {
 
   const openHelp = useCallback(() => setHelpOpen(true), [])
 
-  const sendSystemMessage = useCallback(
-    async (text: string) => {
-      const convId = activeConvId
-      if (!convId) return
-      const bytes = new TextEncoder().encode(text)
-      const content = btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''))
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-      await sendMessage({ conversationId: convId, senderId: userId, content, iv: null, type: 'system', deletedAt: expiresAt })
-    },
-    [activeConvId, userId],
-  )
-
   const openModal = useCallback((type: CreateItemType, title?: string) => {
     setModalType(type)
     setModalTitle(title ?? '')
@@ -72,14 +59,13 @@ export default function CommandProvider({ userId, children }: Props) {
         queryClient,
         openModal,
         openHelp,
-        sendSystemMessage,
         showLocalFeedback,
       })
     }
 
     window.addEventListener('yaply:command', handler)
     return () => window.removeEventListener('yaply:command', handler)
-  }, [activeConvId, conversations, openHelp, openModal, sendSystemMessage, showLocalFeedback, userId])
+  }, [activeConvId, conversations, openHelp, openModal, showLocalFeedback, userId])
 
   return (
     <>
@@ -91,7 +77,7 @@ export default function CommandProvider({ userId, children }: Props) {
           conversationId={activeConvId}
           userId={userId}
           onClose={() => setModalType(null)}
-          onCreated={(msg) => { void sendSystemMessage(msg); setModalType(null) }}
+          onCreated={() => setModalType(null)}
         />
       )}
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}

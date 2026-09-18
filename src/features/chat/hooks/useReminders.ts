@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { postItemCreated } from '../api/messages'
 
 export interface Reminder {
   id: string
@@ -44,14 +45,15 @@ export function useCreateReminder(conversationId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ userId, message, remindAt }: { userId: string; message: string; remindAt: string }) => {
-      const { error } = await supabase.from('reminders').insert({
+      const { data, error } = await supabase.from('reminders').insert({
         conversation_id: conversationId,
         user_id: userId,
         message,
         remind_at: remindAt,
         status: 'pending',
-      })
+      }).select('id').single()
       if (error) throw error
+      void postItemCreated(conversationId, userId, { kind: 'reminder', id: data.id, title: message })
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reminders'] }),
   })

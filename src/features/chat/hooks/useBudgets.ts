@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { postItemCreated } from '../api/messages'
 import type { Database } from '@/lib/database.types'
 
 type ExpenseCategory = Database['public']['Enums']['expense_category']
@@ -90,14 +91,15 @@ export function useCreateBudget(conversationId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ name, totalAmount, createdBy }: { name: string; totalAmount: number; createdBy: string }) => {
-      const { error } = await supabase.from('budgets').insert({
+      const { data, error } = await supabase.from('budgets').insert({
         conversation_id: conversationId,
         created_by: createdBy,
         name,
         total_amount: totalAmount,
         currency: 'USD',
-      })
+      }).select('id').single()
       if (error) throw error
+      void postItemCreated(conversationId, createdBy, { kind: 'budget', id: data.id, title: name })
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['budgets', conversationId] }),
   })

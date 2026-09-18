@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { postItemCreated } from '../api/messages'
 
 export interface Task {
   id: string
@@ -54,14 +55,15 @@ export function useCreateTask(conversationId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ title, createdBy }: { title: string; createdBy: string }) => {
-      const { error } = await supabase.from('tasks').insert({
+      const { data, error } = await supabase.from('tasks').insert({
         conversation_id: conversationId,
         created_by: createdBy,
         title,
         status: 'todo',
         priority: 'medium',
-      })
+      }).select('id').single()
       if (error) throw error
+      void postItemCreated(conversationId, createdBy, { kind: 'task', id: data.id, title })
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks', conversationId] }),
   })
