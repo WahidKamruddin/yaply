@@ -4,29 +4,28 @@
 
 ### Platform Context
 
-When the user says **"ios"**, **"swift"**, or **"native"/"mobile"** — work exclusively inside `yaply-ios/`. That directory is the Swift/SwiftUI app and is its own git repo connected to its own GitHub. It is the active client for iOS — build/iOS-specific work happens here now. Do not reference or modify files in the web root.
+When the user says **"ios"**, **"swift"**, or **"native"/"mobile"** — work exclusively inside `yaply-ios/` (Swift/SwiftUI, its own git repo and GitHub). Do not reference or modify files in the web root.
 
 When the user says **"web"** — work exclusively inside the yaply root folder (this repo). Ignore `yaply-ios/` entirely.
 
-**`yaply-native/` (React Native/Expo, TypeScript) no longer exists** — as of 2026-08-03 the user reverted course: it has been deleted and `yaply-ios/` (Swift/SwiftUI) is once again the active iOS client, not deprecated. SwiftUI's native look didn't allow the design customizability wanted, which is why React Native was tried, but that path was abandoned. If you see stale references to `yaply-native/` elsewhere in this file or in `yaply-ios/CLAUDE.md`, they describe the old (now-reversed) direction — treat `yaply-ios/` as the current, actively-developed iOS app.
+`yaply-ios/` is the active iOS client. A React Native rewrite (`yaply-native/`) was tried and abandoned on 2026-08-03 and has been deleted; any reference to it, or to `yaply-ios` being deprecated, is stale.
 
-Web and yaply-ios are independent repos: separate git histories, separate GitHub remotes, separate issue trackers. Any reported bug or feature request must be filed against the correct repo — never mix them.
+Web and yaply-ios are independent repos: separate git histories, GitHub remotes, and issue trackers. File every bug or feature request against the correct repo — never mix them.
 
-**GitHub Remotes:**
 - Web: https://github.com/WahidKamruddin/yaply
 - iOS: https://github.com/WahidKamruddin/yaply-ios
 
 ### GitHub Issues
 
-When the user describes a problem or request, determine which platform(s) it affects and push the issue to that repo's GitHub only. Categorize by label (bug, enhancement, etc.) and use the repo's existing label conventions. Never create a web issue for an iOS-only concern, or vice versa.
+When the user describes a problem or request, determine which platform(s) it affects and push the issue to that repo's GitHub only. Categorize by label (bug, enhancement, etc.) using the repo's existing labels.
 
 ### Committing & Pushing
 
 When the user says **"both apps are good"**:
-1. Stage all changed files in each repo separately (`git add` the relevant files in `yaply-ios/` and in the web root).
-2. Propose a commit message following the repo's existing style — conventional commits format: `feat(): …`, `fix(): …`, `refactor(): …`, etc. Generate a message, then ask the user what to change before committing.
+1. Stage changed files in each repo separately.
+2. Propose a conventional-commits message (`feat(): …`, `fix(): …`, `refactor(): …`) and ask the user what to change before committing.
 3. **Never include "Co-authored-by: Claude" or any AI attribution in commit messages.**
-4. After the user approves the message, commit and push to `main`. Create a branch only if the user asks; by default push straight to `main` since this is a solo project.
+4. After approval, commit and push to `main`. Branch only if the user asks.
 
 ### Feature Completion Reminder
 
@@ -40,680 +39,258 @@ Do not launch the dev server, open a browser, or otherwise check UI changes live
 
 ## What This Is
 
-yaply is a web-based E2E encrypted messaging application. It is a Progressive Web App (PWA-capable) built with React and backed entirely by Supabase. It lives as the web platform in a monorepo alongside `yaply-ios` (Swift/SwiftUI — the active iOS client). Both platforms share one Supabase project.
+yaply is a web-based E2E encrypted messaging app (PWA-capable), built with React and backed entirely by Supabase. It shares one Supabase project with `yaply-ios`. **This file is the canonical backend and cross-platform contract** — `yaply-ios/CLAUDE.md` points here for schema, RPCs, and wire formats and only holds iOS-specific notes.
 
 ---
 
 ## Tech Stack
 
-### Frontend Framework: TanStack Start + React 19
+- **TanStack Start + React 19** (Vite-based). Chosen for route-level type safety and TanStack Query integration. Runs as a prerendered client-side SPA on Netlify; SSR features are not relied on.
+- **TanStack Router, file-based.** Routes in `src/routes/`; `routeTree.gen.ts` is generated — never edit it. Routes: `/` (marketing landing), `/auth`, `/chat` (main app), `/friends`, `/settings`, `/profile/$username`, `/link` (pairing QR deep link), plus `__root.tsx` (HTML shell, auth state).
+- **TanStack Query** for server state (conversations, message pages); **Jotai** for UI state (active conversation id, reply target) — atoms shared without prop drilling.
+- **Tailwind CSS v4** via `@tailwindcss/vite`; config lives in CSS (`@theme`), not `tailwind.config.js`. App palette: `#1a2744`, `#5b8def`, `#dce7f8`, `#edf1fa`. **Radix UI** headless primitives (Avatar, Dialog, Dropdown, Scroll Area, Tabs, Tooltip) styled directly — deliberately not shadcn. **Lucide** icons.
+- **Supabase** is the entire backend: Postgres + RLS, Auth, Realtime, Storage. No custom server; the client talks to Supabase directly and authorization lives in RLS policies and `SECURITY DEFINER` RPCs.
+- **Web Crypto API** (`crypto.subtle`) for all crypto — built in, no bundle cost. Supabase does zero crypto.
 
-TanStack Start = a Vite-based full-stack meta-framework (like Next/Remix, TanStack ecosystem). Chosen for route-level type safety (TanStack Router), first-class TanStack Query SSR/hydration, Vite speed, and future flexibility (can add SSR/server functions later without migrating). Currently runs as a client-side SPA on Netlify; SSR features are not relied on (Supabase handles all data).
+### Packages (npm workspaces)
 
-### Routing: TanStack Router (file-based)
-
-Routes live in `src/routes/`. The router auto-generates `routeTree.gen.ts` from the file structure — never edit that file manually. There are only four routes:
-
-| File | Path | Purpose |
-|------|------|---------|
-| `__root.tsx` | (layout wrapper) | HTML shell, loads auth state |
-| `index.tsx` | `/` | Public marketing landing page (see **Landing Page** below) — not an auth redirect |
-| `auth.tsx` | `/auth` | Sign in / sign up |
-| `chat.tsx` | `/chat` | Main app: conversation list + chat |
-| `settings.tsx` | `/settings` | Account/profile editing, billing, privacy policy, terms, help, report-a-problem (see Feature Map) |
-| `link.tsx` | `/link` | Landing point for the pairing QR deep link (`/link#c=<code>`) — see Live device pairing |
-
-### State Management: Jotai + TanStack Query
-
-Two separate state layers are used intentionally:
-
-**TanStack Query** (`@tanstack/react-query`) manages **server state** — Supabase data needing caching, pagination, background refetch (conversation list, message pages).
-
-**Jotai** manages **UI state** — ephemeral client state not belonging in a query cache (active conversation id, reply target). Chosen over Redux/Zustand for zero-boilerplate atoms shared across components (e.g. `activeConversationIdAtom` set by the list, read by `ChatView`) without prop drilling.
-
-### Styling: Tailwind CSS v4 + Radix UI
-
-**Tailwind CSS v4** is used via the Vite plugin (`@tailwindcss/vite`). Version 4 is a major rewrite — configuration is done in CSS (`@theme`) rather than `tailwind.config.js`. The project uses a custom blue-slate color palette (`#1a2744`, `#5b8def`, `#dce7f8`, `#edf1fa`) defined inline via class values.
-
-**Radix UI** provides headless, accessible primitives: Avatar, Dialog, Dropdown Menu, Scroll Area, Tabs, Tooltip. These are unstyled components that handle keyboard navigation, focus trapping, and ARIA roles. Tailwind classes are applied on top. This was chosen over shadcn/ui (which wraps Radix) to keep direct control over the markup.
-
-**Lucide React** provides icons.
-
-### Backend: Supabase
-
-Supabase serves as the entire backend. No custom server is needed. It provides:
-
-- **PostgreSQL** — primary database with Row-Level Security (RLS) policies
-- **Auth** — email/password auth with session management
-- **Realtime** — WebSocket-based Postgres change subscriptions
-- **Storage** — S3-compatible file storage for media, avatars, stickers
-
-**Why Supabase (over Firebase / custom API):** Postgres's relational model fits the conversation/member/message schema (FKs, JOINs) better than Firestore's document model; RLS enforces authorization at the DB level, so the client talks directly to Supabase with no middleware layer to maintain.
-
-### Encryption: Web Crypto API (envelope encryption, wire format v2)
-
-Messages are encrypted end-to-end with **per-message envelope encryption**. The primitives live in `packages/crypto/src/`; the protocol glue lives in `src/features/chat/hooks/useEncryption.ts`. This replaced the original pairwise-ECDH scheme in migration `00029_multi_device_envelopes.sql` (all pre-v2 messages, conversations, and device rows were wiped by explicit decision — there is no legacy data to support; any stray `iv`-set/`enc_v`-NULL row renders as `decryptFailed`).
-
-**Why v2 exists (the single-slot bug):** the old scheme stored ONE identity key per user (`devices.device_id` hard-coded to 1) and every login upserted the local browser's key into that slot. Any second browser/device/cleared-storage overwrote the published key, permanently orphaning all messages sealed under the previous key — including the user's own sent history. Messages also recorded nothing about which key they were sealed to.
-
-**Algorithm:**
-- **Message cipher:** AES-GCM, random 256-bit *message key* (mk) per message, 12-byte random nonce
-- **Key wrap:** one ephemeral P-256 keypair per message; per recipient device, `KEK = ECDH(eph_priv, device_pub)` and `AES-GCM(KEK, raw mk)` with its own 12-byte nonce
-
-**How a send works:**
-1. On login, each install registers its own `devices` row: a P-256 identity keypair + a random 31-bit `device_id`, both stored locally (IndexedDB). The upsert conflicts only on `(user_id, device_id)` — an install can only ever touch its own row, never another install's.
-2. To send, the client fetches **every active device of every conversation member** (including all of the sender's own devices — mandatory, or the sender's other installs can't read the message), generates mk, encrypts the plaintext once, and wraps mk for each device.
-3. The message row gets `content`, `iv`, `enc_v = 2`; one `message_envelopes` row per recipient device records `(recipient_user_id, recipient_fp, eph_pub, key_iv, wrapped_key)`. Both are inserted atomically by the `send_message_with_envelopes` RPC (security definer), which **rejects an empty envelope set**.
-4. To decrypt, a device looks up the envelope whose `recipient_fp` equals its own key fingerprint (JWK `x.y`), unwraps mk with its identity private key + the envelope's ephemeral public key, and decrypts the content. **No envelope for my fingerprint on an `enc_v = 2` message is a legitimate, permanent state** — the message was sealed before this device existed — and renders as an explicit "couldn't decrypt" (`DecryptedMessage.decryptFailed`), never raw ciphertext or `atob()` garbage.
-
-**Wire format v2 (critical for cross-platform compatibility):**
-```
-messages.content       = base64( ciphertext + GCM tag[16] )   — AES-GCM(mk, plaintext)
-messages.iv            = base64( nonce[12] )
-messages.enc_v         = 2   (NULL = unencrypted phase-1; iv must then also be NULL)
-envelope.eph_pub       = JSON-stringified JWK of the per-message ephemeral P-256 public key
-envelope.key_iv        = base64( nonce[12] ) for the key wrap
-envelope.wrapped_key   = base64( AES-GCM(KEK, raw 32-byte mk) + GCM tag[16] )
-envelope.recipient_fp  = JWK x + '.' + y of the recipient device's identity key
-```
-**Key derivation:** the KEK is the raw 32-byte ECDH shared secret (x-coordinate of the shared point) used directly as an AES-256-GCM key — **no HKDF**. iOS/Android must mirror this exactly (CryptoKit: `P256.KeyAgreement`, raw shared secret bytes as the AES key).
-
-**Invariants (each one guards a real regression):**
-- `enc_v = 2` ⟺ envelopes exist ⟺ `iv` non-NULL. The phase-1 fallback is always written as `enc_v = NULL` **and** `iv = NULL` — never `enc_v = 2` without envelopes (the RPC enforces this server-side).
-- Decrypt branches on `enc_v` **first**, then `iv = NULL` (phase-1), and anything else is `decryptFailed`. Applied identically at all three decrypt sites: `ChatView`'s effect, `ThreadView.loadReplies`, and the sidebar previews in `api/conversations.ts`.
-- The sender's own devices are always in the recipient set (`encryptForMembers` unions the sender's id and adds the local device key even if the DB read races device registration).
-- Media/sticker/gif/system messages never enter v2 — they send `content: '', iv: null` and stay `enc_v = NULL`.
-- Sender-side fan-out bound: only devices with `last_active_at` within 90 days receive envelopes.
-
-**Groups ARE E2E encrypted (since v2):** the envelope scheme keys groups and DMs identically — one mk wrapped for every member device. There is no group/DM split anywhere in the crypto path anymore.
-
-**Fallback (phase-1):** if **any** member has zero registered devices (brand-new account that never logged in), the client sends plain base64 (`enc_v = NULL`, `iv = NULL`) so that member isn't handed permanently undecryptable ciphertext. **Always `TextEncoder`/`TextDecoder` for phase-1 — never `btoa()`/`atob()` on raw text** (`btoa()` breaks on non-Latin-1). Decode via `decodePhase1` in `useEncryption.ts`.
-
-**Message editing (contract only — no edit UI exists):** an edit of a v2 message is a **re-seal**: generate a fresh mk, new `content`/`iv`, and replace ALL envelope rows in one transaction (a future `edit_message_with_envelopes` RPC). Never reuse the old mk. Side effect: edits become readable by devices added after the original send.
-
-**Device registration must be single-flight (critical):** `useEncryption` is mounted by more than one component (`ChatView` and `ThreadView`), so `registerDevice` can run concurrently for the same user. Without a guard, two calls on a fresh install each generate a *different* keypair and race to publish — leaving the locally stored private key out of sync with the published public key, which breaks every message sealed to the losing key. `registrationInFlight: Map<userId, Promise>` makes concurrent calls share one registration. Both `encryptForMembers` and `decryptV2ForUser` **await** that promise, so a message sent or read immediately after login is never silently downgraded to unencrypted phase-1 (or reported as a false decrypt failure) merely because registration hadn't finished. iOS must apply the same single-flight rule.
-
-**Key storage:** IndexedDB via `idb`, DB `yaply-keys` **version 3** (v3 dropped the pairwise `derived` store and legacy unscoped keypair entries). Store `identity` holds, **scoped per user**: `pub:<userId>` / `priv:<userId>` (identity JWKs), `deviceId:<userId>` (this install's `devices.device_id`), and `escrow:<userId>` (an array of `{ deviceId, pub, priv }` adopted from another device via live pairing — see below).
-
-**In-memory cache must be keyed by userId, not a single mutable slot (critical):** `useEncryption.ts` keeps an in-JS-memory cache on top of IndexedDB (`identityPairMemCache`) so repeated encrypts/decrypts don't hit IndexedDB every time. An earlier version stored this as one mutable variable plus a "clear everything when a different userId shows up" check (`cacheOwner`) — this had a real race: sign out and back into a *different* account fast enough in the same tab, and a straggling async call still in flight for the old account (e.g. the sidebar's preview decryption, which runs independently of `ChatView`) could resolve *after* the new account's session had already reset the cache, and overwrite it with the old account's keypair while the tracker still said it belonged to the new user. Every decrypt for the new account then silently used the wrong private key — **every message failed**, specifically when testing multiple accounts by signing in/out in one browser tab (the common way to test multi-user flows solo). Fixed by making `identityPairMemCache` a `Map<userId, pair>`. `devicesMemCache` (60s TTL) is intentionally global/unscoped by requester since a user's public device list is the same no matter who is asking. iOS must not replicate the single-slot-plus-owner-check pattern for any per-user in-memory cache.
-
-**Why Web Crypto and not a JS crypto library (e.g. TweetNaCl, forge):** built into every browser (no bundle cost), runs in a secure context; keys *could* be non-extractable (current impl exports to JWK for IndexedDB — a trade-off).
-
-**What we build vs. what's provided:** the crypto *algorithms* are the browser's Web Crypto (`crypto.subtle`) — not hand-rolled. Supabase does *zero* crypto; it only stores ciphertext + public keys and never sees a private key. The *protocol* tying primitives together (key gen/storage, public-key exchange via `devices`, wire format, envelope scheme, rotation handling) is custom yaply code — this middle layer is where the risk lives (the historical single-slot bug was a protocol flaw, not an algorithm flaw). A future hardening path is adopting a vetted protocol lib (libsignal) instead of the custom ECDH+AES scheme.
-
-### Live device pairing (history sync across devices)
-
-Every install has its own identity keypair, which is why a new device cannot read
-messages sealed before it existed. **Live pairing** closes that gap: an
-already-linked device (the *sender*) hands its key material to a newly signed-in
-one (the *receiver*) over an ephemeral, authenticated Realtime channel. Nothing
-is stored server-side — there is no PIN, no vault, no recovery blob. Code lives
-in `packages/crypto/src/pairing.ts`, `src/features/pairing/`,
-`src/features/settings/components/DevicePairingSettings.tsx`, and `src/routes/link.tsx`.
-
-**Two independent role axes — do not conflate them:**
-- **Trust role**: `sender` (holds keys) vs `receiver` (needs them). Fixed by which device has history.
-- **Rendezvous role**: `presenter` (shows the code) vs `entrant` (scans or types it). Free choice.
-
-All four combinations are supported, which is the whole point: the pairing code
-carries only a short rendezvous id — **never key material** — so it is small
-enough to type. That is what makes a camera optional and covers desktop→phone,
-phone→desktop, desktop→desktop and phone→phone. The QR is a convenience layer
-over the same code, never the only path; the "Scan QR" control is only rendered
-when `enumerateDevices()` actually reports a `videoinput`, so a camera-less
-desktop never sees a dead end.
-
-**Pairing code:** 8 characters of Crockford base32 (`0-9`, `A-Z` minus I/L/O/U),
-displayed `XXXX-XXXX`. `normalizePairingCode` parses leniently (case-insensitive,
-strips dashes/spaces, folds `O→0` and `I,L→1`). **It is a rendezvous identifier,
-not a secret.**
-
-**QR deep link:** `https://<origin>/link#c=<code>` — the code is in the
-**fragment** on purpose, so it never reaches server logs, proxies, or a Referer
-header. `/link` reads it from `window.location.hash` (not search params) and
-drops the user into the receiver flow.
-
-**Channel:** `supabase.channel('pairing:<userId>:<code>', { config: { private: true } })`.
-Migration `00034_pairing_channel_authorization.sql` adds the first-ever RLS
-policies on `realtime.messages`, scoping SELECT/INSERT to topics matching
-`pairing:<auth.uid()>:%`. Every other channel in the app (typing, presence,
-message invalidation) is public and unaffected — RLS on `realtime.messages` only
-applies to channels opened with `private: true`.
-
-**Protocol** (roles are *trust* roles; either side may have presented the code):
-1. Both subscribe. Sender broadcasts `ready`; receiver broadcasts `hello { ephPub }`
-   both on subscribe and on `ready` — neither side can assume it joined first.
-2. Sender derives the shared secret + SAS, broadcasts `ack { ephPub }`.
-3. Receiver derives the same secret + SAS independently.
-4. Human compares the two 6-digit codes and confirms **on the sender**.
-5. Sender broadcasts `payload { iv, ciphertext }`; receiver decrypts, merges into
-   its local escrow, broadcasts `done`.
-
-**Wire format (iOS must match byte-for-byte):**
-- Ephemeral P-256 keypair per side, **memory-only** — never IndexedDB, never Postgres.
-- `secret = raw 32-byte ECDH shared secret` used **directly** as the AES-256-GCM
-  transfer key — same no-HKDF convention as the message envelope KEK.
-- `sas = SHA-256(secret ‖ "yaply-sas-v1")`, first 4 bytes big-endian, `mod 1_000_000`, zero-padded to 6 digits.
-- `ciphertext = base64(AES-GCM(secret, JSON.stringify(EscrowedKey[])) + tag)`,
-  `iv = base64(nonce[12])`, where `EscrowedKey = { deviceId, pub: JsonWebKey, priv: JsonWebKey }`.
-
-**Invariants (each guards a real failure mode):**
-- **The SAS step is load-bearing, not decorative.** It is what stops a *second
-  authenticated session on the same account* (a stolen JWT / logged-in tab) from
-  racing to join the channel and impersonating the receiver — that attacker
-  passes the RLS policy. A relay in the middle necessarily holds two different
-  shared secrets and produces two different codes. Never ship a "skip
-  verification" path.
-- **Abort on a second joiner.** If a *different* `ephPub` arrives on a live
-  session, the whole session is cancelled rather than picking a winner. Silently
-  choosing one is exactly how a race becomes key exfiltration.
-- **Escrowed keys are decrypt-only.** They are never published to `devices` and
-  never used as a recipient when sealing new messages — this install still seals
-  to its own key. They exist solely so old envelopes stay readable.
-- **Import merges, never overwrites** (`mergeEscrowedKeys`, de-duped by
-  fingerprint): pairing twice from two devices unions history access.
-- **Candidate fingerprints, not one fingerprint.** `getCandidateFingerprints()`
-  returns own fp first, then escrowed ones; `fetchEnvelopesForMessages` filters
-  `.in('recipient_fp', candidateFps)` and `decryptV2ForUser` picks the private key
-  matching `envelope.recipient_fp`. Applied identically at all three decrypt
-  sites (`ChatView` effect, `ThreadView.loadReplies`, `api/conversations.ts`
-  previews) — the same lockstep rule as the `enc_v`/`iv` invariants above.
-- Session TTL is 90s and single-use; expiry surfaces an explicit "code expired"
-  state, never a silent stall.
-
-**Accepted limitation:** both devices must be online at the same time. There is
-no cold-start recovery — lose every linked device at once and history is
-permanently `decryptFailed`. This is the deliberate trade for storing no
-recovery secret server-side. Anyone holding an unlocked linked device can also
-mint new linked devices, exactly as in Signal/WhatsApp.
-
-### Device management (naming + revocation)
-
-Settings → Devices lists this user's `devices` rows, each renameable inline and
-revocable behind a confirmation dialog.
-
-**Naming.** `src/lib/deviceName.ts` generates a name from the user agent at
-**first registration only** — `Chrome on macOS (Web)`. Later logins must never
-re-write `device_name`, or a device the user renamed silently reverts, which is
-why `doRegisterDevice` only includes the column in its upsert when the row is
-new. The platform is baked into the generated string *and* stored separately in
-`platform`, so a rename can't lose which client a row belongs to.
-
-**Revocation is three things, and all three are required.** Deleting the
-`devices` row alone is theatre: the device keeps a valid session and would
-re-register on next login, republishing the same keypair out of IndexedDB.
-1. **`revoke_device` RPC** deletes the row (peers stop sealing to it) *and* the
-   device's `auth.sessions` row, which cascades `auth.refresh_tokens` — the
-   session can no longer be renewed.
-2. **`useDeviceRevocation`** (mounted in `routes/chat.tsx`) reacts to the
-   realtime DELETE, filtered to the install's **own row id** so no other user's
-   device ids are observable. Without this the device stays usable until its
-   access token expires — up to an hour after you "signed it out".
-3. **The device clears its local keys** (`clearAllKeys`) on revocation, and
-   `doRegisterDevice` runs an **orphan check** at startup: a local `deviceId`
-   with no matching row means it was revoked while offline, so it wipes keys and
-   comes back as a brand-new device. Skipping this step is what would let a
-   revoked device resurrect its old identity.
-
-A revoked device therefore has to sign in again *and* re-pair to read history —
-wiping the keys drops its escrowed keys too, which is the intended outcome.
-
-**A failed query must never be read as "revoked."** Both the realtime hook and
-the orphan check only act on a *successful* empty result; treating a network
-error as a missing row would sign users out on a blip.
-
-### Security Model — Known Gaps & Limitations
-
-E2E here means **text message content is encrypted between a user's active devices** — not "everything is private from everyone." Do not overstate it. Known gaps (treat as documented limitations, not bugs):
-
-- **Pre-device history: solved for the online case only.** Live device pairing (above) lets a new device adopt an existing device's keys and read history sealed before it existed. It requires an **already-linked device online at the same time** — there is no cold-start recovery, by design, because nothing that could unlock messages is stored server-side.
-- **Explicitly out of scope (future work):** cold-start history recovery when every linked device is lost (would require key escrow, which was deliberately rejected — see the pairing section); server-side pruning of stale device rows; recovering already-orphaned legacy messages (permanent `decryptFailed`); message-editing implementation (no UI; contract only).
-- **Device linking is as strong as an unlocked device.** Whoever holds an unlocked, signed-in device can approve linking a new one. Inherent to every device-linking design (Signal/WhatsApp included); the SAS confirmation defends against a network/relay attacker, not against physical access.
-- **No key verification (MITM):** the server distributes public keys and there is no safety-number/fingerprint verification UI, so an *active* or compromised server could substitute keys. Protects against a *passive* server, not an active one.
-- **No forward secrecy / no ratchet:** a device's identity key never rotates; the per-message ephemeral key wraps to a *static* recipient key, so compromise of a device's private key exposes all past **and** future messages sent to it. No Double-Ratchet-style evolution.
-- **Metadata is unprotected:** who talks to whom, timing, frequency, reply chains, conversation membership, and message sizes are all plaintext in the DB.
-- **Private keys stored extractable** in IndexedDB (JWK) → exfiltratable via XSS or malicious code. Non-extractable keys would harden this.
-- **Media is NOT encrypted:** images, files, and stickers live at public Storage URLs. Encryption covers text content only.
-- **Device management: partial.** Users can list, rename and revoke devices (Settings → Devices). Revoking kills the device's auth session and forces it to re-pair. Still missing: a one-tap "log out everywhere", and server-side pruning of stale rows — the `devices` table only grows. Revocation of a device that is **offline** takes effect when it next comes online (via the orphan check); until then it simply can't reach the API with a dead refresh token.
-- **Group membership changes unhandled:** new members can't read pre-join history; removed members aren't cryptographically cut off (no group re-keying).
-- **Push payloads transit Apple as ciphertext.** Message pushes ship `content` (the AES-GCM ciphertext) plus that device's `wrapped_key` through APNs, and a Notification Service Extension decrypts them on-device — the server never can. This is still end to end: the KEK requires the device's P-256 private key, which never leaves the Keychain. But sealed message bytes now sit in Apple's push infrastructure for up to `apns-expiration` (24h), which is a real threat-model change versus having no pushes at all, and it means a future APNs compromise would hold ciphertext it could not open rather than nothing. The non-message pushes (friend requests, task assignments, confirmed events, reminders) are **plaintext** — the underlying columns are unencrypted anyway. Reactions are also stored in plaintext.
-- **Search:** no server-side search over ciphertext; client-side search only covers already-decrypted, loaded messages.
-- **Fan-out scaling:** envelope rows = messages × recipients × devices, bounded only by the 90-day `last_active_at` filter; large groups are heavy on writes/storage.
-- **Cross-platform interop:** web and iOS both implement wire format v2, live pairing, and device revocation. Any change to the SAS formula, transfer payload shape, pairing channel topic, or envelope wire format must land on both at once or mixed conversations silently break.
-- **Browser-E2E trust:** the app *ships the JavaScript that does the crypto*, so whoever controls delivery could exfiltrate keys/plaintext via a malicious update. This is an *active* attack (detectable via open-source/audits) and can't retroactively recover messages sealed to a key that was never captured — but it means "the server can't read it" is not the same as "the operator physically cannot read it."
-
-### Packages (Monorepo)
-
-The project is a pnpm workspace monorepo with two internal packages:
-
-| Package | Path | Contents |
-|---------|------|---------|
-| `@yaply/crypto` | `packages/crypto/` | `generateKeyPair`, `deriveSharedKey`, `publicKeyFingerprint`, `generateMessageKey`, `encryptWithEnvelopes(plaintext, recipients)`, `unwrapAndDecrypt(myPriv, envelope, content, iv)`, `encryptMessage`, `decryptMessage`, `storeIdentityKeyPair(userId, …)`, `loadIdentityKeyPair(userId)`, `storeLocalDeviceId(userId, id)`, `loadLocalDeviceId(userId)`, `clearAllKeys` |
-| `@yaply/shared` | `packages/shared/` | TypeScript type definitions, constants, validators |
-
-**Why a monorepo:** The iOS and Android apps will need to understand the same data shapes. `packages/shared/types.ts` is the canonical type reference. The `packages/crypto` package documents the encryption contract that all platforms must implement (even though iOS and Android use different crypto libraries, the same wire format and key derivation logic applies).
+- `@yaply/crypto` (`packages/crypto/src/`: `encryption.ts`, `keyStore.ts`, `pairing.ts`, with tests) — key generation, envelope seal/unseal, IndexedDB key store, pairing primitives. **It is the specification** every platform must reproduce, not just the web implementation.
+- `@yaply/shared` (`packages/shared/src/`) — canonical types, constants, validators.
 
 ### Build & Deploy
 
-- **Vite 8** builds the app. The output goes to `dist/client/` (configured in `netlify.toml`).
-- **Netlify** hosts the app as a prerendered SPA, not a live SSR function. Build command is `vite build && node scripts/generate-html.mjs`: the first step builds client + SSR bundles, the second (`scripts/generate-html.mjs`) imports the SSR server, renders route `/` once at build time, and writes the result over `dist/client/index.html`. A catch-all redirect (`/* → /index.html`, status 200) then serves that one prerendered shell for every route — the Netlify SSR function is built but not invoked at runtime.
-- Because of this, **route loaders must not depend on request-time data to render correctly on `/`** — `auth.tsx`/`chat.tsx` guard their `beforeLoad` with `if (typeof document === 'undefined') return` so auth/session state is never baked into the static shell; it loads client-side after hydration.
-- **`@netlify/vite-plugin-tanstack-start`** handles Netlify-specific SSR adapter concerns (used for the build step above, not for live routing).
+Vite builds to `dist/client/`. Netlify serves it as a **prerendered SPA**: `vite build && node scripts/generate-html.mjs` renders `/` once at build time over `dist/client/index.html`, and a catch-all `/* → /index.html` (200) serves that shell for every route. The Netlify SSR function is built but never invoked.
 
-### Landing Page (`src/routes/index.tsx`)
+Consequently **route loaders must not depend on request-time data** — `auth.tsx`/`chat.tsx` guard `beforeLoad` with `if (typeof document === 'undefined') return` so session state is never baked into the static shell.
 
-The `/` route is a single-file marketing page (all markup, styles, and interactive demos live in `index.tsx`; CSS is a template-literal string injected via `<style>`, scoped under a `.lp` root class rather than Tailwind). It is intentionally decoupled from the app's design system (`#1a2744` blue-slate) — it uses its own dark-navy/mint palette with a full light-mode override (`.lp-light`), toggled via a nav button and persisted to `localStorage['yaply-theme']`.
+---
 
-**Font:** Bricolage Grotesque, self-hosted at `public/fonts/BricolageGrotesque-var-latin.woff2` (variable weight 200–800) and loaded via `@font-face` inside the page's own `<style>` block. Self-hosted deliberately — the CSP's `font-src 'self'` has no exception for a Google Fonts CDN, so a `<link>` to fonts.googleapis.com would be blocked.
+## Encryption: envelope scheme, wire format v2
 
-**Progressive enhancement pattern (repeated across every interactive element on the page):** every component server-renders its *final, most legible* state (e.g. `EncryptWire` renders already-sealed ciphertext; `EventFlowDemo` renders the confirmed event; `KothaDemo` renders the completed summary). A `useEffect` then "rewinds" to the initial state and replays the animation once the element scrolls into view via `IntersectionObserver`. This means the prerendered HTML (see Build & Deploy above) is never empty or mid-animation for no-JS/crawler contexts — `npm run build && node scripts/generate-html.mjs` must be re-run and `dist/client/index.html` spot-checked after any change here. All animations respect `prefers-reduced-motion` (checked via `prefersReducedMotion()`) by skipping straight to the final state.
+Primitives in `packages/crypto/src/`; protocol glue in `src/features/chat/hooks/useEncryption.ts`. Introduced by migration `00029_multi_device_envelopes.sql`, which wiped all pre-v2 data — there is no legacy data to support; any stray `iv`-set/`enc_v`-NULL row renders as `decryptFailed`.
 
-**Interactive demo components** (all decorative — they mimic app behavior with local component state, not real Supabase calls):
-- `ChatMock` — scripted hero conversation that types itself out.
-- `EventFlowDemo` — a clickable when2meet-style availability grid that flips into a confirmed event card; mirrors the real `/plan` → `/event` flow.
-- `GroupCarousel` — autoplaying carousel (Tasks/Notes/Albums/Budgets) with dot nav and arrows, pauses on hover.
-- `KothaDemo` — "chaotic thread → AI summary" demo for the **Kotha AI** feature section. **Kotha does not exist in the app** — per the Feature Map, `ai_conversations` is schema-only with no UI or API integration. This section (and the "built-in translation" card in the small-details bento) are forward-looking marketing copy, not documented features. Do not treat landing-page copy as a source of truth for what's implemented — check the Feature Map below instead.
-- `EncryptWire` — "what you see" → "what we see" demo: real plaintext scrambles into ciphertext on scroll-into-view. Characters lock to their final glyph as the sweep passes (only a small trailing "wavefront" flickers) so the sweep's end state always exactly equals the sealed display — this was a deliberate fix for a visual "pop" when the old version snapped from random scramble to the real ciphertext in one frame.
-- `DecryptText` — reusable glyph-scramble-to-plaintext text reveal, scoped to the "Sealed, end to end." header only (previous versions used it more broadly; kept restrained per product feedback).
+**Why v2 exists:** the old scheme stored one identity key per user (`device_id` hard-coded to 1) and every login overwrote it, permanently orphaning every message sealed to the previous key — including the user's own sent history.
+
+**Send:**
+1. Each install registers its own `devices` row: a P-256 identity keypair + random 31-bit `device_id`, stored locally. The upsert conflicts only on `(user_id, device_id)`, so an install can only touch its own row.
+2. Fetch **every active device of every member, including all the sender's own devices** (mandatory, or the sender's other installs can't read it). Generate a random 256-bit message key (mk), encrypt the plaintext once, wrap mk per device.
+3. `send_message_with_envelopes` RPC inserts the message and all envelopes atomically; it **rejects an empty envelope set or a NULL iv**.
+4. **Decrypt:** find the envelope whose `recipient_fp` is one of this device's candidate fingerprints, unwrap mk, decrypt content. **No matching envelope on an `enc_v = 2` message is a legitimate, permanent state** (sealed before this device existed) and renders as an honest "couldn't decrypt" (`DecryptedMessage.decryptFailed`), never raw ciphertext.
+
+**Wire format (every platform must match byte-for-byte):**
+```
+messages.content       = base64( AES-GCM(mk, plaintext) ciphertext + tag[16] )
+messages.iv            = base64( nonce[12] )
+messages.enc_v         = 2   (NULL = phase-1; iv must then also be NULL)
+envelope.eph_pub       = JSON-stringified JWK of the per-message ephemeral P-256 public key
+envelope.key_iv        = base64( nonce[12] )
+envelope.wrapped_key   = base64( AES-GCM(KEK, raw 32-byte mk) + tag[16] )
+envelope.recipient_fp  = JWK x + '.' + y of the recipient device's identity key
+KEK                    = raw 32-byte ECDH(eph_priv, device_pub) shared secret — NO HKDF
+```
+One ephemeral keypair per message; fresh random mk and nonces every time. iOS: CryptoKit `P256.KeyAgreement`, raw shared-secret bytes as the AES key (never `hkdfDerivedSymmetricKey`).
+
+**Invariants (each guards a real regression):**
+- `enc_v = 2` ⟺ envelopes exist ⟺ `iv` non-NULL. Phase-1 is always `enc_v = NULL` **and** `iv = NULL`; the RPC enforces this server-side.
+- Decrypt branches on `enc_v` **first**, then `iv = NULL` (phase-1), anything else is `decryptFailed` — identically at all three decrypt sites: `ChatView`'s effect, `ThreadView.loadReplies`, and sidebar previews in `api/conversations.ts`.
+- Sender's own devices are always recipients (`encryptForMembers` unions the sender's id and adds the local device key even if the DB read races registration).
+- Media/sticker/gif/file/voice/system messages never enter v2: `content: ''`, `iv: null`, `enc_v = NULL`.
+- Fan-out bound: only devices with `last_active_at` within 90 days receive envelopes.
+- Groups and DMs are sealed identically — there is no group/DM split in the crypto path.
+
+**Phase-1 fallback:** if **any** member has zero registered devices (never logged in), send plain base64 (`enc_v = NULL`, `iv = NULL`) so they aren't handed undecryptable ciphertext. Always `TextEncoder`/`TextDecoder` — never `btoa()`/`atob()` on raw text (breaks on non-Latin-1). Decode via `decodePhase1`.
+
+**Editing (contract only, no UI):** a re-seal — fresh mk, new `content`/`iv`, replace ALL envelopes in one transaction (future `edit_message_with_envelopes` RPC). Never reuse the old mk.
+
+**Registration must be single-flight (critical):** `useEncryption` is mounted by both `ChatView` and `ThreadView`, so concurrent calls on a fresh install would each generate a different keypair and race to publish, desyncing the stored private key from the published public key. `registrationInFlight: Map<userId, Promise>` shares one registration; `encryptForMembers` and `decryptV2ForUser` **await** it so a message right after login is never downgraded to phase-1 or reported as a false failure. iOS applies the same rule.
+
+**Key storage:** IndexedDB via `idb`, DB `yaply-keys` **version 3**, store `identity`, scoped per user: `pub:<userId>`, `priv:<userId>`, `deviceId:<userId>`, `escrow:<userId>` (array of `{ deviceId, pub, priv }` adopted via pairing).
+
+**In-memory caches must be keyed by userId (critical):** `identityPairMemCache` is a `Map<userId, pair>`. It used to be one mutable slot plus a "clear when a different user shows up" owner check; signing out and into another account in one tab let a straggling async call (e.g. sidebar preview decryption) repopulate the slot with the old account's keypair, so every decrypt for the new account failed. `devicesMemCache` (60s TTL) is intentionally global since a user's public device list is the same for any requester. No platform may use single-slot-plus-owner-check for a per-user cache.
+
+---
+
+## Live device pairing (history sync across devices)
+
+A new install can't read messages sealed before it existed. Live pairing lets an already-linked device (*sender*) hand its key material to a newly signed-in one (*receiver*) over an ephemeral, authenticated Realtime channel. **Nothing is stored server-side** — no PIN, vault, or recovery blob. Code: `packages/crypto/src/pairing.ts`, `src/features/pairing/`, `src/features/settings/components/DevicePairingSettings.tsx`, `src/routes/link.tsx`.
+
+**Two independent role axes:** *trust role* (sender holds keys, receiver needs them) and *rendezvous role* (presenter shows the code, entrant scans or types it). All four combinations work because the code carries only a short rendezvous id, never key material — small enough to type, so a camera is optional. "Scan QR" renders only when `enumerateDevices()` reports a `videoinput`.
+
+**Contract (web and iOS must match byte-for-byte):**
+- **Code:** 8 chars Crockford base32 (`0-9A-Z` minus I/L/O/U), displayed `XXXX-XXXX`. `normalizePairingCode` is lenient: case-insensitive, strips dashes/spaces, folds `O→0`, `I,L→1`. A rendezvous id, **not a secret**.
+- **QR deep link:** `https://<origin>/link#c=<code>` — in the **fragment** so it never reaches server logs, proxies, or Referer. `/link` reads `window.location.hash`.
+- **Channel:** `pairing:<userId>:<code>`, opened with `{ config: { private: true } }`. Migration `00034_pairing_channel_authorization.sql` adds RLS on `realtime.messages` scoping SELECT/INSERT to `pairing:<auth.uid()>:%`. Only `private: true` channels are affected; typing/presence/invalidation channels stay public.
+- **Keys:** ephemeral P-256 per side, **memory-only**. `secret` = raw 32-byte ECDH shared secret used directly as the AES-256-GCM key (no HKDF).
+- **SAS:** `SHA-256(secret ‖ "yaply-sas-v1")`, first 4 bytes big-endian, `mod 1_000_000`, zero-padded to 6 digits.
+- **Payload:** `ciphertext = base64(AES-GCM(secret, JSON.stringify(EscrowedKey[])) + tag)`, `iv = base64(nonce[12])`, `EscrowedKey = { deviceId, pub: JsonWebKey, priv: JsonWebKey }` (JWKs, not DER/SEC1).
+- **Handshake:** sender broadcasts `ready` on subscribe; receiver broadcasts `hello { ephPub }` on subscribe **and** on `ready` (neither can assume it joined first); sender derives secret+SAS and sends `ack { ephPub }`; receiver derives independently; human compares codes and confirms **on the sender**; sender sends `payload { iv, ciphertext }`; receiver merges into escrow and sends `done`.
+- **TTL** 90s, single-use; expiry shows an explicit "code expired" state.
+
+**Invariants:**
+- **The SAS step is load-bearing.** It stops a *second authenticated session on the same account* (stolen JWT, logged-in tab) — which passes RLS — from impersonating the receiver. A relay holds two different secrets and produces two different codes. Never ship a skip path.
+- **Abort on a second joiner:** a different `ephPub` on a live session cancels it. Never pick a winner.
+- **Escrowed keys are decrypt-only:** never published to `devices`, never used as a recipient.
+- **Import merges, never overwrites** (`mergeEscrowedKeys`, de-duped by fingerprint).
+- **Candidate fingerprints:** `getCandidateFingerprints()` returns own fp first, then escrowed; `fetchEnvelopesForMessages` filters `.in('recipient_fp', candidateFps)` and `decryptV2ForUser` picks the private key matching `envelope.recipient_fp` — at all three decrypt sites.
+
+**Accepted limitation:** both devices must be online at once. Lose every linked device and history is permanently `decryptFailed` — the deliberate trade for storing no recovery secret. Anyone with an unlocked linked device can mint new ones, as in Signal/WhatsApp.
+
+---
+
+## Device management (naming + revocation)
+
+Settings → Devices lists the user's `devices` rows, renameable inline, revocable behind a confirm dialog. Code: `src/features/pairing/api/devices.ts`, `hooks/useDeviceRevocation.ts` (mounted in `routes/chat.tsx`), `src/lib/deviceName.ts`. Migration `00035_device_management.sql`. iOS mirrors it in `Features/Devices/`.
+
+- **Naming** is generated from the user agent (`Chrome on macOS (Web)`) at **first registration only**; `doRegisterDevice` includes `device_name` in its upsert only for a new row, or a renamed device silently reverts. `platform` is stored separately so a rename can't lose it.
+- **Revocation needs all three parts** — deleting the row alone is theatre, since the device keeps its session and re-registers from local storage:
+  1. **`revoke_device` RPC** deletes the `devices` row *and* its `auth.sessions` row (cascading `auth.refresh_tokens`). Never a direct DELETE.
+  2. **Realtime watcher** reacts to the DELETE, filtered to the install's **own row id** (delete events carry only the PK and aren't RLS-filtered). Without it the device stays usable until its access token expires.
+  3. **Local key wipe** (`clearAllKeys`) on revocation, plus an **orphan check** at startup: a local `deviceId` with no matching row means it was revoked offline → wipe keys and register fresh.
+- **A failed query is never "revoked."** Only a *successful* empty result counts.
+- The row records the access token's `session_id` claim so revoke can find the session.
+
+---
+
+## Security Model — Known Gaps & Limitations
+
+E2E here means **text message content is encrypted between a user's active devices** — do not overstate it. These are documented limitations, not bugs:
+
+- **Out of scope:** cold-start history recovery (needs key escrow, deliberately rejected); pruning stale `devices` rows; message editing.
+- **No key verification UI:** an active or compromised server could substitute public keys. Protects against a passive server only.
+- **No forward secrecy / ratchet:** identity keys never rotate, so a leaked device key exposes past and future messages to it.
+- **Metadata is plaintext:** who talks to whom, timing, membership, reply chains, sizes.
+- **Private keys are extractable JWKs in IndexedDB** — exfiltratable via XSS.
+- **Media is not encrypted:** images, files, voice, stickers are public Storage URLs. Reactions are plaintext.
+- **No "log out everywhere";** offline revocation takes effect at next launch.
+- **Group membership changes:** new members can't read pre-join history; removed members aren't cryptographically cut off.
+- **Push payloads carry ciphertext through APNs** (plus that device's `wrapped_key`), stored up to 24h by Apple. Still E2E, but a threat-model change versus no pushes. Non-message pushes are plaintext.
+- **Search** covers only loaded, decrypted messages. **Fan-out** is messages × recipients × devices.
+- **Browser-E2E trust:** the server ships the crypto JS, so a malicious update could exfiltrate keys — an active, detectable attack.
 
 ---
 
 ## Database Schema
 
-The migrations in `supabase/migrations/` match the live database. All runtime code uses the column names below.
+Migrations in `supabase/migrations/` match the live DB. `src/lib/database.types.ts` is generated and may lag; `src/features/chat/types.ts` is the runtime source of truth.
 
-**`conversations` table:**
-```
-id          uuid
-type        text   ('direct' | 'group' | 'ai')
-name        text
-avatar_url  text
-created_by  uuid
-created_at  timestamptz
-updated_at  timestamptz
-```
+**`conversations`:** `id, type ('direct'|'group'|'ai'), name, avatar_url, created_by, created_at, updated_at`
 
-**`conversation_members` table:**
-```
-conversation_id  uuid
-user_id          uuid
-role             text   ('owner' | 'admin' | 'member')
-joined_at        timestamptz
-last_read_at     timestamptz
-muted_until      timestamptz   — null = not muted; future date = muted until then; 8640000000000 ms epoch = muted forever
-request_state    text   ('accepted' | 'pending' | 'declined') default 'accepted' — message requests, see Friends System
-```
+**`conversation_members`:** `conversation_id, user_id, role ('owner'|'admin'|'member'), joined_at, last_read_at, muted_until, request_state ('accepted'|'pending'|'declined', default 'accepted')`. `muted_until`: null = not muted, future = muted until then, `8640000000000` ms epoch (JS max Date) = forever.
 
-**`messages` table:**
-```
-id              uuid
-conversation_id uuid
-sender_id       uuid
-type            text   ('text' | 'image' | 'gif' | 'sticker' | 'file' | 'voice' | 'system' | 'ai')  — 'voice' added in migration 00037; iOS records it, web renders <audio>. Media types (image/gif/sticker/file/voice) are never E2E encrypted.
-content         text   — base64(AES-GCM ciphertext+tag) or plain base64 (phase-1)
-iv              text   — base64(nonce[12]); NULL = phase-1 fallback
-enc_v           smallint — 2 = envelope-encrypted (see message_envelopes); NULL = phase-1
-media_url       text
-media_mime      text
-reply_to_id     uuid
-thread_id       uuid
-edited_at       timestamptz
-deleted_at      timestamptz
-created_at      timestamptz
-```
+**`messages`:** `id, conversation_id, sender_id, type ('text'|'image'|'gif'|'sticker'|'file'|'voice'|'system'|'ai'), content, iv, enc_v, media_url, media_mime, reply_to_id, thread_id, edited_at, deleted_at, created_at`. `voice` added in `00037`. See the wire format above for `content`/`iv`/`enc_v`.
 
-**Encryption wire format (v2):** `content = base64(AES-GCM(message key, plaintext) + tag[16])`, `iv = base64(nonce[12])`, `enc_v = 2`, with one `message_envelopes` row per recipient device. `enc_v = NULL` means phase-1 (and `iv` must also be NULL — content is plain base64). See the Encryption section above; these three columns move together and the invariant is enforced by the `send_message_with_envelopes` RPC.
+**`message_envelopes`:** `id, message_id (FK ON DELETE CASCADE), recipient_user_id, recipient_fp, eph_pub, key_iv, wrapped_key, created_at`. UNIQUE `(message_id, recipient_user_id, recipient_fp)`; index `(recipient_user_id, message_id)`. RLS: SELECT for recipient or the message's sender; INSERT/DELETE for the sender.
 
-**`message_envelopes` table:** `id, message_id (FK → messages ON DELETE CASCADE), recipient_user_id (FK → profiles), recipient_fp (text — JWK x.y of the recipient device key), eph_pub (text — JSON-stringified JWK of the per-message ephemeral public key), key_iv (text — base64 nonce[12]), wrapped_key (text — base64(AES-GCM(KEK, raw 32-byte message key) + tag)), created_at`. UNIQUE(message_id, recipient_user_id, recipient_fp); index (recipient_user_id, message_id). RLS: SELECT for the recipient or the message's sender; INSERT/DELETE for the message's sender only. Migration `00029_multi_device_envelopes.sql`.
+**`message_reactions`:** PK `(message_id, user_id, emoji)`, so a user may hold several. iOS enforces one-per-user client-side (delete then insert); web allows multiple. To unify, add a `(message_id, user_id)` constraint and update both clients.
 
-**`pinned_messages` table:** `conversation_id (FK → conversations ON DELETE CASCADE), message_id (FK → messages ON DELETE CASCADE), pinned_by (FK → profiles ON DELETE SET NULL), pinned_at timestamptz`, PK `(conversation_id, message_id)`; index `(conversation_id, pinned_at desc)`. Any conversation member can pin/unpin (RLS is membership-scoped for SELECT/INSERT/DELETE); `pinned_by` must equal `auth.uid()` on insert. A separate table rather than a `messages.pinned_at` column **on purpose** — the `messages` UPDATE policy is deliberately narrow (sender-only soft delete) and widening it just to toggle a pin would also expose `content`. In the `supabase_realtime` publication. Migration `00036_pinned_messages.sql`. **Implemented on both platforms.** Web: `src/features/chat/api/pins.ts` (`fetchPins` / `pinMessage` / `unpinMessage`), `hooks/usePins.ts` (`usePins` query + `useTogglePin` optimistic mutation — insert-at-front / remove on `['pins', conversationId]`, rollback by refetch on error), `components/PinnedBanner.tsx` (rendered in `ChatView` below the search bar, above the message list — previews the newest pin that's currently loaded; "{n} pinned messages" when >1). Pin/Unpin is a hover-action button in `MessageBubble` (all members, any message). `useRealtimeMessages` also subscribes to `pinned_messages` (`event: '*'`, `conversation_id` filter) and invalidates `['pins', …]` — payload never parsed.
+**`pinned_messages`:** `conversation_id (FK CASCADE), message_id (FK CASCADE), pinned_by (FK SET NULL), pinned_at`, PK `(conversation_id, message_id)`, index `(conversation_id, pinned_at desc)`. Any member pins/unpins; `pinned_by = auth.uid()` on insert. **A separate table on purpose** — widening the deliberately narrow `messages` UPDATE policy would also expose `content`. In the realtime publication. Migration `00036`. Both platforms: most-recently-pinned first, idempotent pin (upsert on `conversation_id,message_id`), any member can unpin, every realtime event is a refetch trigger, banner previews only a pin whose message is loaded.
 
-**`profiles` table:** id, username (`unique` DB constraint — the actual source of truth), display_name, avatar_url, bio, birthdate (date, nullable — migration `00032_add_profile_birthdate.sql`), public_key, is_online, last_seen_at, created_at, updated_at.
+**`profiles`:** `id, username (UNIQUE — the real enforcement), display_name, avatar_url, bio, birthdate (00032), public_key, is_online, last_seen_at, created_at, updated_at`. RLS is `using (true)` deliberately (see Friends). No DELETE policy — rows are only removed by the `auth.users` cascade.
 
-**Username uniqueness check (pre-save, both places a username is set):** `src/features/chat/hooks/useUsernameAvailability.ts` debounces a `select id from profiles where username = candidate` (excluding the caller's own id when editing) so the UI can block Save *before* attempting a write, rather than only reacting to the Postgres `23505` unique-violation after a failed insert/update. Both call sites still catch `23505` on the actual write as a last-resort guard against a race between the check and the save — the DB constraint remains the real enforcement, the live check is UX. Used by `UsernameSetupModal.tsx` (first-login username prompt) and `AccountSettings.tsx` (Settings → Account username field).
+**`devices`:** `user_id, device_id (int, random per install), identity_key (JSON JWK), key_fingerprint (JWK x.y), signed_prekey, device_name, platform ('web'|'ios'|'android'), session_id, last_active_at, created_at`. UNIQUE `(user_id, device_id)`, index `(user_id, key_fingerprint)`. RLS: owner manages own rows; any authenticated user can read (needed to encrypt to peers). In the realtime publication since `00035`. **Never hard-code `device_id = 1`.**
 
-**`devices` table:** user_id, device_id (int), identity_key (text — JSON-stringified JWK public key), key_fingerprint (text — JWK `x.y`, matches `message_envelopes.recipient_fp`), signed_prekey, device_name (user-editable; auto-generated once at first registration, e.g. `Chrome on macOS (Web)`), platform (`web` | `ios` | `android`), session_id (uuid — the `session_id` claim of the access token this install signed in with; nullable for rows written before migration 00035), last_active_at, created_at. UNIQUE(user_id, device_id); index (user_id, key_fingerprint). (The unused `push_subscription` jsonb column was dropped in `00038_push_tokens.sql`: `devices` is world-readable, so a push token must never live here — see `push_tokens` below.) **One row per install** — each browser/device generates its own random `device_id` (stored locally as `deviceId:<userId>` in IndexedDB) and upserts only that row. Never hard-code `device_id = 1`: that was the single-slot bug where every login overwrote the one published key and orphaned history. RLS: owner can manage own rows; any authenticated user can read (needed to encrypt to a peer's devices). Codified in `00027_create_devices.sql`; `key_fingerprint` added in `00029_multi_device_envelopes.sql`; `platform`/`session_id` and the revoke path in `00035_device_management.sql`. In the `supabase_realtime` publication (since 00035) so a revoked device can react instantly.
+**`push_tokens`:** `id, user_id, device_id, token, platform ('ios'|'android'), environment ('sandbox'|'production'), fail_count, last_success_at, created_at, updated_at`. UNIQUE `(user_id, device_id)`; composite FK `(user_id, device_id) → devices ON DELETE CASCADE`. Owner-only RLS, **no world-readable select** — a token is a capability to push to a phone. Migration `00038`. Load-bearing: **the cascade is a security property** (a revoked-but-unwiped install still holds its key, and pushes carry its `wrapped_key`); **`environment` is per row** (wrong APNs host → `400 BadDeviceToken` → hard prune); **a token identifies an install, not a user** (a trigger deletes any other row holding the same token, or A keeps getting B's messages after a sign-in switch).
 
-**`push_tokens` table:** `id, user_id, device_id (int), token (the APNs device token), platform ('ios'|'android'), environment ('sandbox'|'production'), fail_count, last_success_at, created_at, updated_at`. UNIQUE(user_id, device_id); composite FK `(user_id, device_id) → devices ON DELETE CASCADE`. RLS: owner-only `for all`, and deliberately **no** world-readable select — unlike `devices`, a token is a capability to push content to someone's phone, not a public key. Migration `00038_push_tokens.sql`.
+`push_subscriptions` (00019) is Web Push (VAPID) only (`platform = 'web'` check). The client half (`usePushNotifications.ts`, `public/sw.js`) exists; the VAPID sender is not built.
 
-Three things about this table are load-bearing:
-- **The cascade is a security property.** `revoke_device` deletes the `devices` row; a revoked-but-not-yet-wiped install still holds its P-256 private key, and the push payload carries ciphertext plus that device's `wrapped_key`. Without the cascade, revocation would keep handing a revoked device readable content.
-- **`environment` is per row, not per deployment.** Xcode debug builds get sandbox tokens and TestFlight/App Store builds get production ones; the wrong APNs host returns `400 BadDeviceToken`, which the sender treats as a hard prune. iOS reads it from the `aps-environment` entitlement in `embedded.mobileprovision`, **not** `#if DEBUG` — the two diverge for ad-hoc and enterprise builds.
-- **A token identifies an install, not a user.** Sign out of A and into B on the same phone and Apple reissues the same token, so a trigger deletes any other row holding it. Skipping that leaves A receiving B's messages.
+**Productivity tables:**
+- **`notes`:** `id, user_id, conversation_id, title, content, event_id, created_at, updated_at` — owner-only RLS (`user_id`, not `created_by`).
+- **`tasks`:** `id, conversation_id, created_by, assigned_to, title, description, status ('todo'|'in_progress'|'done'), priority ('low'|'medium'|'high'), due_at, completed_at, created_at, updated_at` — members SELECT, creator/assignee UPDATE, creator DELETE.
+- **`reminders`:** `id, user_id (creator), conversation_id, message, remind_at, status ('pending'|'sent'|'dismissed'), created_at` — all members view/update/delete since `00022`. No `target_type`.
+- **`events`** (00020): `id, conversation_id, created_by, name, description, location, status ('planning'|'confirmed'), starts_at, ends_at, created_at, updated_at`. `planning` = when2meet mode.
+- **`event_availability`:** `id, event_id, user_id, slots (jsonb ISO strings), updated_at`, UNIQUE `(event_id, user_id)`.
+- **`event_rsvp`:** `id, event_id, user_id, response ('going'|'maybe'|'not_going'|'pending'), updated_at`, UNIQUE `(event_id, user_id)`.
+- **`albums`:** `id, conversation_id, name, created_by, created_at, event_id`; **`album_media`:** `id, album_id, message_id, media_url, media_mime, created_at`.
+- **`budgets`:** `id, conversation_id, name, total_amount, currency, created_by, created_at, event_id`; **`expenses`:** `id, budget_id, paid_by, description, amount, category (enum), split_between (uuid[]), created_at`.
+- `albums/notes/budgets.event_id` are `ON DELETE SET NULL` (00021) — deleting an event detaches them.
 
-`push_subscriptions` (migration 00019) is now Web Push (VAPID) only, enforced by a `platform = 'web'` check constraint. The web client half (`usePushNotifications.ts`, `public/sw.js`) is written but the VAPID sender is not built.
+**Account deletion cascade:** every FK to `profiles(id)` is `ON DELETE CASCADE` except `conversations.created_by` and `messages.sender_id` (`SET NULL` — the conversation and messages stay for others). `00031` closed the last gaps. Deleting `auth.users` (only via the `delete-account` function) triggers the whole cascade.
 
-**`notes` table:** `id, user_id, conversation_id, title, content, created_at, updated_at` — RLS: `user_id = auth.uid()` (owner only).
+**Orphan cleanup trigger:** `trg_delete_empty_conversation` (AFTER DELETE on `conversation_members`) deletes a conversation with no members left — including all its messages. This is why declining must never delete a membership row.
 
-**`tasks` table:** `id, conversation_id, created_by, assigned_to, title, description, status ('todo'|'in_progress'|'done'), priority ('low'|'medium'|'high'), due_at, completed_at, created_at, updated_at` — RLS: conversation members can SELECT; creator/assignee can UPDATE; creator can DELETE.
+### Key RPCs
 
-**`reminders` table:** `id, user_id, conversation_id, message, remind_at, status ('pending'|'sent'|'dismissed'), created_at` — RLS after migration 00022: all conversation members can view/update/delete. Creator identified by `user_id`.
+- `find_or_create_direct_conversation(target_user_id)` — always use for DMs. Raises `blocked`, `cannot message yourself`. Recipient's `request_state` is `'accepted'` if friends, else `'pending'`. If the caller previously declined, resets **their own** side to `'accepted'`.
+- `send_message_with_envelopes(p_conversation_id, p_content, p_iv, p_envelopes jsonb, p_type, p_reply_to_id, p_thread_id, p_media_url, p_media_mime)` — the only path for encrypted sends. Rejects empty envelopes or NULL iv; gates on `can_send_in_conversation()` (raises `cannot send in this conversation`). Plain `messages` inserts are only for phase-1/system/media.
+- `create_group_conversation(p_name, p_member_ids)` / `add_group_member(p_conversation_id, p_user_id)` — raise `can only add friends to groups`.
+- `send_friend_request(p_recipient_id)` / `accept_friend_request(p_request_id)` / `block_user(p_user_id)` — the only writes into `friendships`. Send auto-accepts a reverse pending request; raises `friend request already exists`, `blocked`, `cannot friend yourself`. Block inserts the block and deletes any friendship atomically.
+- `get_relationships(p_user_ids uuid[])` → `(user_id, status, request_id, mutual_friends)`, status ∈ `none | pending_out | pending_in | friends | blocked | blocked_by`. **Batched — one call per list, never per row.**
+- `search_users(p_query)` — username or display_name, excludes blocks in either direction. Use instead of querying `profiles`.
+- `get_friend_suggestions(p_limit)` — friends-of-friends by mutual count + shared-group co-members.
+- `revoke_device(p_device_id)` — signs out one of the **caller's own** devices. Security definer because `auth.sessions` is unreachable otherwise; the internal `auth.uid()` filter is the only guard, so it must never take a user id argument.
 
-**`events` table:** `id, conversation_id, created_by, name, description, location, status ('planning'|'confirmed'), starts_at, ends_at, created_at, updated_at` — migration 00020. `planning` = when2meet mode (no date locked), `confirmed` = date set.
-
-**`event_availability` table:** `id, event_id, user_id, slots (jsonb — array of ISO datetime strings for 30-min slots), updated_at` — UNIQUE(event_id, user_id).
-
-**`event_rsvp` table:** `id, event_id, user_id, response ('going'|'maybe'|'not_going'|'pending'), updated_at` — UNIQUE(event_id, user_id).
-
-**`albums` table:** `id, conversation_id, name, created_by, created_at, event_id (nullable FK → events)` — RLS: conversation members can SELECT/INSERT; creator can DELETE.
-
-**`album_media` table:** `id, album_id, message_id, media_url, media_mime, created_at` — RLS: conversation members.
-
-**`budgets` table:** `id, conversation_id, name, total_amount, currency, created_by, created_at, event_id (nullable FK → events)` — RLS: conversation members can SELECT/INSERT; creator can DELETE.
-
-**`expenses` table:** `id, budget_id, paid_by, description, amount, category (expense_category enum), split_between (uuid[]), created_at`.
-
-**FK cascade note:** `albums.event_id`, `notes.event_id`, `budgets.event_id` → `ON DELETE SET NULL` (migration 00021). Deleting an event detaches linked albums/notes/budgets rather than cascading their deletion.
-
-**Account deletion FK cascade note:** every FK referencing `profiles(id)` is `ON DELETE CASCADE` except `conversations.created_by` and `messages.sender_id`, which are `ON DELETE SET NULL` (a departed creator's conversation stays around for remaining members; a departed sender's messages stay visible, attributed to no one) — migration `00031_fix_profile_delete_fk_actions.sql` closed the last gaps (`conversations.created_by`, `events.created_by`, `polls.created_by`, `message_receipts.user_id` previously had no `ON DELETE` action and would have thrown a foreign key violation on account deletion). `profiles.id` itself is `ON DELETE CASCADE` off `auth.users.id`, so deleting the `auth.users` row (only done by the `delete-account` Edge Function, see Supabase Edge Functions below) is what triggers the entire cascade.
-
-**`friendships` table:** `id, requester_id (FK → profiles), recipient_id (FK → profiles), status ('pending' | 'accepted'), created_at, updated_at`. **One row per pair**, direction preserved so incoming and outgoing requests are distinguishable. A duplicate in either direction is impossible via the functional unique index `friendships_pair_uq on (least(requester_id, recipient_id), greatest(...))`. There is deliberately **no `declined` status** — decline, cancel and unfriend all DELETE the row so a later re-request stays possible; blocking is the permanent tool. RLS: participants can SELECT and DELETE; **no INSERT/UPDATE policy at all** — those carry invariants and go through RPCs. In the `supabase_realtime` publication. Migration `00033_friends_system.sql`.
-
-**`user_blocks` table:** `blocker_id, blocked_id, created_at`, PK (blocker_id, blocked_id). Directed. RLS restricts SELECT/INSERT/DELETE to `blocker_id = auth.uid()`, so **the blocked user can never see the row** — they get no signal, their sends simply fail.
-
-**Key RPCs:**
-- `revoke_device(p_device_id int)` — signs one of the **caller's own** devices out. Security definer, because `auth.sessions` is unreachable from `authenticated`; the `auth.uid()` filter inside is the only thing separating a caller from someone else's session, so it must never take a user id from its arguments. Deletes the `devices` row **and** the matching `auth.sessions` row (which cascades `auth.refresh_tokens`). See the device revocation section for why the client-side half is equally load-bearing.
-- `find_or_create_direct_conversation(target_user_id uuid)` — finds or creates a direct DM, inserts both members correctly. Security definer. Always use this instead of manual inserts for direct chats. Raises `blocked` if either party blocked the other, and `cannot message yourself`. On create the recipient's `request_state` is `'accepted'` if the pair are friends, else `'pending'` (a message request). If the caller had previously declined an existing thread, reaching this RPC is an explicit intent to talk and resets **their own** side to `'accepted'`.
-- `send_message_with_envelopes(p_conversation_id, p_content, p_iv, p_envelopes jsonb, p_type, p_reply_to_id, p_thread_id, p_media_url, p_media_mime)` — inserts an `enc_v = 2` message **and** all its `message_envelopes` rows in one transaction. Security definer; **rejects an empty envelope array or a NULL iv**, so a v2 message can never exist without envelopes. Gates on `can_send_in_conversation()` (raises `cannot send in this conversation`). Always use this for encrypted sends; the plain `messages` insert is only for phase-1/system/media rows.
-- `create_group_conversation(p_name, p_member_ids)` / `add_group_member(p_conversation_id, p_user_id)` — both raise `can only add friends to groups` for a non-friend.
-- `send_friend_request(p_recipient_id)` / `accept_friend_request(p_request_id)` / `block_user(p_user_id)` — the only write paths into `friendships`. `send_friend_request` auto-accepts when a reverse pending request already exists, and raises `friend request already exists` / `blocked` / `cannot friend yourself`. `block_user` inserts the block **and** deletes any friendship atomically.
-- `get_relationships(p_user_ids uuid[])` → `(user_id, status, request_id, mutual_friends)` where status ∈ `none | pending_out | pending_in | friends | blocked | blocked_by`. **Batched — always resolve a whole list in one call**, never per row.
-- `search_users(p_query)` — matches username **or** display_name and excludes anyone blocked in either direction. Use instead of querying `profiles` directly (see the Friends System note below).
-- `get_friend_suggestions(p_limit)` — "People You May Know": friends-of-friends by mutual count merged with shared-group co-members, excluding self, existing friends/requests, and blocks.
-
-**Helper functions (security definer, used by both RLS policies and RPC bodies):** `are_friends(a,b)`, `is_blocked_between(a,b)`, `mutual_friend_count(a,b)`, `can_send_in_conversation(user, conversation)`. Per migration 00028's recursion lesson, a policy on table T may never contain an `EXISTS` over T itself — route every cross-table check through one of these. `sync_direct_request_state(a,b)` is **revoked from `anon`/`authenticated`**: it takes both user ids and has no `auth.uid()` guard, so exposing it over PostgREST would let anyone accept a message request on someone else's behalf; only the security-definer callers reach it.
+**Helpers** (security definer, used by RLS and RPCs): `are_friends`, `is_blocked_between`, `mutual_friend_count`, `can_send_in_conversation`. Per `00028`'s recursion lesson, a policy on table T may never `EXISTS` over T — route cross-table checks through a helper. `sync_direct_request_state(a,b)` is **revoked from `anon`/`authenticated`** (no `auth.uid()` guard; exposing it would let anyone accept requests for others).
 
 ### Friends System (migration 00033)
 
-Two separate consent mechanisms that are easy to conflate — they are not the same thing:
+Two consent mechanisms that are easy to conflate:
+- **Friend requests** (`friendships`) — the social relationship. Required to join a group; drives friends list, suggestions, mutual counts.
+- **Message requests** (`conversation_members.request_state`) — permission to talk. A DM from a non-friend lands with the recipient's row `'pending'`: readable, **not repliable until accepted**. Accepting does not create a friendship.
 
-- **Friend requests** (`friendships`) — a social relationship. Needed to be added to a group; drives the friends list, suggestions and mutual counts.
-- **Message requests** (`conversation_members.request_state`) — permission to talk. A DM from a **non-friend** arrives with the recipient's own member row set to `'pending'`: they can read it but **cannot reply until they accept**. Accepting a message request does **not** create a friendship — it only opens the thread. Friends skip this entirely and chat immediately.
+**`friendships`:** `id, requester_id, recipient_id, status ('pending'|'accepted'), created_at, updated_at`. One row per pair, direction preserved; functional unique index on `(least, greatest)`. **No `declined` status** — decline, cancel and unfriend all DELETE so a later re-request works. RLS: participants SELECT/DELETE; **no INSERT/UPDATE policy** (writes go through RPCs, a direct write silently fails). In the realtime publication.
 
-`request_state` semantics (per-member, asymmetric):
-- `'accepted'` — normal. The default, so every pre-existing row and every group membership is unaffected.
-- `'pending'` — this member may read but not send. Excluded from the unread count and from in-app notification banners; shown in the sidebar's "Message requests" section.
-- `'declined'` — hidden from the list, and `can_send_in_conversation` returns false for **everyone** in the conversation, so the sender cannot keep messaging into a wall. The declining user can reopen their own side by explicitly starting the chat again (which routes through `find_or_create_direct_conversation`).
+**`user_blocks`:** `blocker_id, blocked_id, created_at`, PK both. RLS limits everything to `blocker_id = auth.uid()`, so the blocked user never sees the row.
 
-**Declining must never delete the membership row** — `trg_delete_empty_conversation` (below) would take the entire conversation and its messages with it. It is always a `request_state` UPDATE.
+**`request_state`:** `'accepted'` normal (default). `'pending'` — read-only, excluded from unread counts and notification banners, shown in a "Message requests" section. `'declined'` — hidden, and `can_send_in_conversation` returns false for **everyone**, so the sender can't keep messaging into a wall; the decliner can reopen by starting the chat again. **Accept/decline is an UPDATE of your own row — never a DELETE** (the orphan trigger would delete the conversation).
 
-**Block semantics (v1):** sends are blocked in both directions, new DM creation raises `blocked`, any friendship is deleted, and the blocked user is hidden from the blocker's search results and suggestions. History is not deleted. The blocked party sees no indication — the block row is invisible to them and their send simply fails, which the client renders as "You can't message this person right now."
+**Blocks (v1):** sends blocked both ways, new DMs raise `blocked`, friendship deleted, blocked user hidden from search/suggestions. History is kept. The blocked party gets no signal; their send fails with "You can't message this person right now." `blocked_by` must render identically to `none`.
 
-**Why `profiles` RLS was left as `using (true)`:** tightening it to hide blocked users would silently null out the nested `profiles(...)` joins that `fetchConversations`, message senders and the encryption device lookups all depend on. Block-hiding therefore lives in `search_users` plus client-side filtering. **Known, accepted limitation:** a blocked user can still read the blocker's profile row directly.
+**`profiles` RLS stays `using (true)`:** tightening it would null out the nested `profiles(...)` joins in `fetchConversations`, message senders, and device lookups. Block-hiding lives in `search_users` plus client filtering. Accepted limitation: a blocked user can read the blocker's profile row.
 
-**All gating is server-side.** Both conversation-creating RPCs are `SECURITY DEFINER` and bypass RLS, so a client-side check is decorative — and iOS shares this backend. Add rules to the RPC body and/or an RLS policy, never to the client. (Migration 00033 also fixed the `messages` INSERT policy, whose membership subquery compared `cm.conversation_id = cm.conversation_id` and was consequently always true.)
-
-**Postgres trigger — orphan conversation cleanup:**
-`trg_delete_empty_conversation` (AFTER DELETE on `conversation_members`, FOR EACH ROW) — calls `delete_conversation_if_empty()` which deletes the `conversations` row if no members remain. This means deleting your membership from a DM where the other user already left cascades to deleting all messages and the conversation itself. Migration: `delete_conversation_if_empty`.
+**All gating is server-side.** The conversation RPCs are `SECURITY DEFINER` and bypass RLS, and iOS shares this backend — add rules to RPC bodies or RLS, never only to a client. (`00033` also fixed the `messages` INSERT policy, whose subquery compared `cm.conversation_id = cm.conversation_id` and was always true.)
 
 ---
 
 ## Feature Map
 
-### Implemented
+Features live in `src/features/<name>/` with `api/`, `components/`, `hooks/`. Only the non-obvious parts are listed.
 
-| Feature | Files |
-|---------|-------|
-| Auth (sign in / sign up) | `src/routes/auth.tsx`, `src/lib/auth.ts`, `src/lib/passwordStrength.ts` — signup requires a password meeting all 5 checks (8+ chars, upper, lower, number, symbol) shown live via a strength meter + checklist (`isPasswordStrongEnough` gates the submit button); password/confirm-password fields have a show/hide toggle. Email/password signups require clicking an emailed confirmation link before `signInWithPassword` succeeds — Google OAuth accounts are exempt since Google already verifies the address. **This is enforced by the Supabase project's "Confirm email" toggle (Dashboard → Authentication → Sign In / Providers → Email), not by app code** — no migration/RLS/Edge Function can set it, only the Dashboard or the Management API with a personal access token. The client handles an unconfirmed-login attempt by surfacing a "Resend confirmation email" action (`supabase.auth.resend({ type: 'signup', email })`). |
-| Conversation list | `src/features/chat/components/ConversationList.tsx`, `src/features/chat/hooks/useConversations.ts` |
-| Collapsible sidebar (desktop) | `sidebarCollapsedAtom` (`atomWithStorage`, `yaply-sidebar-collapsed`). circled `ChevronLeft` button in the `ConversationList` header collapses; a `PanelLeft` button expands it — in the `ChatView` header when a chat is open, and at the top of the `Dashboard` otherwise. `routes/chat.tsx` animates the column `md:w-72` ↔ `md:w-0` (`transition-[width]`, `motion-reduce` safe). `md+` only; mobile is unaffected. |
-| Direct messaging | `src/features/chat/components/ChatView.tsx` |
-| Group conversations | `createGroupConversation` in `src/features/chat/api/conversations.ts` |
-| Message pagination (50/page) | `src/features/chat/hooks/useMessages.ts` |
-| Real-time messages | `src/features/chat/hooks/useRealtimeMessages.ts` |
-| E2E encryption (envelope, v2 — DMs **and** groups) | `packages/crypto/`, `src/features/chat/hooks/useEncryption.ts`, `message_envelopes` + `send_message_with_envelopes` (migration 00029) |
-| Multi-device support | One `devices` row per install (random `device_id`); every message sealed to all member devices incl. the sender's own |
-| Soft delete messages (own messages only) | `deleteMessage` in `src/features/chat/api/messages.ts`; deletes update `deleted_at` column |
-| Delete message confirmation modal | Radix UI Dialog in `MessageBubble.tsx` |
-| Reply quotation with deleted-message handling | Reply block in `MessageBubble.tsx` |
-| Message reply | `replyToMessageIdAtom`, `ReplyStrip` in `MessageInput` |
-| Mute conversations | `muteConversation` in conversations API; `muted_until` column in `conversation_members`. Reachable from the `ConversationItem` swipe menu **and** the Chat settings modal (below). |
-| **Chat settings modal** | Tapping the `ChatView` header title/avatar opens it (no longer navigates to a profile, and there's no separate Info button). Groups → `GroupInfoModal.tsx` (retitled "Chat settings"); DMs → `DmSettingsModal.tsx`. Both show: a **Members** list (each row → `/profile/$username`), a **Mute notifications** toggle (`muteConversation`, JS-max-Date sentinel), and a self-only leave/delete — "Leave group" / "Delete chat" (`deleteConversation` on the caller's own `conversation_members` row; `trg_delete_empty_conversation` finishes cleanup). DM adds **Block user** (`blockUser` RPC → close conversation). Group keeps its admin controls + "Delete group for everyone" danger zone. |
-| Mark conversations read | `markConversationRead` in conversations API |
-| Conversation swipe-to-delete | `ConversationItem.tsx` |
-| Delete conversation (self-only) | `deleteConversation` in `src/features/chat/api/conversations.ts` |
-| User presence (is_online) | Migration `00014_add_presence_to_profiles.sql` |
-| User search | `searchUsers` in conversations API |
-| Slash command system (local feedback only) | `src/features/commands/` — outputs shown only to the typing user via `commandFeedbackAtom`, never written to DB |
-| /remind, /mute, /thread, /create | `src/features/commands/handlers/` |
-| **Threads** (tier 3) | `thread_id` filter in `fetchMessages`; `/thread` returns local usage text |
-| **Stickers** (tier 3) | `stickers` table (user_id, storage_path, name); `src/features/media/` components |
-| **Tasks** (tier 3) | `src/features/chat/hooks/useTasks.ts`, `src/features/chat/components/panel/TaskList.tsx`, ConversationPanel Tasks tab |
-| **Notes** (tier 3) | `src/features/chat/hooks/useNotes.ts`, `src/features/chat/components/panel/NoteList.tsx`, ConversationPanel Notes tab |
-| **Reminders** (tier 3) | `src/features/chat/hooks/useReminders.ts`, `src/features/chat/components/panel/ReminderList.tsx`, 60s polling + Web Notifications API. **Shared** — all conversation members can view/dismiss (migration 00022). |
-| **Albums** (tier 3) | `src/features/chat/hooks/useAlbums.ts`, `src/features/chat/components/panel/AlbumList.tsx`, gallery grid with add-photos (chat images + device upload) + event link editor |
-| **Budgets + Splitwise** (tier 3) | `src/features/chat/hooks/useBudgets.ts`, `src/features/chat/hooks/useSplitwise.ts`, `src/lib/splitwise.ts`, `src/features/chat/components/panel/BudgetList.tsx` — delete with confirmation |
-| ConversationPanel right panel | `src/features/chat/components/ConversationPanel.tsx` — tabs: Tasks, Notes, Reminders, **Events**, Albums, Budgets |
-| **Events** (tier 4) | DB: `events`, `event_availability`, `event_rsvp` tables (migrations 00020–00021). `src/features/chat/hooks/useEvents.ts`, `src/features/chat/components/panel/EventList.tsx`, `src/features/chat/components/event/EventModal.tsx`, `src/features/chat/components/event/AvailabilityCalendar.tsx`. `/plan` → status='planning', `/event` → status='confirmed'. |
-| **System message hyperlinks** (tier 4) | `MessageBubble.tsx` — system messages show inline "Open {Tab} →" button that opens sidebar at the relevant tab. 1-week auto-destruct: `deleted_at = now + 7d` at insert. Expired system messages are hidden silently. |
-| **Command cache invalidation** (tier 4) | `CommandProvider.tsx` threads `QueryClient` through `CommandContext`; `CommandModal.tsx` invalidates the right query key after insert; `/remind` invalidates `['reminders']`. Fixes sidebar not updating after slash command creation. |
-| **Delete confirmations** (tier 4) | All list views (TaskList, NoteList, AlbumList, BudgetList, EventList, ReminderList) use Radix Dialog for destructive confirmations before deletes. |
-| **Settings page** (tier 5) | `src/routes/settings.tsx` — full replacement for the old `ProfileModal` popup. Tabs: Account (name, unique username, avatar upload to `avatars` bucket, bio, birthdate, email-auth-only password change, danger-zone account deletion via the `delete-account` Edge Function), Billing/Privacy Policy/Terms of Service (sample content), Help (FAQ accordion), Report a Problem (known-issues list + a form that emails the developer via the `report-problem` Edge Function, see below). `src/features/settings/components/`. |
-| Shared `Avatar` component | `src/components/Avatar.tsx` — single source of truth for avatar rendering app-wide; shows the real photo or a neutral person-silhouette placeholder (never initials) when `avatar_url` is null. |
-| **Friends system** (tier 6) | `src/routes/friends.tsx` (`/friends` — tabs: Friends, Requests, Sent, Discover, Blocked, plus a people search that takes over the panel), `src/features/friends/` (`api/friends.ts`, `hooks/useFriends.ts`, components incl. `ProfileModal`, `FriendActionButton`, `MessageRequestBar`, `UserRow`, `ConfirmDialog`). DB: `friendships`, `user_blocks`, `conversation_members.request_state` (migration 00033). Entry point: Users icon + pending badge in the `ConversationList` header. |
-| **Device management** (rename + revoke) | `src/features/pairing/api/devices.ts`, `src/features/pairing/hooks/useDeviceRevocation.ts` (mounted in `routes/chat.tsx`), `src/lib/deviceName.ts`, Settings → Devices. RPC `revoke_device`; migration `00035_device_management.sql`. |
-| **Live device pairing** (history sync) | `packages/crypto/src/pairing.ts`, `src/features/pairing/` (`hooks/useDevicePairing.ts`, `components/PairingQr.tsx`, `components/QrScanner.tsx`), `src/features/settings/components/DevicePairingSettings.tsx` (Settings → Devices), `src/routes/link.tsx`. Migration `00034_pairing_channel_authorization.sql`. Deps: `qrcode`, `jsqr`. |
-| **User profile view** | `src/features/friends/components/ProfileModal.tsx` — the app's only profile card, opened from every friends list; the `/profile/$username` route is also reachable from the member rows inside the Chat settings modal (the `ChatView` header avatar now opens Chat settings instead of navigating straight to a profile). Shows public profile fields only (never email/account data). |
-| **Message requests** | Non-friend DMs land in the "Message requests" section of `ConversationList`; `ChatView` swaps `MessageInput` for `MessageRequestBar` (Accept / Decline / Block) while `requestState === 'pending'`. |
-| **Composer (expanding attachment menu + expression picker + voice)** | `MessageInput.tsx` — a `Plus` toggle (rotates 45° into an X when open) reveals a row of 4 round icon buttons between the toggle and the textarea: **File · Camera · Voice message · Image**. The row auto-collapses on textarea focus or first keystroke, and on explicit toggle. An in-field emoji button (right-aligned inside the textarea's rounded container) opens the **expression picker**. New optional props (all default to no-ops): `onPickFile`, `onPickCamera`, `onPickImage`, `onStartVoice`, `onExpression`, plus `showAttachments?: boolean` (default `true`) which hides the toggle + emoji button for plain hosts. Row animation respects `prefers-reduced-motion`. Wiring lives in `ChatView`: Image/Camera → hidden `<input type="file" accept="image/*" [capture]>` → `handleImageSelect`; File → hidden `<input type="file">` → `handleFileSelect` (`uploadRawFile` → `sendMedia({ type: 'file', … })`); Voice → swaps the whole composer for `VoiceRecorderBar` (mirrors the `MessageRequestBar` swap) → `handleVoiceSend`. |
-| **Expression picker** | `src/features/media/components/ExpressionPicker.tsx` (replaced `MediaPicker`) — tabs **GIFs** (`GifPicker`, live) · **Stickers** (`StickerPicker`, live — web has a sticker library, unlike iOS) · **Voice notes** (reusable saved voice clips — "coming soon"). Opened by the composer's in-field emoji button; selections route through `ChatView.sendMedia`. |
-| **GIF picker (Giphy)** | `src/features/media/` (`api/gifs.ts`, `hooks/useGifSearch.ts`, `components/GifPicker.tsx`), reached via the composer emoji button → `ExpressionPicker` GIFs tab. `searchGifs`/`getTrendingGifs` hit `api.giphy.com/v1/gifs` (`rating=g`, `bundle=messaging_non_clips`) and send a `downsized` rendition, not `original`. Sent as `type='gif'`, `content=''`, `iv=null`, `enc_v=NULL`, `media_url` = the Giphy URL — **not E2E encrypted** (media never is). `ChatView.sendMedia` renders it optimistically like a text send. GIFs and stickers render **frameless** in `MessageBubble` (`isFrameless` — no bubble background/border/padding, like a sticker in iMessage); images keep the thin frame. The picker grid is a CSS `columns-2` masonry that preserves each GIF's aspect ratio. Requires `VITE_GIPHY_API_KEY`; `hasGiphyKey` gates the picker and shows a config hint (treating the `.env.example` placeholder as unset). CSP already allows `*.giphy.com` for `img-src`/`media-src` and `api.giphy.com` for `connect-src`. |
-| Image / file / sticker / voice send | Composer attachment menu → `handleImageSelect` (`uploadMediaFile`, image-compressed) / `handleFileSelect` + `handleVoiceSend` (`uploadRawFile` — original MIME + extension preserved, no compression) → `media` Storage bucket. Sticker tab of `ExpressionPicker`. All go through `ChatView.sendMedia` with optimistic render; none are E2E encrypted (`content: ''`, `iv: null`, `enc_v = NULL`). `type='file'` renders as a download link and `type='voice'` as `<audio controls>` in `MessageBubble`; previews are "📎 File" / "🎤 Voice message". `VoiceRecorderBar.tsx` records via `MediaRecorder` (`audio/mp4` when supported, else `audio/webm`), stops all tracks on cancel/send/unmount, and surfaces mic-permission denial as a `sendError`. |
+- **Auth** (`routes/auth.tsx`, `src/lib/auth.ts`, `src/lib/passwordStrength.ts`): signup requires all 5 password checks. Email signups must click a confirmation link before sign-in; Google OAuth is exempt. **Enforced by the Supabase Dashboard "Confirm email" toggle, not app code** — no migration can set it. Unconfirmed logins surface a "Resend confirmation email" action.
+- **Chat** (`features/chat/`): `ConversationList`, `ChatView`, `MessageBubble`, `MessageInput`; 50/page pagination (`useMessages`); realtime via `useRealtimeMessages` (invalidation only). Soft delete own messages (`deleted_at`) behind a Radix confirm. Replies via `replyToMessageIdAtom`. Swipe-to-delete a conversation removes only your own membership row.
+- **Collapsible sidebar** (desktop only): `sidebarCollapsedAtom`, persisted.
+- **Chat settings modal:** tapping the `ChatView` header opens `GroupInfoModal` (groups) or `DmSettingsModal` (DMs): members list, mute toggle (`muteConversation`, JS-max-Date sentinel for forever), self-only leave/delete. DMs add Block; groups keep admin controls and "Delete group for everyone."
+- **Pinned messages:** `api/pins.ts`, `hooks/usePins.ts` (optimistic, rollback by refetch), `PinnedBanner.tsx` below the search bar. Pin/Unpin is a hover action for all members. `useRealtimeMessages` also invalidates `['pins', …]`.
+- **Username availability:** `useUsernameAvailability` debounces a `profiles` lookup (excluding own id when editing) so Save is blocked before a write; both call sites (`UsernameSetupModal`, `AccountSettings`) still catch `23505`.
+- **Slash commands** (`features/commands/`): output is **local-only** via `commandFeedbackAtom`, never written to the DB. `CommandProvider` threads the `QueryClient` so `CommandModal` invalidates the right key after insert.
+- **Productivity panel** (`ConversationPanel.tsx` tabs: Tasks, Notes, Reminders, Events, Albums, Budgets). Reminders poll every 60s + Web Notifications. Events: `/plan` → `planning` (when2meet grid, `AvailabilityCalendar.tsx`), `/event` → `confirmed`. Budgets include Splitwise (`src/lib/splitwise.ts`). Every destructive action uses a Radix confirm dialog.
+- **System messages:** `MessageBubble` shows an "Open {Tab} →" button. `deleted_at = now + 7d` at insert; expired ones are hidden silently.
+- **Settings** (`routes/settings.tsx`, `features/settings/components/`): Account (name, username, avatar to `avatars` bucket, bio, birthdate, email-only password change, account deletion via `delete-account`), Devices, Billing/Privacy/Terms (sample content), Help, Report a Problem (`report-problem` function).
+- **`Avatar`** is the only avatar renderer: photo or silhouette placeholder, never initials.
+- **Friends** (`routes/friends.tsx`, `features/friends/`): tabs Friends/Requests/Sent/Discover/Blocked plus search; `ProfileModal` is the only profile card (public fields only). Entry is the Users icon + badge in the `ConversationList` header. Non-friend DMs appear under "Message requests"; `ChatView` swaps `MessageInput` for `MessageRequestBar` while pending.
+- **Composer** (`MessageInput.tsx`): a `Plus` toggle reveals File · Camera · Voice · Image and collapses on focus/typing; an in-field emoji button opens `ExpressionPicker` (GIFs live, Stickers live, Voice notes "coming soon"). Optional props default to no-ops; `showAttachments={false}` gives a plain composer. Voice swaps the composer for `VoiceRecorderBar`.
+- **Media sends** all go through `ChatView.sendMedia` with optimistic render, never encrypted. Images use `uploadMediaFile` (compressed); files and voice use `uploadRawFile` (original MIME). `type='file'` renders as a download link, `type='voice'` as `<audio controls>`. GIFs and stickers render frameless.
+- **GIFs (Giphy):** `rating=g`, sends the `downsized` rendition. `hasGiphyKey` treats the `.env.example` placeholder as unset. CSP already allows `*.giphy.com`.
+- **Voice recording** stops all mic tracks on cancel/send/unmount; mic denial surfaces as `sendError`.
 
-### Not yet integrated
-
-| Feature | Status |
-|---------|--------|
-| Standalone drag-drop image zone | `DragDropZone` component built but not mounted; the composer's Image button is the live path |
-| Reusable saved voice notes | "Voice notes" tab of `ExpressionPicker` is a "coming soon" placeholder; one-off voice messages (record → send) are live via `VoiceRecorderBar` |
-| AI conversations | Schema migrated; no UI or AI API integration |
+**Not yet integrated:** `DragDropZone` (built, not mounted); reusable saved voice notes; AI conversations (`ai_conversations` is schema-only, no UI or API).
 
 ---
 
-## Cross-Platform Implementation Reference (iOS)
+## Landing Page (`src/routes/index.tsx`)
 
-Web is the reference implementation; both platforms share one Supabase project and
-the same schema (see **Database Schema** and **Feature Map** above). Per-feature
-iOS how-to lives in `yaply-ios/CLAUDE.md` — do not duplicate it here. Only
-cross-platform **contracts** that must match byte-for-byte or behave identically
-belong in this repo:
+A single-file marketing page: markup, demos, and a template-literal `<style>` scoped under `.lp` (not Tailwind). Own dark-navy/mint palette with a `.lp-light` override persisted to `localStorage['yaply-theme']`.
 
-- **Encryption wire format v2 & key handling** — see the Encryption section
-  above. Every platform must reproduce it exactly:
-  - Content: `AES-GCM(message key, plaintext)` → `content = base64(ct+tag[16])`,
-    `iv = base64(nonce[12])`, `enc_v = 2`. Fresh random 256-bit message key per
-    message.
-  - Key wrap: one ephemeral P-256 keypair per message; per recipient device
-    `KEK = ECDH(eph_priv, device_pub)` with the **raw 32-byte shared secret used
-    directly as the AES-256 key — no HKDF**; `wrapped_key = base64(AES-GCM(KEK,
-    raw message key) + tag)`, `key_iv = base64(nonce[12])`. iOS: CryptoKit
-    `P256.KeyAgreement`, take the shared secret's raw bytes (do **not** use
-    `hkdfDerivedSymmetricKey`).
-  - Recipients: **every active device (90-day `last_active_at`) of every member,
-    including all of the sender's own devices.** Omitting the sender's devices
-    breaks reading your own sent messages — the original bug.
-  - Device registration: one `devices` row per install with its own random
-    `device_id` persisted locally; upsert only that row. Never write
-    `device_id = 1` unconditionally.
-  - Decrypt: pick the envelope whose `recipient_fp` equals this device's
-    fingerprint (JWK `x.y`); no envelope ⇒ permanent, honest "couldn't decrypt".
-    Branch on `enc_v` **before** looking at `iv`.
-  - Editing (when built): re-seal with a new message key and replace all
-    envelopes in one transaction; never reuse the old key.
-  - Per-user in-memory caches only — never a single-slot-plus-owner-check.
-- **Device naming & revocation** — **implemented on both platforms.** See the
-  Device management section above; iOS mirrors it in
-  `Features/Devices/` (`DeviceRepository`, `DeviceRevocationWatcher`,
-  `DeviceName`) with the orphan check in `EncryptionRegistrar`. The rules that
-  must not drift: name written on **first registration only**; `session_id`
-  claim recorded on the row; revoke via `revoke_device(p_device_id)` and never a
-  direct DELETE (that leaves the auth session alive); orphan check at startup;
-  and a *failed* lookup is never treated as "revoked".
-- **Live device pairing** — **implemented on both platforms** (iOS:
-  `Features/Devices/DevicePairingCrypto.swift`, `DevicePairingViewModel.swift`,
-  `PairingQRView` via CoreImage, `QRScannerView` via AVFoundation). See the Live
-  device pairing section above for the full protocol. The contract that must
-  stay byte-identical:
-  - Code alphabet Crockford base32 (no I/L/O/U), 8 chars, displayed `XXXX-XXXX`;
-    normalise leniently (case-insensitive, strip dashes/spaces, `O→0`, `I,L→1`).
-  - Channel topic `pairing:<userId>:<code>`, opened **private** (`isPrivate = true`
-    in swift-supabase). The RLS policy scopes it to `auth.uid()`.
-  - Ephemeral P-256 per side, memory-only. `secret` = the **raw** ECDH shared
-    secret bytes used directly as an AES-256-GCM key (CryptoKit:
-    `P256.KeyAgreement`, raw bytes — **not** `hkdfDerivedSymmetricKey`).
-  - `sas = SHA-256(secret ‖ "yaply-sas-v1")`, first 4 bytes big-endian,
-    `mod 1_000_000`, zero-padded to 6 digits. Any drift here and the two devices
-    show different numbers and the user correctly refuses to pair.
-  - Payload `base64(AES-GCM(secret, JSON [{deviceId, pub, priv}]) + tag)` with
-    `iv = base64(nonce[12])`; JWKs, not DER/SEC1.
-  - Handshake events `ready` / `hello {ephPub}` / `ack {ephPub}` /
-    `payload {iv, ciphertext}` / `done`, with the receiver re-sending `hello` on
-    `ready`; abort on a second, different `ephPub`.
-  - **iOS is most often the *sender* to a desktop receiver**, so the
-    presenter-with-typed-code path (show an 8-char code) is mandatory, not just
-    QR scanning. Never gate pairing behind the camera.
-  - Adopted keys are decrypt-only: never publish them to `devices`, never seal
-    new messages to them, and merge (don't overwrite) on a second pairing.
-- **Events availability slot keys** — each slot key is the **UTC ISO string** of
-  the slot start (e.g. `"2025-06-10T14:00:00.000Z"`), 8am–10pm local in 30-min
-  increments, 7 days × 28 rows. iOS must build local-time `Date`s then format with
-  `ISO8601DateFormatter`, `timeZone = UTC`, `.withFractionalSeconds`. Any drift
-  breaks heatmap overlap across platforms.
-- **Reminders** — creator is `user_id`; RLS lets all conversation members
-  view/dismiss (migration 00022). Web polls every 60s; iOS should instead schedule
-  a local `UNNotificationRequest` and mark `status='sent'` on delivery. Same time
-  parsing (`30m`, `2h`, `tomorrow`=next 9am).
-- **Command feedback is local-only (critical)** — command output (help, errors,
-  "Reminder set") is **never** written to the DB; shown only to the typing user as
-  an ephemeral banner. The **only** thing written to a conversation is a
-  `type='system'` message on task/note/album/budget creation (`iv = NULL`,
-  `content = base64(TextEncoder(text))`), rendered as centered grey text (no
-  bubble, no sender). System messages auto-destruct after 1 week
-  (`deleted_at = now + 7d`); expired ones are hidden silently.
-- **Friends & message requests (not yet on iOS)** — see the Friends System
-  section above for full semantics. The contract iOS must honour:
-  - Never write `friendships` or `user_blocks` directly for create/accept/block.
-    Use `send_friend_request` / `accept_friend_request` / `block_user`; there is
-    no INSERT or UPDATE RLS policy, so a direct write silently fails. Decline,
-    cancel and unfriend are all a plain `DELETE` on the `friendships` row.
-  - Resolve relationship state with the **batched** `get_relationships(uuid[])`,
-    never one call per user, and render the same six states everywhere a person
-    appears (`none | pending_out | pending_in | friends | blocked | blocked_by`).
-    `blocked_by` must be indistinguishable from `none` in the UI.
-  - Use `search_users(p_query)` for people search — querying `profiles` directly
-    skips the block filter.
-  - Honour `conversation_members.request_state`: hide `'declined'`, put
-    `'pending'` in a separate Message requests section, disable the composer
-    there, and exclude both from unread counts and notification banners.
-    Accepting/declining is an UPDATE of **your own** member row — never a DELETE.
-  - Expect these RPC errors and map them to human text rather than surfacing
-    raw: `blocked`, `cannot send in this conversation`,
-    `can only add friends to groups`, `friend request already exists`.
-- **Message reactions** — `message_reactions` PK is `(message_id, user_id, emoji)`,
-  so the DB allows a user to hold several reactions on one message. iOS's
-  long-press menu enforces **one reaction per user** client-side (Messenger /
-  Instagram style — a new pick clears the old via a
-  `delete … where message_id = ? and user_id = ?` then insert). Web still allows
-  multiple; if the two ever need to match, add the `(message_id, user_id)`
-  constraint in a migration and update both clients.
-- **Pinned messages** — see `pinned_messages` above. Implemented on web and iOS.
-  Both must use the table + membership RLS (never a `messages` column), keep pins
-  ordered most-recently-pinned first, make pin idempotent (upsert on
-  `conversation_id,message_id`), let **any** member unpin, and treat every
-  realtime `pinned_messages` event as a refetch trigger. The banner previews only
-  a pin whose message is currently loaded in the list.
-- **Stickers / media are not encrypted** — `media_url` is a public Storage URL;
-  render directly, no decryption. iOS has no yaply sticker library: it lets the
-  user drop / paste / (iOS 18) keyboard-insert a *system* sticker (Stickers
-  drawer, Memoji, Markup, Genmoji), uploads it as a transparent PNG to the
-  `media` bucket, and sends `type='sticker'` — which the web already renders as
-  an `<img>`, so it round-trips with no web change. A transparent image pasted /
-  dropped on iOS is treated as a sticker (rendered bubble-free), an opaque one as
-  a photo.
-- **Voice messages (`type='voice'`)** — iOS composer records AAC `.m4a` to the
-  `media` bucket and sends `type='voice'`, `media_mime='audio/mp4'`,
-  `content=''`, `iv=null` (not E2E, like all media). Enum value added in
-  migration `00037_voice_message_type.sql`; web `MessageBubble` renders a plain
-  `<audio controls>` and previews it as "🎤 Voice message". Web records via
-  `VoiceRecorderBar` + `MediaRecorder` (`audio/mp4` when the browser supports it,
-  `audio/webm` otherwise — Chrome/Firefox produce webm, which both platforms play
-  fine). Any change to the container/mime must land on both platforms.
-- **Splitwise** — REST API `https://secure.splitwise.com/api/v3.0/`, OAuth2 client
-  credentials; when adding an expense the payer's `paid_share` maps by index in the
-  members array (not always index 0); `simplified_debts` may be null.
-
-## Project Structure
-
-```
-yaply/
-├── src/
-│   ├── app/
-│   │   └── Providers.tsx          # React Query client setup
-│   ├── features/
-│   │   ├── chat/                  # Core messaging feature
-│   │   │   ├── api/               # Supabase calls (conversations.ts, messages.ts)
-│   │   │   ├── components/        # UI (ChatView, MessageBubble, MessageInput, etc.)
-│   │   │   ├── hooks/             # Data hooks (useConversations, useMessages, useEncryption, etc.)
-│   │   │   ├── store/             # Jotai atoms (chat.atoms.ts)
-│   │   │   └── types.ts           # Runtime types (source of truth for DB schema)
-│   │   ├── commands/              # Slash command system
-│   │   │   ├── commandParser.ts
-│   │   │   ├── commandRegistry.ts
-│   │   │   ├── components/        # CommandModal, CommandProvider
-│   │   │   └── handlers/          # remindHandler, muteHandler, threadHandler, createHandler
-│   │   └── media/                 # GIF, image, sticker media
-│   │       ├── api/               # gifs.ts (Giphy), upload.ts (Supabase Storage)
-│   │       ├── components/        # GifPicker, StickerPicker, ExpressionPicker, DragDropZone
-│   │       └── hooks/             # useGifSearch, useStickers, useUpload
-│   │   └── settings/               # Settings page tabs (Account, Billing, Privacy, Terms, Help, Report)
-│   │       └── components/
-│   ├── components/                # Cross-feature shared UI: YaplyLogo, Avatar (avatar_url → img, else person-silhouette placeholder)
-│   ├── lib/
-│   │   ├── auth.ts                # getUser(), onAuthStateChange(), DEV_BYPASS flag
-│   │   ├── supabase.ts            # Supabase client singleton
-│   │   └── database.types.ts      # Auto-generated Supabase types (may be stale — see discrepancy note)
-│   └── routes/                    # File-based routes (TanStack Router)
-│       ├── index.tsx              # `/` — self-contained marketing landing page (see Landing Page above)
-│       └── settings.tsx           # `/settings` — profile + account settings
-├── public/
-│   └── fonts/                     # Self-hosted webfonts (CSP font-src is 'self' — no external font CDNs)
-├── packages/
-│   ├── crypto/src/
-│   │   ├── encryption.ts          # generateKeyPair, deriveSharedKey, encryptMessage, decryptMessage
-│   │   └── keyStore.ts            # IndexedDB read/write for identity and derived keys
-│   └── shared/src/
-│       ├── types.ts               # Canonical type definitions (aspirational schema)
-│       └── constants/             # Command definitions, app constants
-└── supabase/
-    ├── functions/                 # Edge Functions (server secrets) — report-problem, delete-account (see Environment Variables)
-    └── migrations/                # NOT all applied to live DB (see discrepancy note above)
-```
+- **Font:** Bricolage Grotesque, self-hosted at `public/fonts/` — the CSP's `font-src 'self'` would block Google Fonts.
+- **Progressive enhancement (every interactive element):** server-render the *final, legible* state, then a `useEffect` rewinds and replays the animation when scrolled into view (`IntersectionObserver`). The prerendered HTML is never empty or mid-animation. Respect `prefers-reduced-motion` via `prefersReducedMotion()`. After changes, re-run the build + `scripts/generate-html.mjs` and spot-check `dist/client/index.html`.
+- **Demos are decorative** local state (`ChatMock`, `EventFlowDemo`, `GroupCarousel`, `KothaDemo`, `EncryptWire`, `DecryptText`). `EncryptWire` locks each glyph as the sweep passes so the end state equals the sealed display; `DecryptText` is used only on the "Sealed, end to end." header.
+- **Landing copy is not a source of truth.** Kotha AI and "built-in translation" are forward-looking marketing; neither exists in the app.
 
 ---
 
-## Environment Variables
+## Cross-Platform Contracts (iOS)
 
-Copy `.env.example` to `.env` and fill in:
+Per-feature iOS how-to lives in `yaply-ios/CLAUDE.md`; encryption, pairing, devices, friends, pins and reactions contracts are above. Also:
 
-```
-VITE_SUPABASE_URL=         # From Supabase project settings
-VITE_SUPABASE_ANON_KEY=    # From Supabase project settings (public/anon key)
-VITE_GIPHY_API_KEY=        # From Giphy Developer Dashboard
-```
-
-### Supabase Edge Functions
-
-`supabase/functions/` holds server-side functions deployed separately from the client build (`supabase functions deploy <name>`), for logic that needs a secret the client must never see.
-
-- **`report-problem`** — relays the Settings → Report a Problem form to the developer's email via [Resend](https://resend.com), so that address never appears in client code. Requires the secret `RESEND_API_KEY` (`supabase secrets set RESEND_API_KEY=...`) — **not** a `VITE_*` client env var, and not in `.env.example`. Sends from Resend's shared `onboarding@resend.dev` test address unless/until a verified sending domain is configured.
-- **`delete-account`** — permanently deletes the caller's own account (Settings → Account → Danger zone, confirmed via a "type delete to confirm" dialog). Client-side code cannot delete an `auth.users` row directly — only the service role can — so the function identifies the caller from **their own JWT** (`auth.getUser()` on a client built with the forwarded `Authorization` header) and never accepts a user id from the request body, which is what guarantees a caller can only ever delete their own account, not someone else's. It then uses a **separate** service-role client (`SUPABASE_SERVICE_ROLE_KEY`, auto-provided to every Edge Function — not a secret you set yourself) to best-effort remove the user's `avatars` storage objects and call `auth.admin.deleteUser(userId)`. Deleting the `auth.users` row cascades through `profiles` (`profiles_id_fkey ... on delete cascade`) and from there through every other table via the `profiles(id)`-referencing FKs — see the FK cascade note below; this is why `profiles` intentionally has **no DELETE RLS policy** (only `SELECT`/`UPDATE`) — row deletion is never exposed to PostgREST/the client directly, it only ever happens as a cascade side effect of the admin API call.
-- **`send-push`** — the APNs sender. See **Push notifications** below. It is the only function deployed with `verify_jwt = false` (declared in `supabase/config.toml`), because a database trigger invokes it and has no user JWT to present.
+- **Events availability slot keys:** UTC ISO string of the slot start (`"2025-06-10T14:00:00.000Z"`), 8am–10pm local in 30-min steps, 7 days × 28 rows. iOS builds local-time `Date`s then formats with `ISO8601DateFormatter`, `timeZone = UTC`, `.withFractionalSeconds`. Drift breaks heatmap overlap.
+- **Reminders:** creator is `user_id`; all members view/dismiss. Web polls every 60s; iOS schedules a local `UNNotificationRequest` and marks `status='sent'`. Same parsing (`30m`, `2h`, `tomorrow` = next 9am).
+- **Command feedback is local-only (critical):** never written to the DB. The only DB write is a `type='system'` message on task/note/album/budget creation (`iv = NULL`, `content = base64(TextEncoder(text))`), centered grey text, auto-destructing after a week.
+- **Stickers:** iOS has no library; it uploads a dropped/pasted *system* sticker as transparent PNG, `type='sticker'`, which web renders as-is.
+- **Voice (`type='voice'`):** iOS records AAC `.m4a`, `media_mime='audio/mp4'`; web records mp4 or webm. Both play either. Container/mime changes must land on both.
+- **Splitwise:** REST `https://secure.splitwise.com/api/v3.0/`, OAuth2 client credentials. The payer's `paid_share` maps by index in the members array (not always 0); `simplified_debts` may be null.
 
 ---
 
 ## Push notifications
-
-A database trigger enqueues, an Edge Function fans out, and iOS decrypts the preview on-device.
 
 ```
 messages INSERT
@@ -723,65 +300,50 @@ messages INSERT
                  ├─ push_message_context(id)      [00039]  shared metadata
                  └─ push_targets_for_message(id)  [00039]  one row per (token × its envelope)
                       → POST api.push.apple.com/3/device/<token>
-                           payload = metadata + ciphertext + THAT device's envelope
-                                     + mutable-content: 1
+                           payload = metadata + ciphertext + THAT device's envelope + mutable-content: 1
                                         └─ iOS Notification Service Extension decrypts
 ```
 
-**The payload is per device, not per message.** Each token gets the one `message_envelopes` row whose `recipient_fp` matches its `devices.key_fingerprint` — that is the whole reason `push_tokens` carries a `device_id`. `aps.alert.body` is always a safe placeholder ("New message", or "📷 Photo" for media); the extension overwrites it, and every failure path leaves the placeholder rather than surfacing ciphertext.
-
-**Suppression is server-side and must mirror the clients exactly:** never the sender, never `request_state <> 'accepted'`, never a conversation muted per the project-wide convention (`muted_until > now()`), never across a block, and never `type = 'system'`. An `enc_v = 2` message with no envelope for a device is dropped rather than pushed — that device registered after the send and could never resolve the body. `ConversationListViewModel.handleIncomingMessage` on iOS applies the same filters so the in-app banner and the lock screen never disagree.
-
-**APNs limits:** 4096-byte payload cap, which leaves room for roughly 2,100 characters of plaintext. Over that the message **deliberately delivers the `Sent a message` placeholder** with the sender's name as the title. Truncating server-side is impossible — it holds only ciphertext, and AES-GCM is all-or-nothing. Having the extension fetch the message (the Signal/WhatsApp pattern) is defeated by supabase-swift's 1-hour JWT plus rotating refresh token, and a sender-sealed preview blob is a cross-platform wire-format change that a case this rare does not justify. `mutable-content` is dropped for these so the extension is not woken pointlessly. See the iOS CLAUDE.md for the full reasoning. `apns-collapse-id` is the message id so a retried trigger resolves to one banner; grouping is `thread-id` (the conversation id) at the display layer.
-
-**Badge count** is the recipient's **total** unread across accepted, unmuted conversations, not the arriving conversation's (migration `00044` — it was per-conversation, which made the number look arbitrary). iOS recomputes the same figure locally after every conversation-list refresh; the two definitions must move together or the badge flips between values.
-
-**Secrets.** `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID` (`wahid.yaply`), `APNS_PRIVATE_KEY` (the `.p8`) and `PUSH_WEBHOOK_SECRET` go in `supabase secrets` — use `--env-file`, since a multiline `.p8` mangled through a shell is the usual cause of a permanent `403 InvalidProviderToken`. **The key must be created for "Sandbox & Production"** in the developer portal (Keys → APNs → environment). A sandbox-only key works from Xcode and then fails every TestFlight/App Store token with `403 BadEnvironmentKeyInToken` (undocumented by Apple) — exactly what happened on the first TestFlight build (2026-09-17). The sender treats every 403 as a provider-side fault and leaves `fail_count` alone; only `BadDeviceToken`/`Unregistered` blame the token. The function URL and the shared secret also go in **Vault** (`push_fn_url`, `push_webhook_secret`), read by the SECURITY DEFINER `push_config()`; until both Vault rows exist `enqueue_push` is a no-op, so the triggers are inert and harmless.
-
-> ⚠️ Deno's `crypto.subtle.sign` with ECDSA returns IEEE P1363 `r||s` — **already** the JOSE encoding. Do not DER-decode; porting a Node example here is what produces a permanent `InvalidProviderToken`.
-
-**Testing without a device:** `send-push` accepts `dry_run: true` (runs the whole fanout and payload builder, returns the exact JSON per target instead of calling Apple) and `kind: "jwt_check"` (mints a provider token and returns its prefix). Both need the `x-push-secret` header.
-
-**Other kinds** — `friend_request`, `friend_accepted`, `task_assigned`, `event_confirmed` (migration `00041`) and `reminder` (a pg_cron job, migration `00042`) all route through the same function, resolved by `push_simple_notification(kind, payload)`. These are plaintext: no envelope, no `mutable-content`, so the extension never runs for them. Reminder dispatch is exactly-once by construction — `status = 'pending'` is both the work queue and the lock (`for update skip locked` plus an atomic flip to `'sent'` in the same transaction as the enqueue), which fails toward loss rather than duplication.
+- **Payload is per device:** each token gets the one envelope whose `recipient_fp` matches its `devices.key_fingerprint` — that's why `push_tokens` has `device_id`. `aps.alert.body` is always a safe placeholder ("New message", "📷 Photo"); the extension overwrites it, and every failure leaves the placeholder.
+- **Server-side suppression mirrors the clients exactly:** never the sender, never `request_state <> 'accepted'`, never muted (`muted_until > now()`), never across a block, never `type = 'system'`. An `enc_v = 2` message with no envelope for a device is dropped. iOS's `ConversationListViewModel.handleIncomingMessage` applies the same filters.
+- **Over the 4096-byte cap (~2,100 chars of plaintext)** the push deliberately shows `Sent a message` with the sender as title and drops `mutable-content`. Server-side truncation is impossible (ciphertext, AES-GCM is all-or-nothing). Extension fetch (the Signal/WhatsApp pattern) fails because supabase-swift gives the extension a 1-hour JWT with a rotating refresh token; a sender-sealed preview blob is a wire-format change not justified by a rare case.
+- `apns-collapse-id` = message id (a retried trigger yields one banner); `thread-id` = conversation id.
+- **Badge** = recipient's **total** unread across accepted, unmuted conversations (`00044`). iOS recomputes the same figure locally; the definitions must move together.
+- **Other kinds** — `friend_request`, `friend_accepted`, `task_assigned`, `event_confirmed` (`00041`) and `reminder` (pg_cron, `00042`) — go through `push_simple_notification(kind, payload)`. Plaintext, no `mutable-content`. Reminder dispatch is exactly-once: `status = 'pending'` is both queue and lock (`for update skip locked` + atomic flip to `'sent'` in the same transaction), failing toward loss rather than duplication.
+- **Secrets:** `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID` (`wahid.yaply`), `APNS_PRIVATE_KEY` (`.p8`), `PUSH_WEBHOOK_SECRET` via `supabase secrets set --env-file` (a shell-mangled multiline `.p8` causes permanent `403 InvalidProviderToken`). **The key must be "Sandbox & Production"** — a sandbox-only key fails every TestFlight token with `403 BadEnvironmentKeyInToken` (hit on the first TestFlight build, 2026-09-17). Every 403 is treated as provider-side and leaves `fail_count` alone; only `BadDeviceToken`/`Unregistered` blame the token. The function URL and secret also live in **Vault** (`push_fn_url`, `push_webhook_secret`) read by `push_config()`; until both exist, `enqueue_push` is a harmless no-op.
+- ⚠️ Deno's ECDSA `crypto.subtle.sign` already returns IEEE P1363 `r||s` (the JOSE encoding). Don't DER-decode — porting a Node example here produces a permanent `InvalidProviderToken`.
+- **Testing without a device:** `send-push` accepts `dry_run: true` (returns the exact per-target JSON) and `kind: "jwt_check"` (mints a provider token). Both need `x-push-secret`.
 
 ---
 
-## Development
+## Supabase Edge Functions
+
+In `supabase/functions/`, deployed with `supabase functions deploy <name>`, for logic needing a secret the client must never see.
+
+- **`report-problem`** — emails the Report a Problem form via Resend so the developer's address never appears in client code. Secret `RESEND_API_KEY` (not a `VITE_*` var). Sends from `onboarding@resend.dev` until a domain is verified.
+- **`delete-account`** — identifies the caller **from their own JWT** (never a user id from the body), then uses a separate service-role client to best-effort remove `avatars` objects and call `auth.admin.deleteUser`. The `auth.users` delete cascades everything; that's why `profiles` has no DELETE policy.
+- **`send-push`** — the APNs sender (above). The only function with `verify_jwt = false` (in `supabase/config.toml`), because a DB trigger invokes it with no user JWT.
+
+---
+
+## Environment & Development
+
+`.env` (from `.env.example`): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_GIPHY_API_KEY`.
 
 ```bash
-npm install       # Install dependencies (uses npm workspaces)
-npm run dev       # Start dev server at http://localhost:3000
-npm run build     # Production build → dist/client/
-npm run test      # Vitest unit tests
+npm install       # npm workspaces
+npm run dev       # dev server on :3000 (Netlify Dev on :8888) — user runs this, not Claude
+npm run build     # production build → dist/client/
+npm run test      # Vitest
 npm run lint      # ESLint
 npm run format    # Prettier + ESLint fix
 ```
-
-The dev server is also accessible via Netlify Dev at port 8888 (configured in `netlify.toml`).
 
 ---
 
 ## Key Architectural Patterns
 
-**Feature-folder structure:** Each product domain (chat, commands, media) is self-contained under `src/features/`. A feature owns its API layer, components, hooks, and local types. Cross-feature concerns live in `src/lib/`.
-
-**No custom API server:** The client talks directly to Supabase. Authorization is enforced by RLS policies in Postgres. This eliminates backend infrastructure but means all auth-sensitive logic must be expressed as Postgres policies.
-
-**Separation of raw DB types from display types:** `DbMessage` holds the raw encrypted fields from the database. `DecryptedMessage` holds the post-decryption display representation. The UI only touches `DecryptedMessage` — it never renders raw ciphertext.
-
-**Real-time via Supabase channels:** Instead of parsing the Realtime payload (which contains the raw encrypted DB row), `useRealtimeMessages` uses the channel event as a trigger to invalidate and re-fetch via TanStack Query. This avoids having to maintain duplicate decryption logic in the realtime handler.
-
-**Monorepo for cross-platform parity:** `packages/crypto` documents the encryption contract. `packages/shared/types.ts` documents the intended canonical schema. Even though yaply-ios uses a different crypto library (CryptoKit), it must reproduce the same wire format. These packages are the specification, not just the web implementation.
-
----
-
-## Sister Projects (this monorepo)
-
-| Directory | Platform | GitHub | Status |
-|-----------|----------|--------|--------|
-| `.` (root) | Web (React + Supabase) | https://github.com/WahidKamruddin/yaply | Active |
-| `yaply-ios/` | iOS (Swift + SwiftUI) | https://github.com/WahidKamruddin/yaply-ios | **Active** — the client for iOS. A React Native rewrite (`yaply-native/`) was tried and abandoned as of 2026-08-03 — SwiftUI's native look didn't give the design customizability wanted (a Meta Messenger–esque UI), and rather than persist with React Native the user reverted to this Swift app and deleted `yaply-native/` entirely. If you encounter any documentation elsewhere describing `yaply-ios` as deprecated or `yaply-native` as the active client, it is stale — this table is the current source of truth. |
-
-The web repo's `.gitignore` excludes `yaply-ios/` and `yaply-android/` (not yet started) since each has (or will have) its own GitHub repository. The monorepo root exists so Claude Code can cross-reference both platforms in the same working directory.
-
-`yaply-ios/CLAUDE.md` contains its architecture notes and design direction. Any change to the encryption wire format or database schema **must be reflected in both active platform CLAUDE.md files** (web and yaply-ios) and implemented consistently across both.
+- **Feature folders:** each domain under `src/features/` owns its API, components, hooks, and types; cross-feature code in `src/lib/` and `src/components/`.
+- **Raw vs display types:** `DbMessage` holds encrypted fields; `DecryptedMessage` is what the UI renders. The UI never touches ciphertext.
+- **Realtime as invalidation:** channel events trigger a TanStack Query refetch rather than parsing the (encrypted) payload, so decryption logic isn't duplicated.
+- **Parity:** the web `.gitignore` excludes `yaply-ios/`. Any wire-format or schema change must be reflected in both CLAUDE.md files and implemented on both platforms.
