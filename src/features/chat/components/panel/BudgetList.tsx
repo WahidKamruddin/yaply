@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { DollarSign, ArrowLeft, Plus, Link2, X, Trash2, Lock, Unlock } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { Budget } from '../../hooks/useBudgets'
@@ -423,12 +423,20 @@ function CreateBudgetForm({ conversationId, currentUserId, onDone }: { conversat
 
 // ─── Budget list ──────────────────────────────────────────────────────────────
 
-export default function BudgetList({ conversationId, currentUserId, isCurrentUserAdmin }: { conversationId: string; currentUserId: string; isCurrentUserAdmin: boolean }) {
+export default function BudgetList({ conversationId, currentUserId, isCurrentUserAdmin, focusItemId, onFocusHandled }: { conversationId: string; currentUserId: string; isCurrentUserAdmin: boolean; focusItemId?: string | null; onFocusHandled?: () => void }) {
   const { data: budgets = [], isLoading } = useBudgets(conversationId)
   const { data: events = [] } = useEvents(conversationId)
   const { mutate: linkToEvent } = useLinkToEvent()
   const [selected, setSelected] = useState<Budget | null>(null)
   const [creating, setCreating] = useState(false)
+
+  // Open the album/budget a pill or Dashboard row pointed at, once loaded.
+  useEffect(() => {
+    if (!focusItemId || isLoading) return
+    const match = budgets.find((x) => x.id === focusItemId)
+    if (match) setSelected(match)
+    onFocusHandled?.()
+  }, [focusItemId, isLoading, budgets, onFocusHandled])
   useSplitwiseEnabled()
 
   if (selected) return <BudgetDetail budget={selected} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} onBack={() => setSelected(null)} />

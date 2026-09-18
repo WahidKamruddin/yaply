@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Trash2, ChevronDown, ChevronUp, Plus, X, Lock, Unlock } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { Note } from '../../hooks/useNotes'
@@ -8,10 +8,20 @@ interface Props {
   conversationId: string
   currentUserId: string
   isCurrentUserAdmin: boolean
+  // Set when opened from an item-created pill or a Dashboard row.
+  focusItemId?: string | null
+  onFocusHandled?: () => void
 }
 
-function NoteCard({ note, currentUserId, isCurrentUserAdmin }: { note: Note; currentUserId: string; isCurrentUserAdmin: boolean }) {
-  const [expanded, setExpanded] = useState(false)
+function NoteCard({ note, currentUserId, isCurrentUserAdmin, focused = false }: { note: Note; currentUserId: string; isCurrentUserAdmin: boolean; focused?: boolean }) {
+  const [expanded, setExpanded] = useState(focused)
+  const cardRef = useRef<HTMLDivElement>(null)
+  // Also covers a card that was already mounted when it got focused.
+  useEffect(() => {
+    if (!focused) return
+    setExpanded(true)
+    cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [focused])
   const [showConfirm, setShowConfirm] = useState(false)
   const { mutate: deleteNote } = useDeleteNote()
   const { mutate: lockNote } = useLockNote()
@@ -21,7 +31,7 @@ function NoteCard({ note, currentUserId, isCurrentUserAdmin }: { note: Note; cur
 
   return (
     <>
-      <div className="border border-border rounded-xl mb-2 overflow-hidden">
+      <div ref={cardRef} className="border border-border rounded-xl mb-2 overflow-hidden">
         <button
           className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-tint transition-colors"
           onClick={() => setExpanded((v) => !v)}
@@ -139,9 +149,17 @@ function CreateNoteForm({ conversationId, currentUserId, onDone }: { conversatio
   )
 }
 
-export default function NoteList({ conversationId, currentUserId, isCurrentUserAdmin }: Props) {
+export default function NoteList({ conversationId, currentUserId, isCurrentUserAdmin, focusItemId, onFocusHandled }: Props) {
   const { data: notes = [], isLoading } = useNotes(conversationId)
   const [creating, setCreating] = useState(false)
+  // Captured once the list loads so the focused card mounts expanded; the
+  // panel's focus is then cleared so later tab switches don't re-apply it.
+  const [focusedId, setFocusedId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!focusItemId || isLoading) return
+    setFocusedId(focusItemId)
+    onFocusHandled?.()
+  }, [focusItemId, isLoading, onFocusHandled])
 
   return (
     <div>
@@ -159,7 +177,7 @@ export default function NoteList({ conversationId, currentUserId, isCurrentUserA
       ) : !notes.length && !creating ? (
         <p className="text-xs text-text-subtle text-center py-6">No notes yet.</p>
       ) : (
-        <div>{notes.map((n) => <NoteCard key={n.id} note={n} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />)}</div>
+        <div>{notes.map((n) => <NoteCard key={n.id} note={n} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} focused={n.id === focusedId} />)}</div>
       )}
     </div>
   )

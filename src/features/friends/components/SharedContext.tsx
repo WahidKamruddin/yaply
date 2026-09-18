@@ -13,9 +13,10 @@ import Skeleton from '@/components/Skeleton'
 import {
   activeConversationIdAtom,
   conversationPanelOpenAtom,
-  conversationPanelTabAtom,
+  conversationPanelTargetAtom,
 } from '@/features/chat/store/chat.atoms'
 import { useSharedContext } from '../hooks/useSharedContext'
+import type { PanelTab } from '@/features/chat/lib/systemItem'
 
 interface Props {
   currentUserId: string
@@ -42,15 +43,15 @@ export default function SharedContext({ currentUserId, userId }: Props) {
   const navigate = useNavigate()
   const setActiveId = useSetAtom(activeConversationIdAtom)
   const setPanelOpen = useSetAtom(conversationPanelOpenAtom)
-  const setPanelTab = useSetAtom(conversationPanelTabAtom)
+  const setPanelTarget = useSetAtom(conversationPanelTargetAtom)
   const { groups, content, isLoading } = useSharedContext(currentUserId, userId)
   const [open, setOpen] = useState<SectionId | null>('groups')
 
-  async function openConversation(conversationId: string, tab?: string) {
+  async function openConversation(conversationId: string, tab?: PanelTab) {
     setActiveId(conversationId)
     if (tab) {
       setPanelOpen(true)
-      setPanelTab(tab)
+      setPanelTarget({ tab })
     }
     await navigate({ to: '/chat' })
   }

@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Phone, Video, ChevronDown, ArrowLeft, Search, X, PanelRight, ChevronRight } from 'lucide-react'
 import { useAtom, useSetAtom } from 'jotai'
-import { activeConversationIdAtom, replyToMessageIdAtom, conversationPanelOpenAtom, conversationPanelTabAtom, sidebarCollapsedAtom } from '@/features/chat/store/chat.atoms'
+import { activeConversationIdAtom, replyToMessageIdAtom, conversationPanelOpenAtom, conversationPanelTargetAtom, openItemRequestAtom, sidebarCollapsedAtom } from '@/features/chat/store/chat.atoms'
 import { useConversations } from '@/features/chat/hooks/useConversations'
 import { useMessages } from '@/features/chat/hooks/useMessages'
 import { useSendMessage } from '@/features/chat/hooks/useSendMessage'
@@ -19,6 +19,10 @@ import { useReadReceipts } from '@/features/chat/hooks/useReadReceipts'
 import GroupInfoModal from './GroupInfoModal'
 import DmSettingsModal from './DmSettingsModal'
 import ConversationPanel from './ConversationPanel'
+import EventModal from './event/EventModal'
+import { useEvents } from '@/features/chat/hooks/useEvents'
+import { ITEM_META, opensInPanelOnly } from '@/features/chat/lib/systemItem'
+import type { PanelTab, SystemItem } from '@/features/chat/lib/systemItem'
 import { useReminderNotifications } from '@/features/chat/hooks/useReminders'
 import { fetchReactions,
   buildReactionGroups,
@@ -62,7 +66,38 @@ export default function ChatView({ currentUserId }: Props) {
   const [replyId, setReplyId] = useAtom(replyToMessageIdAtom)
   const [panelOpen, setPanelOpen] = useAtom(conversationPanelOpenAtom)
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
-  const setPanelTab = useSetAtom(conversationPanelTabAtom)
+  const setPanelTarget = useSetAtom(conversationPanelTargetAtom)
+  const [openItemRequest, setOpenItemRequest] = useAtom(openItemRequestAtom)
+  // Plans/events open as the EventModal over the chat, not inside the panel.
+  const [openEventId, setOpenEventId] = useState<string | null>(null)
+  const { data: chatEvents = [], isFetched: chatEventsFetched } = useEvents(openEventId ? activeId : null)
+  const openEvent = openEventId ? chatEvents.find((e) => e.id === openEventId) ?? null : null
+
+  useEffect(() => { setOpenEventId(null) }, [activeId])
+
+  // Consume "open this item" requests (item-created pills, Dashboard rows)
+  // once their conversation is the active one. Tasks and reminders have no
+  // detail view, so they open the panel tab; everything else opens the item.
+  useEffect(() => {
+    if (!openItemRequest || openItemRequest.conversationId !== activeId) return
+    const { kind, id } = openItemRequest
+    setOpenItemRequest(null)
+    if (kind === 'plan' || kind === 'event') {
+      setOpenEventId(id)
+      return
+    }
+    setPanelOpen(true)
+    setPanelTarget(opensInPanelOnly(kind) ? { tab: ITEM_META[kind].tab } : { tab: ITEM_META[kind].tab, itemId: id })
+  }, [openItemRequest, activeId, setOpenItemRequest, setPanelOpen, setPanelTarget])
+
+  // The event was deleted since the pill was posted — fall back to the tab.
+  useEffect(() => {
+    if (openEventId && chatEventsFetched && !openEvent) {
+      setOpenEventId(null)
+      setPanelOpen(true)
+      setPanelTarget({ tab: 'events' })
+    }
+  }, [openEventId, chatEventsFetched, openEvent, setPanelOpen, setPanelTarget])
 
   // Switching conversations or closing the chat (activeId -> null) should
   // never leave a reply from the previous conversation armed.
@@ -468,10 +503,14 @@ export default function ChatView({ currentUserId }: Props) {
     if (msg) setThreadViewRoot(msg)
   }, [decrypted])
 
-  const handleOpenPanel = useCallback((tab: string) => {
+  const handleOpenPanel = useCallback((tab: PanelTab) => {
     setPanelOpen(true)
-    setPanelTab(tab)
-  }, [setPanelOpen, setPanelTab])
+    setPanelTarget({ tab })
+  }, [setPanelOpen, setPanelTarget])
+
+  const handleOpenItem = useCallback((item: SystemItem) => {
+    if (activeId) setOpenItemRequest({ conversationId: activeId, kind: item.kind, id: item.id })
+  }, [activeId, setOpenItemRequest])
 
   const handleReact = useCallback(async (messageId: string, emoji: string) => {
     const existing = reactionsMap[messageId]?.find((r) => r.emoji === emoji && r.reactedByMe)
@@ -613,12 +652,9 @@ export default function ChatView({ currentUserId }: Props) {
         currentUserId={currentUserId}
         currentUserName={currentUserProfile?.display_name ?? currentUserProfile?.username ?? ''}
         conversations={conversations}
-        onOpenConversation={(conversationId, tab) => {
+        onOpenConversation={(conversationId, item) => {
           setActiveId(conversationId)
-          if (tab) {
-            setPanelOpen(true)
-            setPanelTab(tab)
-          }
+          if (item) setOpenItemRequest({ conversationId, ...item })
         }}
       />
     )
@@ -770,6 +806,7 @@ export default function ChatView({ currentUserId }: Props) {
                 reactions={reactionsMap[msg.id] ?? []}
                 onReact={handleReact}
                 onOpenPanel={handleOpenPanel}
+                onOpenItem={handleOpenItem}
                 isPinned={pinSet.has(msg.id)}
                 onTogglePin={!msg.deletedAt && !pendingIdSet.has(msg.id) ? togglePin : undefined}
                 groupPosition={groupPositions[i]}
@@ -937,6 +974,16 @@ export default function ChatView({ currentUserId }: Props) {
         currentUserId={currentUserId}
         members={conversation?.members ?? []}
         onClose={() => setPanelOpen(false)}
+      />
+    )}
+
+    {openEvent && (
+      <EventModal
+        event={openEvent}
+        currentUserId={currentUserId}
+        conversationId={activeId}
+        members={conversation.members}
+        onClose={() => setOpenEventId(null)}
       />
     )}
     </div>

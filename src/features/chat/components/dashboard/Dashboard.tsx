@@ -10,6 +10,7 @@ import { createDirectConversation } from '@/features/chat/api/conversations'
 import { useStickers, useDeleteSticker, useCreateSticker } from '@/features/media/hooks/useStickers'
 import { getMediaPublicUrl } from '@/features/media/api/upload'
 import type { ConversationListItem } from '@/features/chat/types'
+import type { ItemKind } from '@/features/chat/lib/systemItem'
 import DashboardCreateModal from './DashboardCreateModal'
 import StickerCreateModal from './StickerCreateModal'
 import { DashboardRowSkeleton, DashboardFriendSkeleton, DashboardStickerSkeleton } from './DashboardSkeletons'
@@ -18,7 +19,8 @@ interface Props {
   currentUserId: string
   currentUserName: string
   conversations: ConversationListItem[]
-  onOpenConversation: (conversationId: string, tab?: 'reminders' | 'events' | 'notes') => void
+  // With an item, the chat opens that item (reminders open their panel tab).
+  onOpenConversation: (conversationId: string, item?: { kind: ItemKind; id: string }) => void
 }
 
 function relativeTime(iso: string) {
@@ -160,7 +162,7 @@ export default function Dashboard({ currentUserId, currentUserName, conversation
                 {reminders.map((r) => (
                   <button
                     key={r.id}
-                    onClick={() => r.conversation_id && onOpenConversation(r.conversation_id, 'reminders')}
+                    onClick={() => r.conversation_id && onOpenConversation(r.conversation_id, { kind: 'reminder', id: r.id })}
                     className="w-full flex items-start gap-2.5 px-1 py-2 rounded-lg hover:bg-tint transition-colors text-left"
                   >
                     <Clock size={12} className="text-text-subtle mt-1 flex-shrink-0" />
@@ -197,7 +199,7 @@ export default function Dashboard({ currentUserId, currentUserName, conversation
                 {upcomingEvents.map((e) => (
                   <button
                     key={e.id}
-                    onClick={() => onOpenConversation(e.conversation_id, 'events')}
+                    onClick={() => onOpenConversation(e.conversation_id, { kind: e.status === 'planning' ? 'plan' : 'event', id: e.id })}
                     className="w-full flex items-start gap-2.5 px-1 py-2 rounded-lg hover:bg-tint transition-colors text-left"
                   >
                     {e.status === 'planning' ? (
@@ -354,7 +356,7 @@ export default function Dashboard({ currentUserId, currentUserName, conversation
                       .map((n) => (
                         <button
                           key={n.id}
-                          onClick={() => n.conversation_id && onOpenConversation(n.conversation_id, 'notes')}
+                          onClick={() => n.conversation_id && onOpenConversation(n.conversation_id, { kind: 'note', id: n.id })}
                           className="w-full flex items-start gap-2.5 px-1 py-2 rounded-lg hover:bg-tint transition-colors text-left"
                         >
                           <FileText size={12} className="text-text-subtle mt-1 flex-shrink-0" />

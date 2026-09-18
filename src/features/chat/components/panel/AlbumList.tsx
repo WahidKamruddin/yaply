@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Image, ArrowLeft, Trash2, Plus, X, Upload, Check, Link2, Lock, Unlock } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { Album } from '../../hooks/useAlbums'
@@ -10,6 +10,9 @@ interface Props {
   conversationId: string
   currentUserId: string
   isCurrentUserAdmin: boolean
+  // Set when opened from an item-created pill or a Dashboard row.
+  focusItemId?: string | null
+  onFocusHandled?: () => void
 }
 
 type PhotoTab = 'chat' | 'device'
@@ -304,10 +307,18 @@ function CreateAlbumForm({ conversationId, currentUserId, onDone }: { conversati
   )
 }
 
-export default function AlbumList({ conversationId, currentUserId, isCurrentUserAdmin }: Props) {
+export default function AlbumList({ conversationId, currentUserId, isCurrentUserAdmin, focusItemId, onFocusHandled }: Props) {
   const { data: albums = [], isLoading } = useAlbums(conversationId)
   const [selected, setSelected] = useState<Album | null>(null)
   const [creating, setCreating] = useState(false)
+
+  // Open the album/budget a pill or Dashboard row pointed at, once loaded.
+  useEffect(() => {
+    if (!focusItemId || isLoading) return
+    const match = albums.find((x) => x.id === focusItemId)
+    if (match) setSelected(match)
+    onFocusHandled?.()
+  }, [focusItemId, isLoading, albums, onFocusHandled])
 
   if (selected) {
     return (
