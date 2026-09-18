@@ -8,9 +8,10 @@ import TaskList from './panel/TaskList'
 import NoteList from './panel/NoteList'
 import BudgetList from './panel/BudgetList'
 import type { MemberSummary } from '../types'
-import { conversationPanelTabAtom } from '../store/chat.atoms'
+import { conversationPanelTargetAtom } from '../store/chat.atoms'
+import type { PanelTab } from '../lib/systemItem'
 
-type Tab = 'reminders' | 'events' | 'albums' | 'tasks' | 'notes' | 'budgets'
+type Tab = PanelTab
 
 const PRIMARY_TABS: Array<{ id: Tab; label: string; Icon: React.ElementType }> = [
   { id: 'reminders', label: 'Reminders', Icon: Bell },
@@ -36,17 +37,21 @@ export default function ConversationPanel({ conversationId, currentUserId, membe
   const isCurrentUserAdmin = members.find((m) => m.userId === currentUserId)?.isAdmin ?? false
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const [requestedTab, setRequestedTab] = useAtom(conversationPanelTabAtom)
+  const [target, setTarget] = useAtom(conversationPanelTargetAtom)
+  // The album/budget/note to open once its list has loaded. The list calls
+  // onFocusHandled after using it (or finding it gone) so it applies once.
+  const [focusItemId, setFocusItemId] = useState<string | null>(null)
 
-  // Consume deep-link tab requests from system message clicks
+  // Consume deep-link requests from item-created pills, Dashboard rows, etc.
   useEffect(() => {
-    if (requestedTab) {
-      const allTabs = [...PRIMARY_TABS, ...SECONDARY_TABS]
-      const match = allTabs.find((t) => t.id === requestedTab)
-      if (match) setActiveTab(match.id)
-      setRequestedTab(null)
+    if (target) {
+      setActiveTab(target.tab)
+      setFocusItemId(target.itemId ?? null)
+      setTarget(null)
     }
-  }, [requestedTab, setRequestedTab])
+  }, [target, setTarget])
+
+  const clearFocus = () => setFocusItemId(null)
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -130,10 +135,10 @@ export default function ConversationPanel({ conversationId, currentUserId, membe
       <div className="flex-1 overflow-y-auto p-3">
         {activeTab === 'reminders' && <ReminderList conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />}
         {activeTab === 'events'    && <EventList    conversationId={conversationId} currentUserId={currentUserId} members={members} isCurrentUserAdmin={isCurrentUserAdmin} />}
-        {activeTab === 'albums'    && <AlbumList    conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />}
+        {activeTab === 'albums'    && <AlbumList    conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} focusItemId={focusItemId} onFocusHandled={clearFocus} />}
         {activeTab === 'tasks'     && <TaskList     conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />}
-        {activeTab === 'notes'     && <NoteList     conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />}
-        {activeTab === 'budgets'   && <BudgetList   conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />}
+        {activeTab === 'notes'     && <NoteList     conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} focusItemId={focusItemId} onFocusHandled={clearFocus} />}
+        {activeTab === 'budgets'   && <BudgetList   conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} focusItemId={focusItemId} onFocusHandled={clearFocus} />}
       </div>
     </div>
   )

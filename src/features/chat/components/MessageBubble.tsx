@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { CheckCheck, Reply, Trash2, AlertCircle, Smile, MessageSquarePlus, MessageSquare, BookImage, Lock, Pin, PinOff } from 'lucide-react'
+import { CheckCheck, Reply, Trash2, AlertCircle, Smile, MessageSquarePlus, MessageSquare, BookImage, Lock, Pin, PinOff, Map as MapIcon, Calendar, CheckSquare, FileText, Image as ImageIcon, DollarSign, Bell, ChevronRight } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { DecryptedMessage } from '@/features/chat/types'
 import type { ReactionGroup } from '@/features/chat/api/reactions'
 import Avatar from '@/components/Avatar'
 import type { GroupPosition } from '@/features/chat/lib/messageGrouping'
 import AddToAlbumModal from './AddToAlbumModal'
+import { ITEM_META, parseSystemItem } from '@/features/chat/lib/systemItem'
+import type { ItemKind, PanelTab, SystemItem } from '@/features/chat/lib/systemItem'
 
 function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr)
@@ -85,7 +87,10 @@ interface Props {
   onReplyInThread?: (messageId: string) => void
   reactions?: ReactionGroup[]
   onReact?: (messageId: string, emoji: string) => void
-  onOpenPanel?: (tab: string) => void
+  // Legacy plain-text system messages only know which tab they belong to.
+  onOpenPanel?: (tab: PanelTab) => void
+  // Item-created pills open the item itself (or its tab for tasks/reminders).
+  onOpenItem?: (item: SystemItem) => void
   isPinned?: boolean
   // Any conversation member can pin/unpin any message. Undefined = not a
   // pinnable context (e.g. thread view).
@@ -98,7 +103,19 @@ interface Props {
   showSenderName?: boolean
 }
 
-const SYSTEM_TAB_MAP: Array<[RegExp, string]> = [
+const ITEM_ICONS: Record<ItemKind, React.ElementType> = {
+  task: CheckSquare,
+  note: FileText,
+  album: ImageIcon,
+  budget: DollarSign,
+  plan: MapIcon,
+  event: Calendar,
+  reminder: Bell,
+}
+
+// Pre-JSON system messages (plain text, expire within a week of the
+// item-created pill format shipping) still get a tab link.
+const SYSTEM_TAB_MAP: Array<[RegExp, PanelTab]> = [
   [/Plan created/i,     'events'],
   [/Event created/i,    'events'],
   [/Album created/i,    'albums'],
@@ -108,14 +125,14 @@ const SYSTEM_TAB_MAP: Array<[RegExp, string]> = [
   [/Reminder set/i,     'reminders'],
 ]
 
-function getPanelTab(content: string): string | null {
+function getPanelTab(content: string): PanelTab | null {
   for (const [re, tab] of SYSTEM_TAB_MAP) {
     if (re.test(content)) return tab
   }
   return null
 }
 
-const TAB_LABELS: Record<string, string> = {
+const TAB_LABELS: Record<PanelTab, string> = {
   events: 'Events',
   albums: 'Albums',
   tasks: 'Tasks',
@@ -124,7 +141,7 @@ const TAB_LABELS: Record<string, string> = {
   reminders: 'Reminders',
 }
 
-export default function MessageBubble({ message, isOwn, isRead, replyMessage, threadCount = 0, conversationId, currentUserId, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact, onOpenPanel, isPinned = false, onTogglePin, groupPosition = 'single', showSenderName = true }: Props) {
+export default function MessageBubble({ message, isOwn, isRead, replyMessage, threadCount = 0, conversationId, currentUserId, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact, onOpenPanel, onOpenItem, isPinned = false, onTogglePin, groupPosition = 'single', showSenderName = true }: Props) {
   const [hovered, setHovered] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showTime, setShowTime] = useState(false)
@@ -159,6 +176,34 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
   if (isSystem) {
     // System messages with a past deletedAt are expired — render nothing.
     if (message.deletedAt && new Date(message.deletedAt) <= new Date()) return null
+    const item = parseSystemItem(message.content)
+    if (item) {
+      const Icon = ITEM_ICONS[item.kind]
+      const who = isOwn
+        ? 'You'
+        : (message.senderProfile?.display_name ?? message.senderProfile?.username ?? 'Someone')
+      return (
+        <div className="flex justify-center my-2 px-4">
+          <div className="flex items-center gap-2 min-w-0 max-w-md text-xs bg-tint border border-border pl-1.5 pr-3 py-1 rounded-full">
+            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary-tint flex items-center justify-center">
+              <Icon size={11} className="text-primary" />
+            </span>
+            <span className="min-w-0 truncate text-text-muted">
+              {who} created a {ITEM_META[item.kind].noun}
+              {item.title && <> · <span className="font-medium text-text">{item.title}</span></>}
+            </span>
+            {onOpenItem && (
+              <button
+                onClick={() => onOpenItem(item)}
+                className="flex-shrink-0 flex items-center text-primary-text hover:text-[#5b8def] font-medium transition-colors"
+              >
+                Open<ChevronRight size={12} />
+              </button>
+            )}
+          </div>
+        </div>
+      )
+    }
     const panelTab = getPanelTab(message.content)
     return (
       <div className="flex justify-center my-2">
