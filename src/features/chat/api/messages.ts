@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import type { DbMessage, SendMessageParams } from '../types'
 import type { DbEnvelope } from '../hooks/useEncryption'
+import { encodeSystemItem } from '../lib/systemItem'
+import type { SystemItem } from '../lib/systemItem'
 
 const PAGE_SIZE = 50
 
@@ -223,4 +225,18 @@ export async function deleteMessage(messageId: string): Promise<void> {
     .eq('id', messageId)
 
   if (error) throw error
+}
+
+// Posts the "{sender} created a {kind} · {title}" pill into the chat. Best
+// effort: a failed pill must never fail (or roll back) the create itself.
+// System messages are never encrypted and self-destruct after a week.
+export async function postItemCreated(conversationId: string, senderId: string, item: SystemItem): Promise<void> {
+  try {
+    const bytes = new TextEncoder().encode(encodeSystemItem(item))
+    const content = btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''))
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    await sendMessage({ conversationId, senderId, content, iv: null, type: 'system', deletedAt: expiresAt })
+  } catch (err) {
+    console.error('[yaply] failed to post item-created message', { conversationId, item, err })
+  }
 }

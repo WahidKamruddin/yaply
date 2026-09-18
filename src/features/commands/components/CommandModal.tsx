@@ -10,6 +10,8 @@ import { supabase } from '@/lib/supabase'
 import { useEvents } from '@/features/chat/hooks/useEvents'
 import { useConversationImages } from '@/features/chat/hooks/useAlbums'
 import { uploadMediaFile } from '@/features/media/api/upload'
+import type { SystemItem } from '@/features/chat/lib/systemItem'
+import { postItemCreated } from '@/features/chat/api/messages'
 
 interface Props {
   type: CreateItemType
@@ -17,7 +19,7 @@ interface Props {
   conversationId: string
   userId: string
   onClose: () => void
-  onCreated: (systemMessage: string) => void
+  onCreated: () => void
 }
 
 const icons: Record<CreateItemType, React.ReactNode> = {
@@ -82,27 +84,30 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
     setSaving(true)
     try {
       const linkedEventId = eventId || null
+      let created: SystemItem | null = null
 
       if (type === 'task') {
-        await supabase.from('tasks').insert({
+        const { data: task, error } = await supabase.from('tasks').insert({
           conversation_id: conversationId,
           created_by: userId,
           title,
           description: description || null,
           due_at: dueAt || null,
           status: 'todo',
-        })
-        onCreated(`📋 Task created: "${title}"`)
+        }).select('id').single()
+        if (error) throw error
+        created = { kind: 'task', id: task.id, title }
 
       } else if (type === 'note') {
-        await supabase.from('notes').insert({
+        const { data: note, error } = await supabase.from('notes').insert({
           conversation_id: conversationId,
           user_id: userId,
           title,
           content: description || '',
           event_id: linkedEventId,
-        })
-        onCreated(`📝 Note created: "${title}"`)
+        }).select('id').single()
+        if (error) throw error
+        created = { kind: 'note', id: note.id, title }
 
       } else if (type === 'album') {
         const { data: album, error } = await supabase
@@ -134,36 +139,37 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
           })
         }
 
-        const photoCount = selectedChatImages.size + deviceFiles.length
-        onCreated(`📸 Album created: "${title}"${photoCount > 0 ? ` (${photoCount} photo${photoCount !== 1 ? 's' : ''})` : ''}`)
+        created = { kind: 'album', id: album.id, title }
 
       } else if (type === 'budget') {
-        await supabase.from('budgets').insert({
+        const { data: budget, error } = await supabase.from('budgets').insert({
           conversation_id: conversationId,
           created_by: userId,
           name: title,
           total_amount: parseFloat(amount),
           currency: 'USD',
           event_id: linkedEventId,
-        })
-        onCreated(`💰 Budget created: "${title}"${amount ? ` ($${amount})` : ''}`)
+        }).select('id').single()
+        if (error) throw error
+        created = { kind: 'budget', id: budget.id, title }
 
       } else if (type === 'plan') {
-        await supabase.from('events').insert({
+        const { data: plan, error } = await supabase.from('events').insert({
           conversation_id: conversationId,
           created_by: userId,
           name: title,
           description: description || null,
           status: 'planning',
           starts_at: null,
-        })
-        onCreated(`🗓️ Plan created: "${title}" — open the Events panel to set availability`)
+        }).select('id').single()
+        if (error) throw error
+        created = { kind: 'plan', id: plan.id, title }
 
       } else if (type === 'event') {
         if (!eventDate || !eventTime) { setSaving(false); return }
         const startsAt = new Date(eventDate)
         startsAt.setHours(eventTime.getHours(), eventTime.getMinutes(), 0, 0)
-        await supabase.from('events').insert({
+        const { data: event, error } = await supabase.from('events').insert({
           conversation_id: conversationId,
           created_by: userId,
           name: title,
@@ -171,12 +177,14 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
           location: location || null,
           status: 'confirmed',
           starts_at: startsAt.toISOString(),
-        })
-        onCreated(`📅 Event created: "${title}"`)
+        }).select('id').single()
+        if (error) throw error
+        created = { kind: 'event', id: event.id, title }
 
-      } else {
-        onCreated(`✅ ${type.charAt(0).toUpperCase() + type.slice(1)} created: "${title}"`)
       }
+      // Polls have no table yet, so nothing to announce.
+      if (created) void postItemCreated(conversationId, userId, created)
+      onCreated()
 
       const key = QUERY_KEY_MAP[type]
       if (key) void qc.invalidateQueries({ queryKey: [key, conversationId] })

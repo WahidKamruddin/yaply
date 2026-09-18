@@ -14,7 +14,6 @@ export interface CommandContext {
   queryClient: QueryClient
   openModal: (type: CreateItemType, title?: string) => void
   openHelp: () => void
-  sendSystemMessage: (text: string) => Promise<void>
   showLocalFeedback: (text: string) => void
 }
 
@@ -32,7 +31,7 @@ export async function executeCommand(name: string, ctx: CommandContext): Promise
         createdBy: ctx.userId,
         args: ctx.args,
       })
-      if (result.startsWith('⏰')) {
+      if (!result) {
         void ctx.queryClient.invalidateQueries({ queryKey: ['reminders'] })
       }
       break

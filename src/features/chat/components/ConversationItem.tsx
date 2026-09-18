@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { muteConversation, deleteConversation } from '@/features/chat/api/conversations'
 import Avatar from '@/components/Avatar'
 import type { ConversationListItem } from '@/features/chat/types'
+import { systemItemPreview } from '@/features/chat/lib/systemItem'
 
 interface Props {
   conversation: ConversationListItem
@@ -41,7 +42,11 @@ export default function ConversationItem({ conversation, currentUserId, isActive
   const isOnline = !conversation.isGroup && (otherMembers[0]?.profile.is_online ?? false)
 
   const lastContent = conversation.lastMessage
-    ? conversation.lastMessage.deletedAt
+    // System messages carry a future deletedAt (their 7-day expiry), so
+    // they're checked before the deleted state.
+    ? conversation.lastMessage.type === 'system'
+      ? systemItemPreview(conversation.lastMessage.content).slice(0, 60)
+      : conversation.lastMessage.deletedAt
       ? 'Message deleted'
       : conversation.lastMessage.type === 'gif'
         ? '🎞️ GIF'
