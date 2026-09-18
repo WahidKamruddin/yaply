@@ -4,11 +4,11 @@
 
 ### Platform Context
 
-When the user says **"ios"**, **"swift"**, or **"native"/"mobile"** — work exclusively inside `yaply-ios/` (Swift/SwiftUI, its own git repo and GitHub). Do not reference or modify files in the web root.
+**"ios"**, **"swift"**, **"native"/"mobile"** → work only in `yaply-ios/` (its own repo); don't touch the web root. **"web"** → work only in this repo; ignore `yaply-ios/`.
 
-When the user says **"web"** — work exclusively inside the yaply root folder (this repo). Ignore `yaply-ios/` entirely.
+**Tags:** `(w)` = web, `(i)` = iOS, `(wi)` = both. The user prefixes each item in a request with one.
 
-`yaply-ios/` is the active iOS client. A React Native rewrite (`yaply-native/`) was tried and abandoned on 2026-08-03 and has been deleted; any reference to it, or to `yaply-ios` being deprecated, is stale.
+`yaply-ios/` is the active iOS client. The React Native rewrite (`yaply-native/`) was abandoned 2026-08-03 and deleted; any reference to it, or to `yaply-ios` being deprecated, is stale.
 
 Web and yaply-ios are independent repos: separate git histories, GitHub remotes, and issue trackers. File every bug or feature request against the correct repo — never mix them.
 
