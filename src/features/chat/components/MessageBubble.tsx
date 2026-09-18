@@ -5,11 +5,25 @@ import * as Dialog from '@radix-ui/react-dialog'
 import type { DecryptedMessage } from '@/features/chat/types'
 import type { ReactionGroup } from '@/features/chat/api/reactions'
 import Avatar from '@/components/Avatar'
+import type { GroupPosition } from '@/features/chat/lib/messageGrouping'
 import AddToAlbumModal from './AddToAlbumModal'
 
 function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr)
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+// Small-radius "tail" corners for a bubble at a given spot in a run of
+// consecutive messages (Messenger style). 'single' and 'first' are the
+// original standalone-bubble tail; the tail side is right for own
+// messages, left for received. Middle bubbles use a slightly softer
+// radius (md) since both inner corners are tucked.
+function tailClasses(isOwn: boolean, position: GroupPosition): string {
+  switch (position) {
+    case 'middle': return isOwn ? 'rounded-tr-md rounded-br-md' : 'rounded-tl-md rounded-bl-md'
+    case 'last': return isOwn ? 'rounded-tr-sm' : 'rounded-tl-sm'
+    default: return isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'
+  }
 }
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉']
@@ -76,6 +90,12 @@ interface Props {
   // Any conversation member can pin/unpin any message. Undefined = not a
   // pinnable context (e.g. thread view).
   onTogglePin?: (messageId: string) => void
+  // Position in a run of consecutive messages from the same sender. The
+  // avatar shows only beside the last bubble, the name only above the first.
+  groupPosition?: GroupPosition
+  // Sender names label bubbles only in group chats — in a DM the header
+  // already says who the other person is.
+  showSenderName?: boolean
 }
 
 const SYSTEM_TAB_MAP: Array<[RegExp, string]> = [
@@ -104,7 +124,7 @@ const TAB_LABELS: Record<string, string> = {
   reminders: 'Reminders',
 }
 
-export default function MessageBubble({ message, isOwn, isRead, replyMessage, threadCount = 0, conversationId, currentUserId, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact, onOpenPanel, isPinned = false, onTogglePin }: Props) {
+export default function MessageBubble({ message, isOwn, isRead, replyMessage, threadCount = 0, conversationId, currentUserId, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact, onOpenPanel, isPinned = false, onTogglePin, groupPosition = 'single', showSenderName = true }: Props) {
   const [hovered, setHovered] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showTime, setShowTime] = useState(false)
@@ -130,6 +150,11 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
   // instead of the underlap treatment.
   const replyCanUnderlap = !(isFrameless && message.mediaUrl)
   const replyColors = REPLY_QUOTE_COLORS
+  const showAvatar = groupPosition === 'single' || groupPosition === 'last'
+  const showName = showSenderName && (groupPosition === 'single' || groupPosition === 'first')
+  // Tighter spacing inside a run; the gap after its last bubble is unchanged.
+  const rowSpacing = groupPosition === 'first' || groupPosition === 'middle' ? 'mb-0' : 'mb-1'
+  const avatarSpacer = <div className="w-7 flex-shrink-0" aria-hidden />
 
   if (isSystem) {
     // System messages with a past deletedAt are expired — render nothing.
@@ -154,8 +179,8 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
 
   if (message.deletedAt) {
     return (
-      <div className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'} mb-1`}>
-        {!isOwn && (
+      <div className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'} ${rowSpacing}`}>
+        {!isOwn && (showAvatar ? (
           <button
             onClick={openSenderProfile}
             disabled={!openSenderProfile}
@@ -164,7 +189,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
           >
             <Avatar src={message.senderProfile?.avatar_url} alt="" size={28} />
           </button>
-        )}
+        ) : avatarSpacer)}
         <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-tint border border-border">
           <AlertCircle size={12} className="text-text-subtle" />
           <span className="text-xs text-text-subtle italic">Message deleted</span>
@@ -176,11 +201,11 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
   return (
     <>
     <div
-      className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'} mb-1 group`}
+      className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'} ${rowSpacing} group`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); setShowEmojiPicker(false) }}
     >
-      {!isOwn && (
+      {!isOwn && (showAvatar ? (
         <button
           onClick={openSenderProfile}
           disabled={!openSenderProfile}
@@ -189,9 +214,9 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
         >
           <Avatar src={message.senderProfile?.avatar_url} alt="" size={28} />
         </button>
-      )}
+      ) : avatarSpacer)}
       <div className={`flex flex-col max-w-[65%] ${isOwn ? 'items-end' : 'items-start'}`}>
-        {!isOwn && (
+        {!isOwn && showName && (
           <button
             onClick={openSenderProfile}
             disabled={!openSenderProfile}
@@ -342,8 +367,8 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                   isFrameless && message.mediaUrl
                     ? ''
                     : isOwn
-                      ? 'bg-gradient-to-br from-primary to-primary-dark text-white rounded-br-sm'
-                      : 'bg-card text-text rounded-bl-sm border border-border-soft'
+                      ? `bg-gradient-to-br from-primary to-primary-dark text-white ${tailClasses(true, groupPosition)}`
+                      : `bg-card text-text ${tailClasses(false, groupPosition)} border border-border-soft`
                 } ${
                   !(isMedia && message.mediaUrl)
                     ? 'px-3 py-2'
