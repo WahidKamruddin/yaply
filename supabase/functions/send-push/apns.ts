@@ -76,6 +76,9 @@ export function invalidateJwt() {
 export type ApnsResult =
   | { outcome: 'sent' }
   | { outcome: 'prune'; reason: string }
+  // Our side is misconfigured (key, team, topic). Nothing is wrong with the
+  // token, so this must never count toward pruning it.
+  | { outcome: 'provider'; reason: string }
   | { outcome: 'failed'; reason: string }
 
 // Delivers one payload to one token, retrying only what is worth retrying.
@@ -118,6 +121,15 @@ export async function sendToDevice(
       invalidateJwt()
       headers.authorization = `bearer ${await apnsJwt()}`
       continue
+    }
+
+    // Every other 403 is a provider-side problem: a .p8 created for one APNs
+    // environment only (BadEnvironmentKeyInToken — the key works from Xcode
+    // and fails on TestFlight), the wrong team, or a topic the key cannot sign
+    // for. Retrying cannot help, and blaming the token would prune every row
+    // in the table after ten sends.
+    if (res.status === 403 || reason === 'TopicDisallowed' || reason === 'BadTopic') {
+      return { outcome: 'provider', reason }
     }
 
     // Should be unreachable once buildPayload has run, and retrying cannot help.

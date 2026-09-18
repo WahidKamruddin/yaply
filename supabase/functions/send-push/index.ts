@@ -74,6 +74,11 @@ async function fanout<T extends Deliverable>(
         } else if (result.outcome === 'prune') {
           stats.pruned++
           await admin.from('push_tokens').delete().eq('token', target.token)
+        } else if (result.outcome === 'provider') {
+          // Loud, but leaves fail_count alone: the token is healthy and the
+          // fix is in the APNs key or secrets, not the database.
+          stats.failed++
+          console.error(`APNs rejected our provider credentials for device ${target.device_id}: ${result.reason}`)
         } else {
           stats.failed++
           console.error(`APNs failed for device ${target.device_id}: ${result.reason}`)
