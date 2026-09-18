@@ -30,6 +30,7 @@ import type { GifResult } from '@/features/media/api/gifs'
 import { supabase } from '@/lib/supabase'
 import type { DecryptedMessage, ConversationListItem } from '@/features/chat/types'
 import MessageBubble from './MessageBubble'
+import { getGroupPositions } from '@/features/chat/lib/messageGrouping'
 import MessageInput from './MessageInput'
 import VoiceRecorderBar from './VoiceRecorderBar'
 import PinnedBanner from './PinnedBanner'
@@ -167,6 +168,8 @@ export default function ChatView({ currentUserId }: Props) {
     const q = searchQuery.toLowerCase()
     return allMessages.filter((m) => m.content.toLowerCase().includes(q))
   }, [allMessages, searchQuery])
+
+  const groupPositions = useMemo(() => getGroupPositions(displayMessages), [displayMessages])
 
   const lastOwnMessageId = useMemo(() => {
     const own = displayMessages.filter((m) => m.senderId === currentUserId && !m.deletedAt)
@@ -735,7 +738,7 @@ export default function ChatView({ currentUserId }: Props) {
           <div className="flex items-center justify-center h-24 text-text-subtle text-sm">Loading messages...</div>
         )}
 
-        {displayMessages.map((msg) => {
+        {displayMessages.map((msg, i) => {
           const msgDate = new Date(msg.createdAt).toDateString()
           const showSeparator = msgDate !== lastDate
           lastDate = msgDate
@@ -769,6 +772,8 @@ export default function ChatView({ currentUserId }: Props) {
                 onOpenPanel={handleOpenPanel}
                 isPinned={pinSet.has(msg.id)}
                 onTogglePin={!msg.deletedAt && !pendingIdSet.has(msg.id) ? togglePin : undefined}
+                groupPosition={groupPositions[i]}
+                showSenderName={conversation.isGroup}
               />
             </div>
           )
@@ -898,6 +903,7 @@ export default function ChatView({ currentUserId }: Props) {
           currentUserId={currentUserId}
           conversationId={activeId}
           memberUserIds={conversation.members.map((m) => m.userId)}
+          isGroup={conversation.isGroup}
           onClose={() => setThreadViewRoot(null)}
         />
       )}

@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import type { DbEnvelope } from '@/features/chat/hooks/useEncryption'
 import type { DecryptedMessage } from '@/features/chat/types'
 import MessageBubble from './MessageBubble'
+import { getGroupPositions } from '@/features/chat/lib/messageGrouping'
 
 interface Props {
   rootMessage: DecryptedMessage
@@ -15,10 +16,12 @@ interface Props {
   // Every member of the conversation — thread replies are envelope-encrypted
   // for all member devices, same as main messages.
   memberUserIds: string[]
+  // Sender names show on bubbles only in group chats.
+  isGroup: boolean
   onClose: () => void
 }
 
-export default function ThreadView({ rootMessage, currentUserId, conversationId, memberUserIds, onClose }: Props) {
+export default function ThreadView({ rootMessage, currentUserId, conversationId, memberUserIds, isGroup, onClose }: Props) {
   const [replies, setReplies] = useState<DecryptedMessage[]>([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -126,6 +129,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
 
   const rootName = rootMessage.senderProfile?.display_name ?? rootMessage.senderProfile?.username ?? 'Deleted user'
   const rootTime = formatDistanceToNow(new Date(rootMessage.createdAt), { addSuffix: true })
+  const replyPositions = getGroupPositions(replies)
 
   function replyMessageFor(msg: DecryptedMessage): DecryptedMessage | null {
     if (!msg.replyToId) return null
@@ -168,6 +172,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
             message={rootMessage}
             isOwn={rootMessage.senderId === currentUserId}
             currentUserId={currentUserId}
+            showSenderName={isGroup}
             onReply={() => {}}
             onDelete={() => {}}
           />
@@ -180,13 +185,15 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
               No replies yet — start the thread!
             </p>
           ) : (
-            replies.map((msg) => (
+            replies.map((msg, i) => (
               <MessageBubble
                 key={msg.id}
                 message={msg}
                 isOwn={msg.senderId === currentUserId}
                 currentUserId={currentUserId}
                 replyMessage={replyMessageFor(msg)}
+                groupPosition={replyPositions[i]}
+                showSenderName={isGroup}
                 onReply={() => {}}
                 onDelete={() => {}}
               />
