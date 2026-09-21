@@ -35,6 +35,14 @@ After every feature is finished and the user confirms it's good, ask: "Want to c
 
 Do not launch the dev server, open a browser, or otherwise check UI changes live — the user reviews all UI changes themselves. Verify with `tsc`/`lint` and code review only, unless the user explicitly asks for a live check.
 
+### Staging Branch
+
+All work now lands on `staging` first; the user merges `staging` → `main` when it's proven out. `staging` tracks `origin/staging`.
+
+**Staging access gate** (`src/components/StagingGate.tsx`, wired into `src/routes/__root.tsx`): a full-screen passcode prompt in front of the entire app — before the marketing page finishes mounting and before `/auth` — gated behind `VITE_STAGING_GATE=true`. Passcode `yapry67`, unlock persisted in `localStorage['yaply-staging-unlocked']`. Client-side only, not real auth — just keeps the staging deploy off casual visitors.
+
+**Must never be active on main/production:** the check (`import.meta.env.VITE_STAGING_GATE === 'true'`) is a build-time constant, so when the env var is unset (the default, and the only value it should ever have on the production Netlify site) the gate component and its markup are dead-code-eliminated out of the client bundle entirely — confirmed by inspecting the built output. Set `VITE_STAGING_GATE=true` **only** in the staging Netlify site/branch-context env vars, never on production. The `/` route's prerendered HTML (`generate-html.mjs`) does not currently bake the gate in even when the var is set at build time (an SSR-vs-client env quirk in this Vite/TanStack Start setup) — harmless since `/` is public marketing content anyway and the client bundle (which does correctly include/exclude the gate) takes over immediately on hydration, matching how `auth.tsx`/`chat.tsx` guards are already client-side-only.
+
 ---
 
 ## What This Is

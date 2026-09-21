@@ -4,6 +4,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 import Providers from '@/app/Providers'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import NotFoundScreen from '@/components/NotFoundScreen'
+import StagingGate from '@/components/StagingGate'
 import { useTheme } from '@/lib/useTheme'
 import appCss from '../styles.css?url'
 
@@ -37,9 +38,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <Providers>
-          <ErrorBoundary>{children}</ErrorBoundary>
-        </Providers>
+        <StagingGate>
+          <Providers>
+            <ErrorBoundary>{children}</ErrorBoundary>
+          </Providers>
+        </StagingGate>
         {import.meta.env.DEV && (
           <TanStackDevtools
             config={{ position: 'bottom-right' }}
