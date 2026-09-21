@@ -13,3 +13,8 @@ verify_jwt = true
 # including the public anon key.
 [functions.send-push]
 verify_jwt = false
+
+# Called before a visitor has any session — there's no user JWT to verify.
+# Anonymous and public by design; validation happens in the function body.
+[functions.join-waitlist]
+verify_jwt = false

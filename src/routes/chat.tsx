@@ -2,6 +2,7 @@ import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useCallback } from 'react'
 import { useAtom } from 'jotai'
 import { getSession, getUser, onAuthStateChange } from '@/lib/auth'
+import { WAITLIST_MODE } from '@/lib/waitlistMode'
 import ConversationList from '@/features/chat/components/ConversationList'
 import ChatView from '@/features/chat/components/ChatView'
 import UsernameSetupModal from '@/features/chat/components/UsernameSetupModal'
@@ -23,6 +24,7 @@ import type { User } from '@supabase/supabase-js'
 export const Route = createFileRoute('/chat')({
   beforeLoad: async () => {
     if (typeof document === 'undefined') return // SSR — no localStorage, client handles it
+    if (WAITLIST_MODE) throw redirect({ to: '/auth' })
     const session = await getSession()
     if (!session) throw redirect({ to: '/auth' })
   },

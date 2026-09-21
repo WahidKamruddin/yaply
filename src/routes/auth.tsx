@@ -3,12 +3,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff, Check, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getSession } from '@/lib/auth'
+import { WAITLIST_MODE } from '@/lib/waitlistMode'
 import YaplyLogo from '@/components/YaplyLogo'
+import WaitlistForm from '@/features/waitlist/components/WaitlistForm'
 import { getPasswordChecks, getPasswordStrength, isPasswordStrongEnough } from '@/lib/passwordStrength'
 
 export const Route = createFileRoute('/auth')({
   beforeLoad: async () => {
     if (typeof document === 'undefined') return // SSR — no localStorage, client handles it
+    if (WAITLIST_MODE) return // no app to bounce a returning session into
     const session = await getSession()
     if (session) throw redirect({ to: '/chat' })
   },
@@ -177,6 +180,10 @@ function AuthPage() {
               <YaplyLogo variant="mark" size={48} />
             </Link>
 
+            {WAITLIST_MODE ? (
+              <WaitlistForm />
+            ) : (
+              <>
             <div className="auth-head">
               <h1 className="auth-title">{mode === 'signin' ? 'Welcome back.' : 'Create your account.'}</h1>
               <p className="auth-subtitle">
@@ -331,6 +338,8 @@ function AuthPage() {
               </svg>
               Continue with Google
             </button>
+              </>
+            )}
           </div>
 
           <p className="auth-foot">
@@ -637,6 +646,20 @@ const AUTH_CSS = `
 .auth-resend-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .auth-submit { width: 100%; margin-top: 4px; }
+
+/* ---- waitlist ---- */
+.wl-eyebrow { margin: 0 auto 14px; }
+.wl-success {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 4px; padding: 8px 0 4px;
+  animation: auth-in 0.5s cubic-bezier(0.22,1,0.36,1) both;
+}
+.wl-success-icon {
+  width: 46px; height: 46px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--mint); background: var(--mint-soft); border: 1px solid var(--mint-line);
+  margin-bottom: 10px;
+}
 
 .auth-foot { margin: 22px 0 0; text-align: center; font-size: 13px; }
 .auth-foot a { color: var(--dim); text-decoration: none; font-family: var(--mono); font-size: 12.5px; transition: color 0.2s; }

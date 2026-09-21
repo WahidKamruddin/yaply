@@ -2,6 +2,7 @@ import { createFileRoute, redirect, useNavigate, Link } from '@tanstack/react-ro
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, Ban, Inbox, Search, Send, Sparkles, Users, X } from 'lucide-react'
 import { getSession, getUser, onAuthStateChange } from '@/lib/auth'
+import { WAITLIST_MODE } from '@/lib/waitlistMode'
 import LoadingScreen from '@/components/LoadingScreen'
 import FriendsList from '@/features/friends/components/FriendsList'
 import FriendRequestsList from '@/features/friends/components/FriendRequestsList'
@@ -14,6 +15,7 @@ import type { User } from '@supabase/supabase-js'
 export const Route = createFileRoute('/friends')({
   beforeLoad: async () => {
     if (typeof document === 'undefined') return // SSR — no localStorage, client handles it
+    if (WAITLIST_MODE) throw redirect({ to: '/auth' })
     const session = await getSession()
     if (!session) throw redirect({ to: '/auth' })
   },
