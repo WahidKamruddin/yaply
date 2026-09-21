@@ -240,6 +240,7 @@ export type Database = {
           joined_at: string | null
           last_read_at: string | null
           muted_until: string | null
+          mute_mentions: boolean
           request_state: string
           role: string | null
           user_id: string
@@ -251,6 +252,7 @@ export type Database = {
           joined_at?: string | null
           last_read_at?: string | null
           muted_until?: string | null
+          mute_mentions?: boolean
           request_state?: string
           role?: string | null
           user_id: string
@@ -262,6 +264,7 @@ export type Database = {
           joined_at?: string | null
           last_read_at?: string | null
           muted_until?: string | null
+          mute_mentions?: boolean
           request_state?: string
           role?: string | null
           user_id?: string
@@ -763,6 +766,8 @@ export type Database = {
           iv: string | null
           media_mime: string | null
           media_url: string | null
+          mentioned_user_ids: string[]
+          mentions_everyone: boolean
           reply_to_id: string | null
           sender_id: string | null
           thread_id: string | null
@@ -779,6 +784,8 @@ export type Database = {
           iv?: string | null
           media_mime?: string | null
           media_url?: string | null
+          mentioned_user_ids?: string[]
+          mentions_everyone?: boolean
           reply_to_id?: string | null
           sender_id?: string | null
           thread_id?: string | null
@@ -795,6 +802,8 @@ export type Database = {
           iv?: string | null
           media_mime?: string | null
           media_url?: string | null
+          mentioned_user_ids?: string[]
+          mentions_everyone?: boolean
           reply_to_id?: string | null
           sender_id?: string | null
           thread_id?: string | null
@@ -1498,6 +1507,8 @@ export type Database = {
           p_iv: string
           p_media_mime?: string
           p_media_url?: string
+          p_mentioned_user_ids?: string[]
+          p_mentions_everyone?: boolean
           p_reply_to_id?: string
           p_thread_id?: string
           p_type?: string
@@ -1513,6 +1524,8 @@ export type Database = {
           iv: string | null
           media_mime: string | null
           media_url: string | null
+          mentioned_user_ids: string[]
+          mentions_everyone: boolean
           reply_to_id: string | null
           sender_id: string | null
           thread_id: string | null

@@ -10,6 +10,7 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
       last_read_at,
       is_muted,
       muted_until,
+      mute_mentions,
       request_state,
       conversations (
         id,
@@ -57,6 +58,7 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
 
   const lastMessages: Record<string, DecryptedMessage> = {}
   const unreadCounts: Record<string, number> = {}
+  const mentionUnreadCounts: Record<string, number> = {}
   // enc_v = 2 previews are decrypted after the loop via one batched envelope
   // fetch, and awaited before returning — no flash of ciphertext.
   const v2Previews: Array<{ convId: string; messageId: string; content: string; iv: string | null }> = []
@@ -73,7 +75,9 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
         enc_v,
         type,
         deleted_at,
-        created_at
+        created_at,
+        mentioned_user_ids,
+        mentions_everyone
       `)
       .in('conversation_id', convIds)
       .is('deleted_at', null)
@@ -85,6 +89,7 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
         id: string; conversation_id: string; sender_id: string | null
         content: string; iv: string | null; enc_v: number | null; type: string
         deleted_at: string | null; created_at: string
+        mentioned_user_ids: string[] | null; mentions_everyone: boolean | null
       }>) {
         if (!seen.has(m.conversation_id)) {
           seen.add(m.conversation_id)
@@ -128,6 +133,13 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
           const lastRead = myLastReadAt[m.conversation_id]
           if (!lastRead || new Date(m.created_at) > new Date(lastRead)) {
             unreadCounts[m.conversation_id] = (unreadCounts[m.conversation_id] ?? 0) + 1
+            // Mirrors push_targets_for_message's badge subquery: a mention
+            // counts separately so it can surface through a "mute chat" (not
+            // "mute everything") conversation.
+            const isMention = m.mentions_everyone || (m.mentioned_user_ids ?? []).includes(userId)
+            if (isMention) {
+              mentionUnreadCounts[m.conversation_id] = (mentionUnreadCounts[m.conversation_id] ?? 0) + 1
+            }
           }
         }
       }
@@ -192,9 +204,11 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
 
       const lastMsg = lastMessages[conv.id] ?? null
       const unreadCount = unreadCounts[conv.id] ?? 0
+      const mentionUnreadCount = mentionUnreadCounts[conv.id] ?? 0
 
       const rowMutedUntil = (row as unknown as { muted_until: string | null }).muted_until
       const isMuted = rowMutedUntil ? new Date(rowMutedUntil) > new Date() : false
+      const muteMentions = (row as unknown as { mute_mentions: boolean | null }).mute_mentions ?? false
 
       const item: ConversationListItem = {
         id: conv.id,
@@ -208,6 +222,8 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
         mutedUntil: rowMutedUntil,
         requestState: (myRequestState[conv.id] ?? 'accepted') as ConversationListItem['requestState'],
         updatedAt: conv.updated_at,
+        mentionUnreadCount,
+        muteMentions,
       }
       return item
     })
@@ -259,12 +275,16 @@ export async function muteConversation(
   conversationId: string,
   userId: string,
   mutedUntil: Date | null,
+  muteMentions = false,
 ): Promise<void> {
   const { error } = await supabase
     .from('conversation_members')
     .update({
       is_muted: mutedUntil !== null,
       muted_until: mutedUntil?.toISOString() ?? null,
+      // Unmuting always resets mute_mentions too — it's meaningless while
+      // muted_until is null.
+      mute_mentions: mutedUntil === null ? false : muteMentions,
     })
     .eq('conversation_id', conversationId)
     .eq('user_id', userId)

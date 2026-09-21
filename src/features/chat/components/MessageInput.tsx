@@ -1,10 +1,12 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import type { KeyboardEvent } from 'react'
-import { Plus, FileText, Camera, Mic, Image as ImageIcon, Smile, Send, X, Terminal } from 'lucide-react'
+import { Plus, FileText, Camera, Mic, Image as ImageIcon, Smile, Send, X, Terminal, AtSign } from 'lucide-react'
 import { useAtom } from 'jotai'
 import { replyToMessageIdAtom, commandFeedbackAtom } from '@/features/chat/store/chat.atoms'
-import type { DecryptedMessage } from '@/features/chat/types'
+import type { DecryptedMessage, MemberSummary } from '@/features/chat/types'
 import { COMMANDS } from '@yaply/shared/constants/commands'
+import { activeMentionQuery, MENTION_EVERYONE } from '@yaply/shared/mentions'
+import Avatar from '@/components/Avatar'
 
 interface Props {
   onSend: (text: string) => void
@@ -23,7 +25,22 @@ interface Props {
   onExpression?: () => void
   // Hides the attachment toggle + emoji button entirely (e.g. thread replies).
   showAttachments?: boolean
+  // @mentions only exist in group chats — both default to disabled so DM/
+  // thread hosts that don't pass them get plain composer behavior.
+  members?: MemberSummary[]
+  isGroup?: boolean
+  currentUserId?: string
 }
+
+interface MentionOption {
+  id: string
+  everyone: boolean
+  username: string
+  displayName: string
+  avatarUrl: string | null
+}
+
+const MENTION_CANDIDATE_CAP = 8
 
 const noop = () => {}
 
@@ -45,10 +62,17 @@ export default function MessageInput({
   onStartVoice = noop,
   onExpression = noop,
   showAttachments = true,
+  members = [],
+  isGroup = false,
+  currentUserId,
 }: Props) {
   const [text, setText] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const [menuExpanded, setMenuExpanded] = useState(false)
+  const [caret, setCaret] = useState(0)
+  const [mentionIndex, setMentionIndex] = useState(-1)
+  const [mentionDismissed, setMentionDismissed] = useState(false)
+  const dismissedTokenStart = useRef<number | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const collapseMenu = useCallback(() => setMenuExpanded(false), [])
@@ -95,9 +119,69 @@ export default function MessageInput({
     setSelectedIndex(-1)
   }, [filteredCommands.length])
 
+  // The slash-command palette always wins if both could apply.
+  const mentionQuery = useMemo(() => {
+    if (!isGroup || showPalette) return null
+    return activeMentionQuery(text, caret)
+  }, [isGroup, showPalette, text, caret])
+
+  const mentionCandidates = useMemo<MentionOption[]>(() => {
+    if (!mentionQuery) return []
+    const { query } = mentionQuery
+    const options: MentionOption[] = []
+    if (MENTION_EVERYONE.startsWith(query)) {
+      options.push({ id: 'everyone', everyone: true, username: MENTION_EVERYONE, displayName: 'Notify everyone', avatarUrl: null })
+    }
+    for (const m of members) {
+      if (m.userId === currentUserId) continue
+      const uname = m.profile.username.toLowerCase()
+      const dname = (m.profile.display_name ?? '').toLowerCase()
+      if (uname.startsWith(query) || dname.startsWith(query)) {
+        options.push({
+          id: m.userId,
+          everyone: false,
+          username: m.profile.username,
+          displayName: m.profile.display_name ?? m.profile.username,
+          avatarUrl: m.profile.avatar_url,
+        })
+      }
+      if (options.length >= MENTION_CANDIDATE_CAP) break
+    }
+    return options
+  }, [mentionQuery, members, currentUserId])
+
+  // Escape dismisses the palette for the @-token being typed without clearing
+  // the text; typing a new token (different start index) re-arms it.
+  useEffect(() => {
+    if (mentionQuery?.start !== dismissedTokenStart.current) {
+      setMentionDismissed(false)
+    }
+  }, [mentionQuery?.start])
+
+  const showMentionPalette = mentionCandidates.length > 0 && !mentionDismissed
+
+  useEffect(() => {
+    setMentionIndex(-1)
+  }, [mentionCandidates.length])
+
+  function selectMention(option: MentionOption) {
+    if (!mentionQuery) return
+    const insert = `@${option.username} `
+    const newText = text.slice(0, mentionQuery.start) + insert + text.slice(mentionQuery.end)
+    setText(newText)
+    setMentionIndex(-1)
+    const newCaret = mentionQuery.start + insert.length
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+      textareaRef.current?.setSelectionRange(newCaret, newCaret)
+    })
+    setCaret(newCaret)
+  }
+
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value
     setText(value)
+    setCaret(e.target.selectionStart)
     if (value) {
       onTyping?.()
       setMenuExpanded(false)
@@ -112,6 +196,10 @@ export default function MessageInput({
       el.style.height = `${Math.min(el.scrollHeight, 160)}px`
     }
   }, [onTyping, onStopTyping])
+
+  const handleSelect = useCallback((e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    setCaret(e.currentTarget.selectionStart)
+  }, [])
 
   function selectCommand(name: string) {
     const newText = `/${name} `
@@ -148,6 +236,34 @@ export default function MessageInput({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (showMentionPalette) {
+        if (e.key === 'Tab' || e.key === 'ArrowDown') {
+          e.preventDefault()
+          setMentionIndex((i) => (i + 1) % mentionCandidates.length)
+          return
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          setMentionIndex((i) => (i - 1 + mentionCandidates.length) % mentionCandidates.length)
+          return
+        }
+        if (e.key === 'Escape') {
+          // Unlike the command palette, Escape only closes this — it must not
+          // wipe out what the user has typed.
+          e.preventDefault()
+          setMentionIndex(-1)
+          dismissedTokenStart.current = mentionQuery?.start ?? null
+          setMentionDismissed(true)
+          return
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          const chosen = mentionIndex >= 0 ? mentionCandidates[mentionIndex] : mentionCandidates[0]
+          selectMention(chosen)
+          return
+        }
+      }
+
       if (showPalette) {
         if (e.key === 'Tab' || e.key === 'ArrowDown') {
           e.preventDefault()
@@ -186,7 +302,7 @@ export default function MessageInput({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [text, showPalette, selectedIndex, filteredCommands],
+    [text, showPalette, selectedIndex, filteredCommands, showMentionPalette, mentionIndex, mentionCandidates, mentionQuery],
   )
 
   return (
@@ -263,6 +379,40 @@ export default function MessageInput({
         </div>
       )}
 
+      {/* @mention palette — group chats only */}
+      {showMentionPalette && (
+        <div className="mb-2 bg-card border border-border rounded-xl overflow-hidden shadow-lg shadow-black/40">
+          <div className="px-3 py-2 border-b border-border">
+            <span className="text-xs text-text-subtle font-medium">MEMBERS</span>
+          </div>
+          {mentionCandidates.map((option, idx) => (
+            <button
+              key={option.id}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 transition-colors text-left border-l-2 ${
+                idx === mentionIndex
+                  ? 'bg-primary-tint border-[#5b8def]'
+                  : 'border-transparent hover:bg-tint'
+              }`}
+              onClick={() => selectMention(option)}
+            >
+              {option.everyone ? (
+                <span className="w-6 h-6 flex-shrink-0 rounded-full bg-[#5b8def] flex items-center justify-center">
+                  <AtSign size={13} className="text-white" />
+                </span>
+              ) : (
+                <Avatar src={option.avatarUrl} alt={option.displayName} size={24} />
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm text-text truncate">{option.displayName}</span>
+                <span className="block text-xs text-text-subtle truncate">
+                  {option.everyone ? 'Notify everyone' : `@${option.username}`}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-end gap-2">
         {showAttachments && (
           <button
@@ -311,6 +461,7 @@ export default function MessageInput({
             value={text}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
+            onSelect={handleSelect}
             onFocus={collapseMenu}
             placeholder={placeholder ?? 'Message...'}
             disabled={disabled}

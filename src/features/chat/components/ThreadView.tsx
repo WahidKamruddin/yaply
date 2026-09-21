@@ -5,23 +5,26 @@ import { useEncryption, getCandidateFingerprints, decodePhase1 } from '@/feature
 import { fetchThreadMessages, fetchEnvelopesForMessages, sendMessage } from '@/features/chat/api/messages'
 import { supabase } from '@/lib/supabase'
 import type { DbEnvelope } from '@/features/chat/hooks/useEncryption'
-import type { DecryptedMessage } from '@/features/chat/types'
+import type { DecryptedMessage, MemberSummary } from '@/features/chat/types'
 import MessageBubble from './MessageBubble'
 import { getGroupPositions } from '@/features/chat/lib/messageGrouping'
+import { extractMentions } from '@yaply/shared/mentions'
 
 interface Props {
   rootMessage: DecryptedMessage
   currentUserId: string
   conversationId: string
   // Every member of the conversation — thread replies are envelope-encrypted
-  // for all member devices, same as main messages.
-  memberUserIds: string[]
+  // for all member devices, same as main messages, and (for groups) used to
+  // resolve typed @mentions.
+  members: MemberSummary[]
   // Sender names show on bubbles only in group chats.
   isGroup: boolean
   onClose: () => void
 }
 
-export default function ThreadView({ rootMessage, currentUserId, conversationId, memberUserIds, isGroup, onClose }: Props) {
+export default function ThreadView({ rootMessage, currentUserId, conversationId, members, isGroup, onClose }: Props) {
+  const memberUserIds = members.map((m) => m.userId)
   const [replies, setReplies] = useState<DecryptedMessage[]>([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -108,6 +111,15 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
       // Envelope-encrypt for all member devices; encrypt() falls back to
       // phase-1 (enc_v = NULL, iv = NULL) when a member has no device yet.
       const result = await encrypt(memberUserIds, trimmed)
+      // Same plaintext-before-encryption extraction as the main composer
+      // (ChatView.handleSend) — see CLAUDE.md's mentions section.
+      const { mentionedUserIds, mentionsEveryone } = isGroup
+        ? extractMentions(
+            trimmed,
+            members.map((m) => ({ userId: m.userId, username: m.profile.username })),
+            currentUserId,
+          )
+        : { mentionedUserIds: [], mentionsEveryone: false }
       await sendMessage({
         conversationId,
         senderId: currentUserId,
@@ -117,6 +129,8 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
         type: 'text',
         replyToId: rootMessage.id,
         threadId: rootMessage.id,
+        mentionedUserIds,
+        mentionsEveryone,
       })
       await loadReplies()
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
@@ -125,7 +139,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
     }
 
     setSending(false)
-  }, [text, sending, rootMessage, conversationId, currentUserId, memberUserIds, encrypt, loadReplies])
+  }, [text, sending, rootMessage, conversationId, currentUserId, memberUserIds, members, isGroup, encrypt, loadReplies])
 
   const rootName = rootMessage.senderProfile?.display_name ?? rootMessage.senderProfile?.username ?? 'Deleted user'
   const rootTime = formatDistanceToNow(new Date(rootMessage.createdAt), { addSuffix: true })
@@ -173,6 +187,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
             isOwn={rootMessage.senderId === currentUserId}
             currentUserId={currentUserId}
             showSenderName={isGroup}
+            mentionMembers={isGroup ? members : undefined}
             onReply={() => {}}
             onDelete={() => {}}
           />
@@ -194,6 +209,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
                 replyMessage={replyMessageFor(msg)}
                 groupPosition={replyPositions[i]}
                 showSenderName={isGroup}
+                mentionMembers={isGroup ? members : undefined}
                 onReply={() => {}}
                 onDelete={() => {}}
               />

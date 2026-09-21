@@ -30,6 +30,7 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
   const [deleting, setDeleting] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [muted, setMuted] = useState(conversation.isMuted)
+  const [muteMentions, setMuteMentions] = useState(conversation.muteMentions)
   const [muting, setMuting] = useState(false)
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
   const [leaving, setLeaving] = useState(false)
@@ -101,17 +102,37 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
   const toggleMute = useCallback(async () => {
     const next = !muted
     setMuted(next)
+    if (!next) setMuteMentions(false) // unmuting always resets "mute everything" too
     setMuting(true)
     try {
       // JS max Date = "muted forever", matching the ConversationItem convention.
-      await muteConversation(conversation.id, currentUserId, next ? new Date(8640000000000000) : null)
+      await muteConversation(
+        conversation.id,
+        currentUserId,
+        next ? new Date(8640000000000000) : null,
+        next ? muteMentions : false,
+      )
       refresh()
     } catch (err) {
       setMuted(!next)
       setActionError(err instanceof Error ? err.message : 'Failed to update notifications')
     }
     setMuting(false)
-  }, [muted, conversation.id, currentUserId])
+  }, [muted, muteMentions, conversation.id, currentUserId])
+
+  const toggleMuteMentions = useCallback(async () => {
+    const next = !muteMentions
+    setMuteMentions(next)
+    setMuting(true)
+    try {
+      await muteConversation(conversation.id, currentUserId, new Date(8640000000000000), next)
+      refresh()
+    } catch (err) {
+      setMuteMentions(!next)
+      setActionError(err instanceof Error ? err.message : 'Failed to update notifications')
+    }
+    setMuting(false)
+  }, [muteMentions, conversation.id, currentUserId])
 
   const handleLeave = useCallback(async () => {
     setLeaving(true)
@@ -222,11 +243,28 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
             className="w-full flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-tint transition-colors disabled:opacity-50"
           >
             {muted ? <BellOff size={15} className="text-text-subtle" /> : <Bell size={15} className="text-text-subtle" />}
-            <span className="text-sm text-text flex-1 text-left">Mute notifications</span>
+            <div className="flex-1 text-left">
+              <span className="text-sm text-text block">Mute notifications</span>
+              <span className="text-[11px] text-text-subtle">
+                {muted ? (muteMentions ? 'Nothing will notify you' : '@mentions still notify you') : 'On'}
+              </span>
+            </div>
             <span className={`relative w-9 h-5 rounded-full transition-colors ${muted ? 'bg-[#5b8def]' : 'bg-border'}`}>
               <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${muted ? 'left-4' : 'left-0.5'}`} />
             </span>
           </button>
+          {muted && (
+            <button
+              onClick={() => void toggleMuteMentions()}
+              disabled={muting}
+              className="w-full flex items-center gap-3 pl-9 pr-2 py-2.5 rounded-xl hover:bg-tint transition-colors disabled:opacity-50"
+            >
+              <span className="text-sm text-text flex-1 text-left">Also mute @mentions</span>
+              <span className={`relative w-9 h-5 rounded-full transition-colors ${muteMentions ? 'bg-[#5b8def]' : 'bg-border'}`}>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${muteMentions ? 'left-4' : 'left-0.5'}`} />
+              </span>
+            </button>
+          )}
           <button
             onClick={() => setShowLeaveConfirm(true)}
             className="w-full flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-red-500/10 transition-colors"

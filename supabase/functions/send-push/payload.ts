@@ -46,6 +46,7 @@ export interface Target {
   key_iv: string | null
   wrapped_key: string | null
   unread_count: number
+  is_mention: boolean
 }
 
 export interface BuiltPayload {
@@ -95,7 +96,9 @@ export function buildPayload(ctx: MessageContext, target: Target): BuiltPayload 
   // Media is never encrypted, so its body is final and the extension has
   // nothing to do. Text is a placeholder the extension replaces.
   const mediaBody = MEDIA_BODY[ctx.type]
-  const fallbackBody = mediaBody ?? 'Sent a message'
+  // Media can't carry a mention (messages_mentions_text_only), so is_mention
+  // here only ever fires for text messages.
+  const fallbackBody = mediaBody ?? (target.is_mention ? 'Mentioned you' : 'Sent a message')
   const canDecrypt = mediaBody === undefined && ctx.content !== null
 
   const aps: Record<string, unknown> = {
@@ -106,7 +109,7 @@ export function buildPayload(ctx: MessageContext, target: Target): BuiltPayload 
     sound: 'default',
     badge: target.unread_count,
     'thread-id': ctx.conversation_id,
-    'interruption-level': 'active',
+    'interruption-level': target.is_mention ? 'time-sensitive' : 'active',
     // Required, or iOS never launches the service extension and the placeholder
     // body is what the user sees.
     ...(canDecrypt ? { 'mutable-content': 1 } : {}),
@@ -116,6 +119,7 @@ export function buildPayload(ctx: MessageContext, target: Target): BuiltPayload 
     aps,
     v: 1,
     kind: 'message',
+    mention: target.is_mention,
     message_id: ctx.message_id,
     // The device this payload is addressed to. Lets the extension pick the
     // private key for the envelope's fingerprint, including a key adopted via

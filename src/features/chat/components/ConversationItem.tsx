@@ -63,6 +63,13 @@ export default function ConversationItem({ conversation, currentUserId, isActive
           : conversation.lastMessage.content.slice(0, 60)
     : 'No messages yet'
 
+  // Mirrors the server's push_targets_for_message badge rule: a muted chat
+  // still surfaces its unread @mentions unless "mute everything" is also on.
+  const displayUnreadCount = conversation.isMuted
+    ? (conversation.muteMentions ? 0 : conversation.mentionUnreadCount)
+    : conversation.unreadCount
+  const isMentionOnlyBadge = conversation.isMuted && displayUnreadCount > 0
+
   const timeAgo = conversation.updatedAt
     ? formatDistanceToNow(new Date(conversation.updatedAt), { addSuffix: false })
     : ''
@@ -168,12 +175,17 @@ export default function ConversationItem({ conversation, currentUserId, isActive
               </div>
             </div>
             <div className="flex items-center justify-between gap-1 mt-0.5">
-              <p className={`text-xs truncate ${!isActive && conversation.unreadCount > 0 ? 'text-text font-semibold' : 'text-text-muted'}`}>
+              <p className={`text-xs truncate ${!isActive && displayUnreadCount > 0 ? 'text-text font-semibold' : 'text-text-muted'}`}>
                 {lastContent}
               </p>
-              {!isActive && conversation.unreadCount > 0 && (
-                <span className="flex-shrink-0 min-w-[18px] h-[18px] flex items-center justify-center bg-[#5b8def] text-xs text-white font-semibold rounded-full px-1">
-                  {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
+              {!isActive && displayUnreadCount > 0 && (
+                <span
+                  className={`flex-shrink-0 min-w-[18px] h-[18px] flex items-center justify-center text-xs text-white font-semibold rounded-full px-1 ${
+                    isMentionOnlyBadge ? 'bg-[#5b8def]/70 ring-1 ring-[#5b8def]' : 'bg-[#5b8def]'
+                  }`}
+                  title={isMentionOnlyBadge ? 'Unread @mentions in a muted chat' : undefined}
+                >
+                  {isMentionOnlyBadge ? '@' : displayUnreadCount > 99 ? '99+' : displayUnreadCount}
                 </span>
               )}
             </div>
