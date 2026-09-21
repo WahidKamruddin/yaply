@@ -5,7 +5,6 @@ import { submitWaitlist } from '../api/submitWaitlist'
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export default function WaitlistForm() {
-  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -20,7 +19,7 @@ export default function WaitlistForm() {
     }
     setLoading(true)
     try {
-      await submitWaitlist(name.trim(), email.trim())
+      await submitWaitlist(email.trim())
       setJoined(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Try again.')
@@ -53,20 +52,6 @@ export default function WaitlistForm() {
       </div>
 
       <form onSubmit={(e) => void handleSubmit(e)} className="auth-form">
-        <div className="auth-field">
-          <label htmlFor="wl-name">Name</label>
-          <input
-            id="wl-name"
-            type="text"
-            placeholder="Your name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            maxLength={100}
-            autoComplete="name"
-          />
-        </div>
-
         <div className="auth-field">
           <label htmlFor="wl-email">Email</label>
           <input

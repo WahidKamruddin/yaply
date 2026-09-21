@@ -1,8 +1,8 @@
 import { supabase } from '@/lib/supabase'
 
-export async function submitWaitlist(name: string, email: string): Promise<void> {
+export async function submitWaitlist(email: string): Promise<void> {
   const { error } = await supabase.functions.invoke('join-waitlist', {
-    body: { name, email },
+    body: { email },
   })
   if (error) throw error
 }
