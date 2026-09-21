@@ -8,7 +8,11 @@ export interface MuteArgs {
 }
 
 export async function muteHandler({ conversationId, userId, args }: MuteArgs): Promise<string> {
-  const durationStr = args[0] ?? 'forever'
+  // "/mute all" or "/mute all 2h" mutes @mentions too, not just ordinary
+  // messages; plain "/mute [duration]" leaves mentions notifying by default.
+  const muteMentions = args[0] === 'all'
+  const rest = muteMentions ? args.slice(1) : args
+  const durationStr = rest[0] ?? 'forever'
 
   // parseDuration returns null for both "forever" and unparseable input, so
   // handle the explicit "forever" case first and treat any other null as an error.
@@ -20,8 +24,9 @@ export async function muteHandler({ conversationId, userId, args }: MuteArgs): P
     }
   }
 
-  await muteConversation(conversationId, userId, until)
+  await muteConversation(conversationId, userId, until, muteMentions)
+  const suffix = muteMentions ? ' (including @mentions)' : ''
   return until
-    ? `Conversation muted until ${until.toLocaleString()}`
-    : 'Conversation muted indefinitely'
+    ? `Conversation muted until ${until.toLocaleString()}${suffix}`
+    : `Conversation muted indefinitely${suffix}`
 }

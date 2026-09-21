@@ -159,6 +159,55 @@ Settings → Devices lists the user's `devices` rows, renameable inline, revocab
 
 ---
 
+## @mentions (group chats only)
+
+Any group member can `@username` one member or `@everyone`. Migration `00045`.
+Shared grammar module — must match byte-for-byte: `packages/shared/src/mentions.ts`
+(web) ⟷ `yaply-ios/yaply/yaply/Features/Chat/Support/Mentions.swift` (iOS).
+
+**Plaintext side-channel:** the server can't read `content` (ciphertext) but must
+decide push/badge targeting, so `messages.mentioned_user_ids uuid[]` /
+`mentions_everyone boolean` carry mention targeting in plaintext beside it — same
+precedent as `reply_to_id`/`thread_id`. Rendering never reads these columns; the
+bubble tokenizes decrypted text against the member list instead.
+
+**Token grammar:** `@` triggers only at start-of-text or after whitespace.
+Candidate = longest `usernameSchema`-charset run (`[A-Za-z0-9_.-]`) after `@`,
+lowercased, resolved by **longest member-username that's a prefix of it** (never a
+bare regex) — so `@bob.`/`@bob's` resolve to `bob`, `@bobby` beats `bob`.
+`everyone` is reserved, checked first.
+
+**Send path:** `extractMentions(text, members, senderId)` runs on plaintext
+*before* encryption, in `ChatView.handleSend`/`ThreadView` (web) and
+`ChatViewModel.sendMessage`/`ThreadViewModel` (iOS) — group conversations only.
+Passed to `send_message_with_envelopes` or set directly on the phase-1 insert.
+
+**Anti-spoof trigger:** the plain `messages` insert (phase-1/media/system) bypasses
+the RPC, so `trg_messages_sanitize_mentions` (BEFORE INSERT) is the real guard —
+zeroes both columns outside groups/text, intersects `mentioned_user_ids` against
+actual membership, drops the sender. Any member mentioning `@everyone` bypassing
+their own mute is the feature working as designed, not a hole.
+
+**Two-level mute** (`conversation_members.mute_mentions`, meaningful only while
+`muted_until` is future): *Mute chat* (default, `false`) still notifies on a
+mention; *Mute everything* (`true`) silences mentions too. Unmuting always resets
+it to `false` in the same write.
+
+**Suppression/badge rule** — `push_targets_for_message`'s `recips` CTE and its
+per-message badge subquery (`00045`, superseding `00044`): a muted member still
+counts when `(mentions_everyone OR user_id = ANY(mentioned_user_ids)) AND NOT
+mute_mentions` — never overrides a block or `request_state <> 'accepted'`. Both
+clients' local suppression (web `conversations.ts`/`ConversationItem`; iOS
+`ConversationListViewModel.handleIncomingMessage`/`totalUnreadCount`) must apply
+the identical rule or the badge and banner disagree with the push.
+
+**Push payload:** `push_targets_for_message` returns `is_mention`; `send-push`
+sets `mention: target.is_mention` and swaps the undecryptable/oversized fallback
+body to `"Mentioned you"` — **server-side**, so neither NSE needs mention-awareness
+of its own (it only ever decrypts).
+
+---
+
 ## Security Model — Known Gaps & Limitations
 
 E2E here means **text message content is encrypted between a user's active devices** — do not overstate it. These are documented limitations, not bugs:
@@ -166,7 +215,7 @@ E2E here means **text message content is encrypted between a user's active devic
 - **Out of scope:** cold-start history recovery (needs key escrow, deliberately rejected); pruning stale `devices` rows; message editing.
 - **No key verification UI:** an active or compromised server could substitute public keys. Protects against a passive server only.
 - **No forward secrecy / ratchet:** identity keys never rotate, so a leaked device key exposes past and future messages to it.
-- **Metadata is plaintext:** who talks to whom, timing, membership, reply chains, sizes.
+- **Metadata is plaintext:** who talks to whom, timing, membership, reply chains, sizes, and (since `00045`) who was @mentioned — see @mentions below for why that one can't be encrypted.
 - **Private keys are extractable JWKs in IndexedDB** — exfiltratable via XSS.
 - **Media is not encrypted:** images, files, voice, stickers are public Storage URLs. Reactions are plaintext.
 - **No "log out everywhere";** offline revocation takes effect at next launch.
@@ -183,9 +232,9 @@ Migrations in `supabase/migrations/` match the live DB. `src/lib/database.types.
 
 **`conversations`:** `id, type ('direct'|'group'|'ai'), name, avatar_url, created_by, created_at, updated_at`
 
-**`conversation_members`:** `conversation_id, user_id, role ('owner'|'admin'|'member'), joined_at, last_read_at, muted_until, request_state ('accepted'|'pending'|'declined', default 'accepted')`. `muted_until`: null = not muted, future = muted until then, `8640000000000` ms epoch (JS max Date) = forever.
+**`conversation_members`:** `conversation_id, user_id, role ('owner'|'admin'|'member'), joined_at, last_read_at, muted_until, mute_mentions (00045), request_state ('accepted'|'pending'|'declined', default 'accepted')`. `muted_until`: null = not muted, future = muted until then, `8640000000000` ms epoch (JS max Date) = forever. `mute_mentions`: only meaningful while `muted_until` is in the future — `true` = "mute everything" (even @mentions), `false` (default) = "mute chat" (mentions still notify). See @mentions below.
 
-**`messages`:** `id, conversation_id, sender_id, type ('text'|'image'|'gif'|'sticker'|'file'|'voice'|'system'|'ai'), content, iv, enc_v, media_url, media_mime, reply_to_id, thread_id, edited_at, deleted_at, created_at`. `voice` added in `00037`. See the wire format above for `content`/`iv`/`enc_v`.
+**`messages`:** `id, conversation_id, sender_id, type ('text'|'image'|'gif'|'sticker'|'file'|'voice'|'system'|'ai'), content, iv, enc_v, media_url, media_mime, reply_to_id, thread_id, mentioned_user_ids, mentions_everyone, edited_at, deleted_at, created_at`. `voice` added in `00037`. `mentioned_user_ids`/`mentions_everyone` added in `00045`, see @mentions below. See the wire format above for `content`/`iv`/`enc_v`.
 
 **`message_envelopes`:** `id, message_id (FK ON DELETE CASCADE), recipient_user_id, recipient_fp, eph_pub, key_iv, wrapped_key, created_at`. UNIQUE `(message_id, recipient_user_id, recipient_fp)`; index `(recipient_user_id, message_id)`. RLS: SELECT for recipient or the message's sender; INSERT/DELETE for the sender.
 
@@ -219,7 +268,7 @@ Migrations in `supabase/migrations/` match the live DB. `src/lib/database.types.
 ### Key RPCs
 
 - `find_or_create_direct_conversation(target_user_id)` — always use for DMs. Raises `blocked`, `cannot message yourself`. Recipient's `request_state` is `'accepted'` if friends, else `'pending'`. If the caller previously declined, resets **their own** side to `'accepted'`.
-- `send_message_with_envelopes(p_conversation_id, p_content, p_iv, p_envelopes jsonb, p_type, p_reply_to_id, p_thread_id, p_media_url, p_media_mime)` — the only path for encrypted sends. Rejects empty envelopes or NULL iv; gates on `can_send_in_conversation()` (raises `cannot send in this conversation`). Plain `messages` inserts are only for phase-1/system/media.
+- `send_message_with_envelopes(p_conversation_id, p_content, p_iv, p_envelopes jsonb, p_type, p_reply_to_id, p_thread_id, p_media_url, p_media_mime, p_mentioned_user_ids uuid[], p_mentions_everyone)` — the only path for encrypted sends. Rejects empty envelopes or NULL iv; gates on `can_send_in_conversation()` (raises `cannot send in this conversation`). The last two params (added `00045`, defaulted) are @mentions targeting — see below. Plain `messages` inserts are only for phase-1/system/media.
 - `create_group_conversation(p_name, p_member_ids)` / `add_group_member(p_conversation_id, p_user_id)` — raise `can only add friends to groups`.
 - `send_friend_request(p_recipient_id)` / `accept_friend_request(p_request_id)` / `block_user(p_user_id)` — the only writes into `friendships`. Send auto-accepts a reverse pending request; raises `friend request already exists`, `blocked`, `cannot friend yourself`. Block inserts the block and deletes any friendship atomically.
 - `get_relationships(p_user_ids uuid[])` → `(user_id, status, request_id, mutual_friends)`, status ∈ `none | pending_out | pending_in | friends | blocked | blocked_by`. **Batched — one call per list, never per row.**
@@ -254,7 +303,7 @@ Two consent mechanisms that are easy to conflate:
 Features live in `src/features/<name>/` with `api/`, `components/`, `hooks/`. Only the non-obvious parts are listed.
 
 - **Auth** (`routes/auth.tsx`, `src/lib/auth.ts`, `src/lib/passwordStrength.ts`): signup requires all 5 password checks. Email signups must click a confirmation link before sign-in; Google OAuth is exempt. **Enforced by the Supabase Dashboard "Confirm email" toggle, not app code** — no migration can set it. Unconfirmed logins surface a "Resend confirmation email" action.
-- **Chat** (`features/chat/`): `ConversationList`, `ChatView`, `MessageBubble`, `MessageInput`; 50/page pagination (`useMessages`); realtime via `useRealtimeMessages` (invalidation only). Soft delete own messages (`deleted_at`) behind a Radix confirm. Replies via `replyToMessageIdAtom`. Swipe-to-delete a conversation removes only your own membership row.
+- **Chat** (`features/chat/`): `ConversationList`, `ChatView`, `MessageBubble`, `MessageInput`; 50/page pagination (`useMessages`); realtime via `useRealtimeMessages` (invalidation only). Soft delete own messages (`deleted_at`) behind a Radix confirm. Replies via `replyToMessageIdAtom`. Swipe-to-delete a conversation removes only your own membership row. **@mentions** (group chats only) — see the dedicated section above.
 - **Message grouping** (`chat/lib/messageGrouping.ts`, iOS `BubblePosition`, must match): same sender, non-system, same day, ≤5 min → `single|first|middle|last`. Name on first (groups only; DMs never show it), avatar on last; tail corner bottom/both/top.
 - **Collapsible sidebar** (desktop only): `sidebarCollapsedAtom`, persisted.
 - **Chat settings modal:** tapping the `ChatView` header opens `GroupInfoModal` (groups) or `DmSettingsModal` (DMs): members list, mute toggle (`muteConversation`, JS-max-Date sentinel for forever), self-only leave/delete. DMs add Block; groups keep admin controls and "Delete group for everyone."
@@ -314,10 +363,10 @@ messages INSERT
 ```
 
 - **Payload is per device:** each token gets the one envelope whose `recipient_fp` matches its `devices.key_fingerprint` — that's why `push_tokens` has `device_id`. `aps.alert.body` is always a safe placeholder ("New message", "📷 Photo"); the extension overwrites it, and every failure leaves the placeholder.
-- **Server-side suppression mirrors the clients exactly:** never the sender, never `request_state <> 'accepted'`, never muted (`muted_until > now()`), never across a block, never `type = 'system'`. An `enc_v = 2` message with no envelope for a device is dropped. iOS's `ConversationListViewModel.handleIncomingMessage` applies the same filters.
-- **Over the 4096-byte cap (~2,100 chars of plaintext)** the push deliberately shows `Sent a message` with the sender as title and drops `mutable-content`. Server-side truncation is impossible (ciphertext, AES-GCM is all-or-nothing). Extension fetch (the Signal/WhatsApp pattern) fails because supabase-swift gives the extension a 1-hour JWT with a rotating refresh token; a sender-sealed preview blob is a wire-format change not justified by a rare case.
+- **Server-side suppression mirrors the clients exactly:** never the sender, never `request_state <> 'accepted'`, never muted (`muted_until > now()`) **unless the message @mentions the recipient and `mute_mentions` is false** (`00045`, see the @mentions section above), never across a block, never `type = 'system'`. An `enc_v = 2` message with no envelope for a device is dropped. iOS's `ConversationListViewModel.handleIncomingMessage` applies the same filters.
+- **Over the 4096-byte cap (~2,100 chars of plaintext)** the push deliberately shows `Sent a message` (or `Mentioned you` if `is_mention`) with the sender as title and drops `mutable-content`. Server-side truncation is impossible (ciphertext, AES-GCM is all-or-nothing). Extension fetch (the Signal/WhatsApp pattern) fails because supabase-swift gives the extension a 1-hour JWT with a rotating refresh token; a sender-sealed preview blob is a wire-format change not justified by a rare case.
 - `apns-collapse-id` = message id (a retried trigger yields one banner); `thread-id` = conversation id.
-- **Badge** = recipient's **total** unread across accepted, unmuted conversations (`00044`). iOS recomputes the same figure locally; the definitions must move together.
+- **Badge** = recipient's **total** unread across accepted, unmuted conversations, where a muted group now contributes only its unread @mentions instead of zero (`00045`, superseding `00044`'s per-conversation cutoff). iOS recomputes the same figure locally; the definitions must move together.
 - **Other kinds** — `friend_request`, `friend_accepted`, `task_assigned`, `event_confirmed` (`00041`) and `reminder` (pg_cron, `00042`) — go through `push_simple_notification(kind, payload)`. Plaintext, no `mutable-content`. Reminder dispatch is exactly-once: `status = 'pending'` is both queue and lock (`for update skip locked` + atomic flip to `'sent'` in the same transaction), failing toward loss rather than duplication.
 - **Secrets:** `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID` (`wahid.yaply`), `APNS_PRIVATE_KEY` (`.p8`), `PUSH_WEBHOOK_SECRET` via `supabase secrets set --env-file` (a shell-mangled multiline `.p8` causes permanent `403 InvalidProviderToken`). **The key must be "Sandbox & Production"** — a sandbox-only key fails every TestFlight token with `403 BadEnvironmentKeyInToken` (hit on the first TestFlight build, 2026-09-17). Every 403 is treated as provider-side and leaves `fail_count` alone; only `BadDeviceToken`/`Unregistered` blame the token. The function URL and secret also live in **Vault** (`push_fn_url`, `push_webhook_secret`) read by `push_config()`; until both exist, `enqueue_push` is a harmless no-op.
 - ⚠️ Deno's ECDSA `crypto.subtle.sign` already returns IEEE P1363 `r||s` (the JOSE encoding). Don't DER-decode — porting a Node example here produces a permanent `InvalidProviderToken`.

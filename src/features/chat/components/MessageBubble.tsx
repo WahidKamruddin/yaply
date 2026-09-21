@@ -2,13 +2,46 @@ import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { CheckCheck, Reply, Trash2, AlertCircle, Smile, MessageSquarePlus, MessageSquare, BookImage, Lock, Pin, PinOff, Map as MapIcon, Calendar, CheckSquare, FileText, Image as ImageIcon, DollarSign, Bell, ChevronRight } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
-import type { DecryptedMessage } from '@/features/chat/types'
+import type { DecryptedMessage, MemberSummary } from '@/features/chat/types'
 import type { ReactionGroup } from '@/features/chat/api/reactions'
 import Avatar from '@/components/Avatar'
 import type { GroupPosition } from '@/features/chat/lib/messageGrouping'
 import AddToAlbumModal from './AddToAlbumModal'
 import { ITEM_META, parseSystemItem } from '@/features/chat/lib/systemItem'
 import type { ItemKind, PanelTab, SystemItem } from '@/features/chat/lib/systemItem'
+import { tokenizeMentions } from '@yaply/shared/mentions'
+
+// Renders decrypted text with @mention/@everyone runs styled distinctly.
+// Falls back to a single plain text node when there's nothing to highlight,
+// so the common (non-group) case pays no extra cost.
+function renderMentions(
+  content: string,
+  members: MemberSummary[] | undefined,
+  currentUserId: string | undefined,
+  isOwn: boolean,
+) {
+  if (!members || members.length === 0 || !content.includes('@')) return content
+  const tokens = tokenizeMentions(
+    content,
+    members.map((m) => ({ userId: m.userId, username: m.profile.username })),
+  )
+  if (tokens.length === 1 && tokens[0].kind === 'text') return content
+
+  return tokens.map((t, i) => {
+    if (t.kind === 'text') return <span key={i}>{t.value}</span>
+    const isSelfMention = t.everyone || t.userId === currentUserId
+    const className = isSelfMention
+      ? 'font-semibold rounded px-0.5 bg-primary-tint text-primary-text'
+      : isOwn
+        ? 'font-medium underline decoration-white/40'
+        : 'font-medium text-[#5b8def]'
+    return (
+      <span key={i} className={className}>
+        {t.value}
+      </span>
+    )
+  })
+}
 
 function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr)
@@ -101,6 +134,9 @@ interface Props {
   // Sender names label bubbles only in group chats — in a DM the header
   // already says who the other person is.
   showSenderName?: boolean
+  // Group members, for resolving @mentions in decrypted text. Undefined/empty
+  // (DMs, threads that don't pass it) just renders content as plain text.
+  mentionMembers?: MemberSummary[]
 }
 
 const ITEM_ICONS: Record<ItemKind, React.ElementType> = {
@@ -141,7 +177,7 @@ const TAB_LABELS: Record<PanelTab, string> = {
   reminders: 'Reminders',
 }
 
-export default function MessageBubble({ message, isOwn, isRead, replyMessage, threadCount = 0, conversationId, currentUserId, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact, onOpenPanel, onOpenItem, isPinned = false, onTogglePin, groupPosition = 'single', showSenderName = true }: Props) {
+export default function MessageBubble({ message, isOwn, isRead, replyMessage, threadCount = 0, conversationId, currentUserId, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact, onOpenPanel, onOpenItem, isPinned = false, onTogglePin, groupPosition = 'single', showSenderName = true, mentionMembers }: Props) {
   const [hovered, setHovered] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showTime, setShowTime] = useState(false)
@@ -446,7 +482,9 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                     Couldn't decrypt this message
                   </span>
                 ) : (
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{message.content}</p>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                    {renderMentions(message.content, mentionMembers, currentUserId, isOwn)}
+                  </p>
                 )}
               </div>
             </div>

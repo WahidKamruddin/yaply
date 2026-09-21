@@ -87,6 +87,8 @@ export async function sendMessage(params: SendMessageParams): Promise<DbMessage>
       p_thread_id: params.threadId ?? undefined,
       p_media_url: params.mediaUrl ?? undefined,
       p_media_mime: params.mediaMime ?? undefined,
+      p_mentioned_user_ids: params.mentionedUserIds ?? [],
+      p_mentions_everyone: params.mentionsEveryone ?? false,
     })
     if (error) throw error
     return data
@@ -105,6 +107,8 @@ export async function sendMessage(params: SendMessageParams): Promise<DbMessage>
       media_url: params.mediaUrl ?? null,
       media_mime: params.mediaMime ?? null,
       deleted_at: params.deletedAt ?? null,
+      mentioned_user_ids: params.mentionedUserIds ?? [],
+      mentions_everyone: params.mentionsEveryone ?? false,
     })
     .select(`
       id,

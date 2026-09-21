@@ -30,6 +30,12 @@ export interface ConversationListItem {
   // excluded from the unread count. 'declined' = hidden entirely.
   requestState: 'accepted' | 'pending' | 'declined'
   updatedAt: string
+  // Unread messages that @mention me (directly or via @everyone). Counted
+  // separately from unreadCount so a muted group can still surface mentions.
+  mentionUnreadCount: number
+  // "Mute everything" — when true, muting this conversation also silences
+  // @mentions. Meaningful only while isMuted is true.
+  muteMentions: boolean
 }
 
 // Raw DB row — matches the actual messages table schema.
@@ -87,4 +93,9 @@ export interface SendMessageParams {
   mediaUrl?: string | null
   mediaMime?: string | null
   deletedAt?: string | null
+  // Group-chat-only targeting for @mentions — a plaintext side-channel beside
+  // encrypted content, since the server can't read ciphertext to fan out
+  // mention-aware push/badge notifications. See CLAUDE.md's mentions section.
+  mentionedUserIds?: string[]
+  mentionsEveryone?: boolean
 }

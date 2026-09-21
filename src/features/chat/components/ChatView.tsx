@@ -33,6 +33,7 @@ import { uploadMediaFile, uploadRawFile } from '@/features/media/api/upload'
 import type { GifResult } from '@/features/media/api/gifs'
 import { supabase } from '@/lib/supabase'
 import type { DecryptedMessage, ConversationListItem } from '@/features/chat/types'
+import { extractMentions } from '@yaply/shared/mentions'
 import MessageBubble from './MessageBubble'
 import { getGroupPositions } from '@/features/chat/lib/messageGrouping'
 import MessageInput from './MessageInput'
@@ -460,10 +461,22 @@ export default function ChatView({ currentUserId }: Props) {
     // member has no registered device yet — never a mislabeled v2.
     const memberIds = conversation?.members.map((m) => m.userId) ?? []
     const result = await encrypt(memberIds, text)
+
+    // Extracted from plaintext before encryption — mention targeting is the
+    // one piece of this send that travels unencrypted, since the server needs
+    // it to fan out push/badge notifications. DMs never carry mentions.
+    const { mentionedUserIds, mentionsEveryone } = conversation?.isGroup
+      ? extractMentions(
+          text,
+          conversation.members.map((m) => ({ userId: m.userId, username: m.profile.username })),
+          currentUserId,
+        )
+      : { mentionedUserIds: [], mentionsEveryone: false }
+
     send(
       result.mode === 'v2'
-        ? { conversationId: activeId, senderId: currentUserId, content: result.content, iv: result.iv, envelopes: result.envelopes, type: 'text', replyToId: capturedReplyId, threadId: capturedThreadId }
-        : { conversationId: activeId, senderId: currentUserId, content: result.content, iv: null, type: 'text', replyToId: capturedReplyId, threadId: capturedThreadId },
+        ? { conversationId: activeId, senderId: currentUserId, content: result.content, iv: result.iv, envelopes: result.envelopes, type: 'text', replyToId: capturedReplyId, threadId: capturedThreadId, mentionedUserIds, mentionsEveryone }
+        : { conversationId: activeId, senderId: currentUserId, content: result.content, iv: null, type: 'text', replyToId: capturedReplyId, threadId: capturedThreadId, mentionedUserIds, mentionsEveryone },
       {
         onSuccess: (data) => {
           pendingConfirmedRef.current.set(tempId, data.id)
@@ -811,6 +824,7 @@ export default function ChatView({ currentUserId }: Props) {
                 onTogglePin={!msg.deletedAt && !pendingIdSet.has(msg.id) ? togglePin : undefined}
                 groupPosition={groupPositions[i]}
                 showSenderName={conversation.isGroup}
+                mentionMembers={conversation.isGroup ? conversation.members : undefined}
               />
             </div>
           )
@@ -897,6 +911,9 @@ export default function ChatView({ currentUserId }: Props) {
           replyMessage={replyMessage}
           disabled={!activeId || mediaUploading || isOrphanedDM}
           placeholder={isOrphanedDM ? 'This person deleted their account' : undefined}
+          members={conversation.members}
+          isGroup={conversation.isGroup}
+          currentUserId={currentUserId}
         />
       )}
 
@@ -939,7 +956,7 @@ export default function ChatView({ currentUserId }: Props) {
           rootMessage={threadViewRoot}
           currentUserId={currentUserId}
           conversationId={activeId}
-          memberUserIds={conversation.members.map((m) => m.userId)}
+          members={conversation.members}
           isGroup={conversation.isGroup}
           onClose={() => setThreadViewRoot(null)}
         />
