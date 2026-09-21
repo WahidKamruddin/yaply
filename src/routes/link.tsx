@@ -2,6 +2,7 @@ import { createFileRoute, redirect, Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { getSession, getUser } from '@/lib/auth'
+import { WAITLIST_MODE } from '@/lib/waitlistMode'
 import DevicePairingSettings from '@/features/settings/components/DevicePairingSettings'
 import LoadingScreen from '@/components/LoadingScreen'
 import type { User } from '@supabase/supabase-js'
@@ -13,6 +14,7 @@ import type { User } from '@supabase/supabase-js'
 export const Route = createFileRoute('/link')({
   beforeLoad: async () => {
     if (typeof document === 'undefined') return // SSR — no session, client handles it
+    if (WAITLIST_MODE) throw redirect({ to: '/auth' })
     const session = await getSession()
     // Preserve the fragment across the auth bounce: the browser keeps the hash
     // on a client-side redirect, but be explicit rather than relying on it.

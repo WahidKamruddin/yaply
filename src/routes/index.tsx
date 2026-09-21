@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import YaplyLogo from '@/components/YaplyLogo'
 import { HeartHandshake } from 'lucide-react'
+import { WAITLIST_MODE } from '@/lib/waitlistMode'
 
 export const Route = createFileRoute('/')({
   component: LandingPage,
@@ -867,8 +868,14 @@ function LandingPage() {
             <a href="#sealed">Privacy</a>
           </nav>
           <div className="lp-nav-cta">
-            <Link to="/auth" className="lp-btn-ghost">Sign in</Link>
-            <Link to="/auth" className="lp-btn-solid">Open app</Link>
+            {WAITLIST_MODE ? (
+              <Link to="/auth" className="lp-btn-solid">Join the waitlist</Link>
+            ) : (
+              <>
+                <Link to="/auth" className="lp-btn-ghost">Sign in</Link>
+                <Link to="/auth" className="lp-btn-solid">Open app</Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -915,13 +922,13 @@ function LandingPage() {
             </p>
             <div className="lp-cta-row" data-reveal style={{ ['--d' as string]: '220ms' }}>
               <Link to="/auth" className="lp-btn-primary">
-                Get Started
+                {WAITLIST_MODE ? 'Join the Waitlist' : 'Get Started'}
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="5" y1="12" x2="19" y2="12" />
                   <polyline points="12 5 19 12 12 19" />
                 </svg>
               </Link>
-              <Link to="/auth" className="lp-btn-glass">Sign in</Link>
+              {!WAITLIST_MODE && <Link to="/auth" className="lp-btn-glass">Sign in</Link>}
             </div>
          
           </div>
@@ -1102,7 +1109,7 @@ function LandingPage() {
               <h3>That’s the short list.</h3>
               <p>There’s plenty more waiting once you’re inside.</p>
               <Link to="/auth" className="lp-closer-link">
-                Peek inside
+                {WAITLIST_MODE ? 'Join the waitlist' : 'Peek inside'}
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="5" y1="12" x2="19" y2="12" />
                   <polyline points="12 5 19 12 12 19" />
@@ -1119,7 +1126,9 @@ function LandingPage() {
           <YaplyLogo variant="app-icon" size={56} />
           <h2 className="lp-h2">Chat Smarter, Not Harder.</h2>
           <p className="lp-lede"> Take the guesswork out of the group chat.</p>
-          <Link to="/auth" className="lp-btn-primary lp-btn-big">Get started — it’s free</Link>
+          <Link to="/auth" className="lp-btn-primary lp-btn-big">
+            {WAITLIST_MODE ? 'Join the waitlist' : 'Get started — it’s free'}
+          </Link>
         </div>
       </section>
 

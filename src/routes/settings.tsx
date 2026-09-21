@@ -2,6 +2,7 @@ import { createFileRoute, redirect, useNavigate, Link } from '@tanstack/react-ro
 import { useEffect, useState } from 'react'
 import { ArrowLeft, User as UserIcon, CreditCard, Shield, FileText, HelpCircle, Bug, Smartphone } from 'lucide-react'
 import { getSession, getUser, onAuthStateChange } from '@/lib/auth'
+import { WAITLIST_MODE } from '@/lib/waitlistMode'
 import AccountSettings from '@/features/settings/components/AccountSettings'
 import DevicePairingSettings from '@/features/settings/components/DevicePairingSettings'
 import BillingSettings from '@/features/settings/components/BillingSettings'
@@ -15,6 +16,7 @@ import type { User } from '@supabase/supabase-js'
 export const Route = createFileRoute('/settings')({
   beforeLoad: async () => {
     if (typeof document === 'undefined') return // SSR — no localStorage, client handles it
+    if (WAITLIST_MODE) throw redirect({ to: '/auth' })
     const session = await getSession()
     if (!session) throw redirect({ to: '/auth' })
   },
