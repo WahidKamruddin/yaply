@@ -76,13 +76,13 @@ async function getAccessToken(): Promise<string> {
   return data.access_token
 }
 
-// Appends one row [name, email, ISO timestamp] to the sheet's first tab.
-export async function appendWaitlistRow(name: string, email: string): Promise<void> {
+// Appends one row [email, ISO timestamp] to the sheet's first tab.
+export async function appendWaitlistRow(email: string): Promise<void> {
   const sheetId = Deno.env.get('GOOGLE_SHEET_ID')
   if (!sheetId) throw new Error('Waitlist sheet is not configured')
 
   const accessToken = await getAccessToken()
-  const range = 'A:C'
+  const range = 'A:B'
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}:append?valueInputOption=USER_ENTERED`,
     {
@@ -91,7 +91,7 @@ export async function appendWaitlistRow(name: string, email: string): Promise<vo
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ values: [[name, email, new Date().toISOString()]] }),
+      body: JSON.stringify({ values: [[email, new Date().toISOString()]] }),
     },
   )
   if (!res.ok) {
