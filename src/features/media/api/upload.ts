@@ -2,7 +2,13 @@ import { supabase } from '@/lib/supabase'
 
 const BUCKET = 'media'
 
-async function compressImage(file: File, maxDimension = 1280, quality = 0.82): Promise<Blob> {
+type CompressedImage = { blob: Blob; width: number; height: number }
+
+async function compressImage(
+  file: File,
+  maxDimension = 1280,
+  quality = 0.82,
+): Promise<CompressedImage> {
   return new Promise((resolve) => {
     const img = new Image()
     const url = URL.createObjectURL(file)
@@ -15,11 +21,25 @@ async function compressImage(file: File, maxDimension = 1280, quality = 0.82): P
       canvas.width = w
       canvas.height = h
       canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
-      canvas.toBlob((blob) => resolve(blob ?? file), 'image/jpeg', quality)
+      canvas.toBlob((blob) => resolve({ blob: blob ?? file, width: w, height: h }), 'image/jpeg', quality)
     }
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(file) }
+    img.onerror = () => { URL.revokeObjectURL(url); resolve({ blob: file, width: 0, height: 0 }) }
     img.src = url
   })
+}
+
+// Aspect-ratio hint appended to an image's public URL as a fragment, so a
+// client can reserve the bubble's final height before the image downloads
+// instead of resizing the row mid-scroll. A fragment never reaches Storage and
+// is ignored by any client that doesn't read it, so this needs no schema
+// change. iOS parses the same key — see `MediaAspectRatio` in yaply-ios.
+const AR_MIN = 0.5
+const AR_MAX = 3
+function withAspectRatio(publicUrl: string, width: number, height: number): string {
+  if (!width || !height) return publicUrl
+  const base = publicUrl.split('#')[0]
+  const ratio = Math.min(Math.max(width / height, AR_MIN), AR_MAX)
+  return `${base}#ar=${ratio.toFixed(4)}`
 }
 
 export async function uploadMediaFile(
@@ -27,7 +47,8 @@ export async function uploadMediaFile(
   userId: string,
 ): Promise<{ storageRef: string; publicUrl: string }> {
   const isImage = file.type.startsWith('image/') && file.type !== 'image/gif'
-  const blob = isImage ? await compressImage(file) : file
+  const compressed = isImage ? await compressImage(file) : null
+  const blob = compressed?.blob ?? file
   const storageRef = `${userId}/${Date.now()}.jpg`
 
   const { error } = await supabase.storage.from(BUCKET).upload(storageRef, blob, {
@@ -37,7 +58,11 @@ export async function uploadMediaFile(
   if (error) throw error
 
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(storageRef)
-  return { storageRef, publicUrl: data.publicUrl }
+  const publicUrl = compressed
+    ? withAspectRatio(data.publicUrl, compressed.width, compressed.height)
+    : data.publicUrl
+  // storageRef stays clean — the hint is presentation metadata, not identity.
+  return { storageRef, publicUrl }
 }
 
 // Upload a file verbatim — no image compression, original MIME and extension
