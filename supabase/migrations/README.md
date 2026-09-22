@@ -1,11 +1,9 @@
 # Migrations
 
-⚠️ **Do not run `supabase db push` until the remote history is reconciled.** See below.
-
 ## What these files are
 
 - **`00000_baseline.sql`** — a `supabase db dump` of the live database, taken 2026-09-22.
-  This *is* the schema. It is the starting point for any local stack.
+  This _is_ the schema. It is the starting point for any local stack.
 - **`20260922000001_auth_and_storage.sql`** — the parts a public-schema dump cannot carry:
   the `on_auth_user_created` trigger on `auth.users` (without it, signups never get a
   `profiles` row and the app sits on a loading screen forever), plus the `avatars` and
@@ -29,26 +27,24 @@ do not build the live schema. Concretely, they:
 - `00026` compared an enum to `text[]`, and `00037` altered an enum that does not exist,
   which is why voice messages were rejected in production until it was fixed directly
 
-They are kept for their commentary, which explains *why* objects exist in a way a schema
+They are kept for their commentary, which explains _why_ objects exist in a way a schema
 dump cannot. **Do not apply them.**
 
-## The `db push` hazard
+## History, and why it is only two entries
 
-`supabase migration list` shows the remote history is a completely different set
-(`00001_create_profiles`, `00002_create_devices`, … `20260921172207_mentions`). Local
-`00000` has no remote counterpart, so `supabase db push` would try to **apply the
-baseline to production** — running `CREATE TABLE` / `CREATE TYPE` / `CREATE POLICY`
-against a database that already has all of it.
+The remote used to carry a completely different migration list
+(`00001_create_profiles`, `00002_create_devices`, … `20260921172207_mentions`) —
+the record of a schema built by hand, which the files in this directory never
+matched. On 2026-09-22 those rows were cleared with
+`supabase migration repair --status reverted …`, and `00000` plus
+`20260922000001` were marked applied. Only bookkeeping rows changed; no schema
+object and no data was touched.
 
-To make push safe, mark the baseline as already applied remotely without running it:
+`supabase/migrations-archive/REMOTE_HISTORY_BEFORE_BASELINE.md` records the old
+list in full, in case anything ever needs to reference it.
 
-```bash
-supabase migration repair --status applied 00000
-```
+`supabase db push` is clean as of that change — it reports "Remote database is up
+to date" — and future migrations push normally.
 
-The auth/storage migration is timestamped rather than numbered for the same reason: a
-local `00001` would collide with the remote's unrelated `00001_create_profiles`, and the
-CLI would treat it as already applied and never push it.
-
-CI is unaffected: `.github/workflows/e2e.yml` only ever runs `supabase db reset` against
-a throwaway local stack, never `push`.
+CI never pushes: `.github/workflows/e2e.yml` only runs `supabase db reset` against
+a throwaway local stack.
