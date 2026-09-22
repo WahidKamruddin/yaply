@@ -228,7 +228,7 @@ E2E here means **text message content is encrypted between a user's active devic
 
 ## Database Schema
 
-`supabase/migrations/00000_baseline.sql` is a `supabase db dump` of the live database and **is** the schema; `00001_auth_and_storage.sql` adds what a public-schema dump cannot carry (the `on_auth_user_created` trigger on `auth.users`, the `avatars`/`media` buckets and their policies). Everything from here is additive.
+`supabase/migrations/00000_baseline.sql` is a `supabase db dump` of the live database and **is** the schema; `00001_auth_and_storage.sql` adds what a public-schema dump cannot carry (the `on_auth_user_created` trigger on `auth.users`, the `avatars`/`media` buckets and their policies). Everything from here is additive, and `supabase db push` is clean — the remote history was reconciled to these two entries on 2026-09-22.
 
 ⚠️ The 43 hand-written files now in `supabase/migrations-archive/` were a **reconstruction, never the applied history** — they were first executed on 2026-09-22 and did not build the live schema. They defined three enums production never had (`conversation_type`, `member_role`, `message_type`; production uses `text` + CHECK), invented three tables (`ai_messages`, `key_exchanges`, `sticker_packs`), omitted three that exist (`polls`, `prekeys`, `message_receipts`), and never created five live functions — including `delete_conversation_if_empty`, the orphan-cleanup trigger this file calls load-bearing, which appeared only in a comment. They are kept for their commentary, which explains *why* objects exist; a schema dump does not. Do not apply them.
 
