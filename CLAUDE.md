@@ -344,6 +344,7 @@ Per-feature iOS how-to lives in `yaply-ios/CLAUDE.md`; encryption, pairing, devi
 - **System messages:** `type='system'`, `iv = NULL`, `deleted_at = now + 7d`, `content = base64(UTF-8 JSON {"v":1,"kind","id","title"})`, kind ∈ task|note|album|budget|plan|event|reminder. Non-JSON = legacy text (tab link). Previews check `system` before `deletedAt`.
 - **Stickers:** iOS has no library; it uploads a dropped/pasted *system* sticker as transparent PNG, `type='sticker'`, which web renders as-is.
 - **Voice (`type='voice'`):** iOS records AAC `.m4a`, `media_mime='audio/mp4'`; web records mp4 or webm. Both play either. Container/mime changes must land on both.
+- **Image aspect-ratio hint (`#ar=`):** both platforms append `#ar=<width/height>` (4 dp, clamped 0.5–3.0) to an uploaded image's `media_url` — web in `uploadMediaFile`, iOS in `MediaAspectRatio.annotate`. A URL **fragment**, so it never reaches Storage, needs no column, and is ignored by a client that doesn't read it. Its only job is letting a bubble reserve its final height before the image loads; without it every image load resizes its row mid-scroll. iOS also learns the ratio from the first successful decode, so images sent before this existed settle after one appearance. Presentation metadata only — never part of a cache key or an identity comparison, and `storageRef` stays clean.
 - **Splitwise:** REST `https://secure.splitwise.com/api/v3.0/`, OAuth2 client credentials. The payer's `paid_share` maps by index in the members array (not always 0); `simplified_debts` may be null.
 
 ---
