@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { CheckCheck, Reply, Trash2, AlertCircle, Smile, MessageSquarePlus, MessageSquare, BookImage, Lock, Pin, PinOff, Map as MapIcon, Calendar, CheckSquare, FileText, Image as ImageIcon, DollarSign, Bell, ChevronRight } from 'lucide-react'
+import { CheckCheck, Reply, Trash2, AlertCircle, Smile, Plus, MessageSquarePlus, MessageSquare, BookImage, Lock, Pin, PinOff, Map as MapIcon, Calendar, CheckSquare, FileText, Image as ImageIcon, DollarSign, Bell, ChevronRight } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { DecryptedMessage, MemberSummary } from '@/features/chat/types'
 import type { ReactionGroup } from '@/features/chat/api/reactions'
 import Avatar from '@/components/Avatar'
 import type { GroupPosition } from '@/features/chat/lib/messageGrouping'
 import AddToAlbumModal from './AddToAlbumModal'
+import EmojiPickerPopover from './EmojiPickerPopover'
+import { getReactionRail, promoteReaction } from '@/features/chat/lib/reactionRail'
 import { ITEM_META, parseSystemItem } from '@/features/chat/lib/systemItem'
 import type { ItemKind, PanelTab, SystemItem } from '@/features/chat/lib/systemItem'
 import { tokenizeMentions } from '@yaply/shared/mentions'
@@ -60,8 +62,6 @@ function tailClasses(isOwn: boolean, position: GroupPosition): string {
     default: return isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'
   }
 }
-
-const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉']
 
 function replyPreviewText(replyMessage: DecryptedMessage): string {
   if (replyMessage.deletedAt) return 'Message deleted'
@@ -180,10 +180,22 @@ const TAB_LABELS: Record<PanelTab, string> = {
 export default function MessageBubble({ message, isOwn, isRead, replyMessage, threadCount = 0, conversationId, currentUserId, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact, onOpenPanel, onOpenItem, isPinned = false, onTogglePin, groupPosition = 'single', showSenderName = true, mentionMembers }: Props) {
   const [hovered, setHovered] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [showFullEmojiPicker, setShowFullEmojiPicker] = useState(false)
+  const [reactionRail, setReactionRail] = useState<string[]>(() => getReactionRail())
   const [showTime, setShowTime] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showAddToAlbum, setShowAddToAlbum] = useState(false)
   const navigate = useNavigate()
+
+  // A pick from the full picker promotes that emoji into the rail's last
+  // slot (device-local), then reacts with it — quick-taps on an existing
+  // rail slot never reorder the rail.
+  const handleCustomReaction = (emoji: string) => {
+    setReactionRail(promoteReaction(emoji))
+    onReact?.(message.id, emoji)
+    setShowFullEmojiPicker(false)
+    setShowEmojiPicker(false)
+  }
 
   // Deleted senders have no profile row, so there's no profile to open.
   const senderUsername = !isOwn ? message.senderProfile?.username : undefined
@@ -284,7 +296,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
     <div
       className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'} ${rowSpacing} group`}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => { setHovered(false); setShowEmojiPicker(false) }}
+      onMouseLeave={() => { setHovered(false); setShowEmojiPicker(false); setShowFullEmojiPicker(false) }}
     >
       {!isOwn && (showAvatar ? (
         <button
@@ -322,9 +334,9 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                 </button>
                 {showEmojiPicker && (
                   <div
-                    className={`absolute bottom-9 ${isOwn ? 'right-0' : 'left-0'} flex gap-1 bg-card rounded-full shadow-lg shadow-black/40 border border-border px-2 py-1.5 z-20`}
+                    className={`absolute bottom-9 ${isOwn ? 'right-0' : 'left-0'} flex items-center gap-1 bg-card rounded-full shadow-lg shadow-black/40 border border-border px-2 py-1.5 z-20`}
                   >
-                    {QUICK_EMOJIS.map((emoji) => (
+                    {reactionRail.map((emoji) => (
                       <button
                         key={emoji}
                         onClick={() => { onReact?.(message.id, emoji); setShowEmojiPicker(false) }}
@@ -333,6 +345,20 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                         {emoji}
                       </button>
                     ))}
+                    <button
+                      onClick={() => setShowFullEmojiPicker((v) => !v)}
+                      className="w-5 h-5 flex items-center justify-center rounded-full bg-tint hover:bg-tint-strong text-text-muted hover:text-text transition-colors"
+                      title="More emoji"
+                    >
+                      <Plus size={11} />
+                    </button>
+                    {showFullEmojiPicker && (
+                      <div
+                        className={`absolute top-9 ${isOwn ? 'right-0' : 'left-0'} bg-card rounded-2xl shadow-lg shadow-black/40 border border-border z-20`}
+                      >
+                        <EmojiPickerPopover onSelect={handleCustomReaction} />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
