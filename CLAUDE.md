@@ -228,7 +228,11 @@ E2E here means **text message content is encrypted between a user's active devic
 
 ## Database Schema
 
-Migrations in `supabase/migrations/` match the live DB. `src/lib/database.types.ts` is generated and may lag; `src/features/chat/types.ts` is the runtime source of truth.
+`supabase/migrations/00000_baseline.sql` is a `supabase db dump` of the live database and **is** the schema; `00001_auth_and_storage.sql` adds what a public-schema dump cannot carry (the `on_auth_user_created` trigger on `auth.users`, the `avatars`/`media` buckets and their policies). Everything from here is additive.
+
+⚠️ The 43 hand-written files now in `supabase/migrations-archive/` were a **reconstruction, never the applied history** — they were first executed on 2026-09-22 and did not build the live schema. They defined three enums production never had (`conversation_type`, `member_role`, `message_type`; production uses `text` + CHECK), invented three tables (`ai_messages`, `key_exchanges`, `sticker_packs`), omitted three that exist (`polls`, `prekeys`, `message_receipts`), and never created five live functions — including `delete_conversation_if_empty`, the orphan-cleanup trigger this file calls load-bearing, which appeared only in a comment. They are kept for their commentary, which explains *why* objects exist; a schema dump does not. Do not apply them.
+
+`src/lib/database.types.ts` is generated and may lag; `src/features/chat/types.ts` is the runtime source of truth.
 
 **`conversations`:** `id, type ('direct'|'group'|'ai'), name, avatar_url, created_by, created_at, updated_at`
 
@@ -393,10 +397,73 @@ In `supabase/functions/`, deployed with `supabase functions deploy <name>`, for 
 npm install       # npm workspaces
 npm run dev       # dev server on :3000 (Netlify Dev on :8888) — user runs this, not Claude
 npm run build     # production build → dist/client/
-npm run test      # Vitest
+npm run test      # Vitest unit tests (excludes e2e/)
 npm run lint      # ESLint
 npm run format    # Prettier + ESLint fix
 ```
+
+### End-to-end tests
+
+Playwright drives the real app in Chromium against a **local Supabase stack**, so the
+database — not the DOM — is the oracle for wire-format invariants. Needs a Docker
+runtime — **OrbStack** (`brew install --cask orbstack`) locally; CI uses the Docker
+preinstalled on `ubuntu-latest`. 12 specs, ~25s.
+
+```bash
+npm run test:e2e         # build + run (boots the stack if needed)
+npm run test:e2e:reset   # same, but `supabase db reset` first — the migration test
+npm run test:e2e:quick   # skip the build, reuse dist/client
+npm run test:e2e:down    # supabase stop
+```
+
+**The suite drives the production build, not `vite dev`.** `scripts/e2e.mjs` runs
+`vite build && node scripts/generate-html.mjs` (netlify.toml's exact command) and
+`scripts/serve-dist.mjs` serves `dist/client` with the same `/* → /index.html` 200
+catch-all. Two reasons, both load-bearing:
+
+- **Route guards only work in production's shape.** `vite dev` renders server-side, so
+  every `beforeLoad` hits `typeof document === 'undefined'` and returns without
+  redirecting. Production is a prerendered SPA where the router evaluates `beforeLoad`
+  in the browser. Driving the dev server tests a path that never ships.
+- **The dev server can fill your disk.** `@tanstack/devtools-vite` forwards client
+  console output to the server, which logs it, which the client forwards again — any
+  repeating client-side error nests exponentially. One run wrote a **17GB** log and
+  killed the server with ENOSPC. A production build has no devtools plugin and no SSR
+  pass. (The trigger found in Sept 2026 was `@mui/x-date-pickers`' directory import of
+  `react-transition-group`, fixed by `ssr.noExternal` in `vite.config.ts`, but the
+  amplification loop itself is still live in `npm run dev`.)
+
+`scripts/e2e.mjs` resolves the stack's URL and keys from `supabase status` and bakes
+them into the build (VITE_* are inlined at build time). It also bounces Kong when the
+gateway 502s — `db reset` restarts auth but leaves Kong holding stale upstreams.
+`e2e/global-setup.ts` refuses to run unless the URL is loopback, waits for GoTrue,
+seeds four users with `username_set = true` (or the undismissable `UsernameSetupModal`
+blocks every spec), makes Alice and Bob friends (otherwise their DM is a *message
+request* and renders no sidebar preview), and mints a `yaply-auth` session per user.
+
+Load-bearing rules when writing specs:
+- **The DB is the oracle.** `ChatView.handleSend` flushSyncs an optimistic bubble in
+  *before* awaiting `encrypt()`, so "the text appeared" proves nothing. Assert via
+  `e2e/helpers/db.ts` (`expectV2`, `expectPhase1`).
+- **`sendMessage` waits for the write.** Asserting the error banner is absent passes
+  instantly — it is absent before the send starts. The helper awaits the POST response;
+  without that, a following `page.reload()` aborts its own send.
+- **Use `waitForNewDevice(id, baseline)`, not `waitForDevices(id, 1)`.** Every context
+  is its own IndexedDB and so its own device row, and they accumulate across specs, so
+  an absolute count is satisfied by leftovers while this context is still registering.
+- **Anchor assertions to the message you sent** (`waitForNewMessage`). Specs share
+  conversations, and older messages sealed to dead contexts render as "couldn't
+  decrypt" quite correctly.
+- **`signOut()` is global scope** — it revokes every session for the account, not just
+  that tab. A spec that signs out must `restoreSession()` in `afterAll`, and must not
+  hold a second context for that user across the sign-out.
+- **Carol must never be opened in a browser.** A member with zero devices is the only
+  deterministic way to reach the phase-1 fallback.
+- **`video: 'off'`.** It recorded every test and kept the failures; a run of failing
+  specs wrote gigabytes. Traces carry a DOM snapshot per step at a fraction of the size.
+
+`.github/workflows/e2e.yml` runs this on every PR. Its `supabase db reset` step doubles
+as the migration test — the only place migrations are applied to a virgin database.
 
 ---
 
