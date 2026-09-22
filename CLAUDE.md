@@ -407,7 +407,12 @@ npm run format    # Prettier + ESLint fix
 Playwright drives the real app in Chromium against a **local Supabase stack**, so the
 database — not the DOM — is the oracle for wire-format invariants. Needs a Docker
 runtime — **OrbStack** (`brew install --cask orbstack`) locally; CI uses the Docker
-preinstalled on `ubuntu-latest`. 12 specs, ~25s.
+preinstalled on `ubuntu-latest`. 21 specs, ~45s.
+
+Coverage: the `enc_v = 2` wire format and envelope fan-out, sender read-back, the
+phase-1 fallback, the per-user key cache, decrypt-failed rendering, thread/ChatView
+send parity, realtime delivery, message-request gating, the friendship state machine,
+blocks, route guards, and signup with the username modal.
 
 ```bash
 npm run test:e2e         # build + run (boots the stack if needed)
@@ -461,6 +466,19 @@ Load-bearing rules when writing specs:
   deterministic way to reach the phase-1 fallback.
 - **`video: 'off'`.** It recorded every test and kept the failures; a run of failing
   specs wrote gigabytes. Traces carry a DOM snapshot per step at a fraction of the size.
+- **Scope decrypt assertions to the message under test.** A blanket
+  `getByTestId('message-decrypt-failed')).toHaveCount(0)` fails on the shared thread's
+  history, which is sealed to contexts that no longer exist. `failOnCryptoErrors` is
+  narrow for the same reason: it ignores `hadEnvelope: false`, which is the documented
+  permanent state, and fires only on encryption-side failures.
+- **Use `asUser()` for anything about server-side gating.** The service-role client in
+  `helpers/db.ts` bypasses RLS, so asserting with it proves nothing about the policies
+  and SECURITY DEFINER guards that are the subject. `friendships` in particular has no
+  INSERT or UPDATE policy at all.
+- **Pending message requests live in a collapsed "Message requests" section**, not the
+  conversation list — expand it before opening one, and pass
+  `openConversation(..., { expectComposer: false })` since MessageRequestBar replaces
+  the composer.
 
 `.github/workflows/e2e.yml` runs this on every PR. Its `supabase db reset` step doubles
 as the migration test — the only place migrations are applied to a virgin database.

@@ -36,10 +36,23 @@ export async function startDirectChat(page: Page, username: string) {
   await expect(page.getByPlaceholder('Message...')).toBeVisible()
 }
 
-/** Open an already-listed conversation from the sidebar. */
-export async function openConversation(page: Page, conversationId: string) {
-  await page.locator(`[data-conversation-id="${conversationId}"]`).click()
-  await expect(page.getByPlaceholder('Message...')).toBeVisible()
+/**
+ * Open an already-listed conversation from the sidebar.
+ *
+ * `expectComposer: false` for a pending message request, where ChatView swaps
+ * MessageRequestBar in and there is no composer to wait for.
+ */
+export async function openConversation(
+  page: Page,
+  conversationId: string,
+  { expectComposer = true }: { expectComposer?: boolean } = {},
+) {
+  const row = page.locator(`[data-conversation-id="${conversationId}"]`)
+  await expect(row).toBeVisible()
+  await row.click()
+  if (expectComposer) {
+    await expect(page.getByPlaceholder('Message...')).toBeVisible()
+  }
 }
 
 /**
@@ -115,8 +128,13 @@ export async function reloadClearingCaches(page: Page) {
  * deal of routine `[yaply:crypto] ... ok` diagnostics at log level, and matching
  * the prefix alone fails every passing test.
  */
+// Encryption-side failures are always defects. Decryption is different: "no
+// envelope for this device" is the documented, permanent state for a message
+// sealed before this browser context existed, and specs share conversations, so
+// a thread is full of those by design. A decrypt failure is only a defect when an
+// envelope *was* found and still would not open — hence hadEnvelope: true.
 const CRYPTO_FAILURE =
-  /getDevicesFor FAILED|encryptForMembers FAILED|decryptV2ForUser FAILED|failed to register device|DecryptionFailedError/
+  /getDevicesFor FAILED|encryptForMembers FAILED|failed to register device|hadEnvelope: true/
 
 export function failOnCryptoErrors(page: Page) {
   const seen: string[] = []
