@@ -482,6 +482,8 @@ export default function MessageInput({
 
         <button
           onClick={submit}
+          aria-label="Send message"
+          data-testid="send-message"
           disabled={!text.trim() || disabled}
           className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark hover:brightness-110 text-white shadow-[0_6px_18px_rgba(91,141,239,0.35)] disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed transition-all"
         >

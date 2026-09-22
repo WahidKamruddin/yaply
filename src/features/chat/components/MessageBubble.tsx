@@ -503,7 +503,10 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                 ) : message.type === 'voice' && message.mediaUrl ? (
                   <audio controls src={message.mediaUrl} className="max-w-[240px]" />
                 ) : message.decryptFailed ? (
-                  <span className={`flex items-center gap-1.5 text-xs italic ${isOwn ? 'text-white/70' : 'text-text-subtle'}`}>
+                  <span
+                    data-testid="message-decrypt-failed"
+                    className={`flex items-center gap-1.5 text-xs italic ${isOwn ? 'text-white/70' : 'text-text-subtle'}`}
+                  >
                     <Lock size={12} className="flex-shrink-0" />
                     Couldn't decrypt this message
                   </span>
