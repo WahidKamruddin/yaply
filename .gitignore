@@ -23,5 +23,12 @@ yaply-native/
 # Local scratch output, not part of the app
 brag-output/
 
-# Supabase CLI local state (linked project, versions) — machine-specific
+# Supabase CLI local state (linked project, versions, local branch) — machine-specific
 supabase/.temp/
+supabase/.branches/
+
+# Playwright e2e artifacts and minted local-stack sessions
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/e2e/.auth/

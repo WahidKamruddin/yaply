@@ -3,7 +3,7 @@
 
   // Deno runtime, deployed with the Supabase CLI and never compiled by Vite.
   // Its global Deno object and jsr: imports do not resolve under this config.
-  "exclude": ["supabase/functions"],
+  "exclude": ["supabase/functions", "e2e"],
 
   "compilerOptions": {
     "target": "ES2022",
