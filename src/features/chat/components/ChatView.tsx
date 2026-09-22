@@ -873,7 +873,9 @@ export default function ChatView({ currentUserId }: Props) {
 
       {sendError && !isMessageRequest && (
         <div className="px-4 pb-1 flex items-center justify-between gap-2">
-          <p className="text-xs text-red-500">{sendError}</p>
+          <p className="text-xs text-red-500" data-testid="send-error">
+            {sendError}
+          </p>
           <button
             onClick={() => setSendError(null)}
             className="text-text-faint hover:text-text-subtle flex-shrink-0"

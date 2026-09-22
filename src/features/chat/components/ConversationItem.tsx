@@ -150,6 +150,8 @@ export default function ConversationItem({ conversation, currentUserId, isActive
     <>
       <div ref={containerRef} className="relative rounded-xl">
         <button
+          data-testid="conversation-item"
+          data-conversation-id={conversation.id}
           onClick={handleClick}
           onContextMenu={handleContextMenu}
           onPointerDown={handlePointerDown}
@@ -175,7 +177,10 @@ export default function ConversationItem({ conversation, currentUserId, isActive
               </div>
             </div>
             <div className="flex items-center justify-between gap-1 mt-0.5">
-              <p className={`text-xs truncate ${!isActive && displayUnreadCount > 0 ? 'text-text font-semibold' : 'text-text-muted'}`}>
+              <p
+                data-testid="conversation-preview"
+                className={`text-xs truncate ${!isActive && displayUnreadCount > 0 ? 'text-text font-semibold' : 'text-text-muted'}`}
+              >
                 {lastContent}
               </p>
               {!isActive && displayUnreadCount > 0 && (
