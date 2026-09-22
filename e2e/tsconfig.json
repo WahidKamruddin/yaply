@@ -1,0 +1,15 @@
+{
+  // The root tsconfig sets "types": ["vite/client"], which drops @types/node from
+  // globals and makes every `process.env` in here an error. The e2e tree is Node +
+  // Playwright, never bundled by Vite, so it gets its own types list.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "@playwright/test"],
+    "noEmit": true
+  },
+  // The root excludes "e2e" so the app build never compiles these. That exclude is
+  // inherited here and resolves against the ROOT directory, which would empty this
+  // project out entirely — hence the explicit reset.
+  "exclude": [],
+  "include": ["**/*.ts", "../playwright.config.ts"]
+}
