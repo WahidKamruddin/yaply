@@ -76,15 +76,38 @@ async function getAccessToken(): Promise<string> {
   return data.access_token
 }
 
-// Appends one row [email, ISO timestamp] to the sheet's first tab.
-export async function appendWaitlistRow(email: string): Promise<void> {
+function getSheetId(): string {
   const sheetId = Deno.env.get('GOOGLE_SHEET_ID')
   if (!sheetId) throw new Error('Waitlist sheet is not configured')
+  return sheetId
+}
 
+// True if column A already holds this email (case-insensitive). Gates both the
+// duplicate row and the duplicate thank-you email, so resubmitting an address
+// can't be used to repeatedly mail someone.
+export async function hasWaitlistEmail(email: string): Promise<boolean> {
+  const accessToken = await getAccessToken()
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${getSheetId()}/values/A:A?majorDimension=COLUMNS`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  )
+  if (!res.ok) {
+    console.error('Sheets read failed:', await res.text())
+    throw new Error('Failed to read waitlist')
+  }
+  const data = (await res.json()) as { values?: string[][] }
+  const needle = email.toLowerCase()
+  return (data.values?.[0] ?? []).some((cell) => cell.trim().toLowerCase() === needle)
+}
+
+// Appends one row [email, ISO timestamp] to the sheet's first tab. RAW, not
+// USER_ENTERED: the email is user input, and USER_ENTERED would evaluate one
+// starting with `=` as a formula.
+export async function appendWaitlistRow(email: string): Promise<void> {
   const accessToken = await getAccessToken()
   const range = 'A:B'
   const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}:append?valueInputOption=USER_ENTERED`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${getSheetId()}/values/${range}:append?valueInputOption=RAW`,
     {
       method: 'POST',
       headers: {
