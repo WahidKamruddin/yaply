@@ -140,19 +140,35 @@ export async function deviceCount(userId: string): Promise<number> {
   return (await activeDevices(userId)).length
 }
 
+/** The ids currently in a conversation — the "before" half of waitForNewMessage. */
+export async function messageIdsIn(
+  conversationId: string,
+): Promise<Set<string>> {
+  const { data, error } = await db()
+    .from('messages')
+    .select('id')
+    .eq('conversation_id', conversationId)
+  if (error) throw error
+  return new Set(data.map((m) => m.id))
+}
+
 /**
- * Wait for a message newer than `sinceIso` to land, and return it.
+ * Wait for a message that was not in `known` to land, and return it.
  *
- * Specs share conversations, so lastMessage() can hand back something an earlier
- * spec sent. Anchoring on a timestamp taken just before the send makes the
- * assertion about *this* message, and turns "the send silently did not happen"
- * into an explicit timeout rather than a confusing decrypt failure on someone
- * else's ciphertext.
+ * Identity, not time. The obvious version of this took a host-generated
+ * timestamp and compared it against `created_at`, which silently couples two
+ * different clocks: the test runner's and the database container's. That worked
+ * until OrbStack's VM drifted 254 seconds behind the host after a restart, at
+ * which point every send "never landed" and seven specs failed at once for a
+ * reason that looked nothing like a clock.
+ *
+ * Anchoring on ids is immune to that, and still makes the assertion about *this*
+ * message rather than whatever an earlier spec left in a shared conversation.
  */
 export async function waitForNewMessage(
   conversationId: string,
-  sinceIso: string,
-  timeoutMs = 15_000,
+  known: Set<string>,
+  timeoutMs = 20_000,
 ) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -160,14 +176,14 @@ export async function waitForNewMessage(
       .from('messages')
       .select('id, content, iv, enc_v, type, sender_id, created_at')
       .eq('conversation_id', conversationId)
-      .gt('created_at', sinceIso)
       .order('created_at', { ascending: false })
-      .limit(1)
-    if (data && data.length > 0) return data[0]
+    const fresh = data?.find((m) => !known.has(m.id))
+    if (fresh) return fresh
     await new Promise((r) => setTimeout(r, 250))
   }
   throw new Error(
-    `[e2e] no message landed in ${conversationId} after ${sinceIso} within ${timeoutMs}ms`,
+    `[e2e] no new message landed in ${conversationId} within ${timeoutMs}ms ` +
+      `(${known.size} were already there)`,
   )
 }
 

@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test'
-import { USERS, storageStatePath } from '../fixtures/users'
+import { USERS } from '../fixtures/users'
 import {
   profileIdByUsername,
   waitForDevices,
   activeDevices,
 } from '../helpers/db'
-import { restoreSession } from '../helpers/session'
+import { restoreSession, contextFor } from '../helpers/session'
 import {
   gotoChat,
   startDirectChat,
@@ -53,9 +53,7 @@ test('signing out of one account and into another leaves the second able to decr
   // Alice's sending context is deliberately NOT opened yet: signOut() is global
   // scope, so signing her out in this tab would revoke the session a second
   // context was holding and bounce it to /auth mid-test.
-  const tab = await browser.newContext({
-    storageState: storageStatePath('bob'),
-  })
+  const tab = await contextFor(browser, USERS.bob)
   const page = await tab.newPage()
 
   // Sign in as Bob first so this tab has a device, then swap to Alice and back.
@@ -87,9 +85,7 @@ test('signing out of one account and into another leaves the second able to decr
   // sending context opened. Re-minting is required: the signOut above revoked
   // every session she had, including the one in her storageState file.
   await restoreSession(USERS.alice)
-  const aliceCtx = await browser.newContext({
-    storageState: storageStatePath('alice'),
-  })
+  const aliceCtx = await contextFor(browser, USERS.alice)
   const alice = await aliceCtx.newPage()
   await gotoChat(alice)
   await waitForDevices(aliceId, 1)

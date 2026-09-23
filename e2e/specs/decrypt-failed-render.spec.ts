@@ -1,10 +1,12 @@
 import { test, expect } from '@playwright/test'
-import { USERS, storageStatePath } from '../fixtures/users'
+import { USERS } from '../fixtures/users'
+import { contextFor } from '../helpers/session'
 import {
   profileIdByUsername,
   directConversationBetween,
   waitForNewDevice,
   waitForNewMessage,
+  messageIdsIn,
   deviceCount,
   db,
 } from '../helpers/db'
@@ -37,12 +39,8 @@ test('a message with no envelope for this device renders as a failure, not ciphe
   const aliceBefore = await deviceCount(aliceId)
   const bobBefore = await deviceCount(bobId)
 
-  const aliceCtx = await browser.newContext({
-    storageState: storageStatePath('alice'),
-  })
-  const bobCtx = await browser.newContext({
-    storageState: storageStatePath('bob'),
-  })
+  const aliceCtx = await contextFor(browser, USERS.alice)
+  const bobCtx = await contextFor(browser, USERS.bob)
   const alice = await aliceCtx.newPage()
   const bob = await bobCtx.newPage()
 
@@ -53,11 +51,12 @@ test('a message with no envelope for this device renders as a failure, not ciphe
   await reloadClearingCaches(alice)
 
   const text = `envelope-gone ${Date.now()}`
-  const sentAfter = new Date().toISOString()
   await startDirectChat(alice, USERS.bob.username)
-  await sendMessage(alice, text)
 
   const conversationId = await directConversationBetween(aliceId, bobId)
+  const sentAfter = await messageIdsIn(conversationId!)
+  await sendMessage(alice, text)
+
   const message = await waitForNewMessage(conversationId!, sentAfter)
   expect(message.enc_v).toBe(2)
 

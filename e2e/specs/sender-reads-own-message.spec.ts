@@ -1,11 +1,13 @@
 import { test, expect } from '@playwright/test'
-import { USERS, storageStatePath } from '../fixtures/users'
+import { USERS } from '../fixtures/users'
+import { contextFor } from '../helpers/session'
 import {
   profileIdByUsername,
   waitForNewDevice,
   deviceCount,
   directConversationBetween,
   waitForNewMessage,
+  messageIdsIn,
 } from '../helpers/db'
 import {
   gotoChat,
@@ -37,16 +39,12 @@ test('the sender can still read their own message after a reload', async ({
   const aliceBefore = await deviceCount(aliceId)
   const bobBefore = await deviceCount(bobId)
 
-  const ctx = await browser.newContext({
-    storageState: storageStatePath('alice'),
-  })
+  const ctx = await contextFor(browser, USERS.alice)
   const alice = await ctx.newPage()
 
   // Bob needs a device or the send takes the phase-1 path and proves nothing
   // about v2 decryption.
-  const bobCtx = await browser.newContext({
-    storageState: storageStatePath('bob'),
-  })
+  const bobCtx = await contextFor(browser, USERS.bob)
   const bob = await bobCtx.newPage()
   await gotoChat(bob)
   await waitForNewDevice(bobId, bobBefore)
@@ -56,9 +54,19 @@ test('the sender can still read their own message after a reload', async ({
   await reloadClearingCaches(alice)
 
   const text = `own-readback ${Date.now()}`
-  const sentAfter = new Date().toISOString()
   await startDirectChat(alice, USERS.bob.username)
+
+  const conversationId = await directConversationBetween(aliceId, bobId)
+  expect(conversationId).not.toBeNull()
+
+  // Anchored to this send rather than lastMessage(): the alice/bob thread carries
+  // history from earlier specs, sealed to contexts that no longer exist, and
+  // asserting against one of those would report a decrypt failure that is really
+  // just the multi-device limitation.
+  const before = await messageIdsIn(conversationId!)
   await sendMessage(alice, text)
+  const sent = await waitForNewMessage(conversationId!, before)
+  expect(sent.enc_v, 'the send should have been sealed under v2').toBe(2)
 
   // The reload is the point: it drops every in-memory cache, so the text below
   // has to come back through a real unwrap of Alice's own envelope, not from the
@@ -68,16 +76,6 @@ test('the sender can still read their own message after a reload', async ({
   // The active conversation lives in a Jotai atom that is not persisted, so a
   // reload lands on the dashboard with nothing open. Re-open the thread before
   // looking for the message, or this asserts against an empty pane.
-  const conversationId = await directConversationBetween(aliceId, bobId)
-  expect(conversationId).not.toBeNull()
-
-  // Anchored to this send rather than lastMessage(): the alice/bob thread carries
-  // history from earlier specs, sealed to contexts that no longer exist, and
-  // asserting against one of those would report a decrypt failure that is really
-  // just the multi-device limitation.
-  const sent = await waitForNewMessage(conversationId!, sentAfter)
-  expect(sent.enc_v, 'the send should have been sealed under v2').toBe(2)
-
   await openConversation(alice, conversationId!)
   await expect(alice.locator(`#msg-${sent.id}`)).toContainText(text)
   // Scoped to this message on purpose. The thread also carries messages from

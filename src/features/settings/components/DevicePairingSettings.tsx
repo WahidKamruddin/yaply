@@ -19,7 +19,11 @@ import { formatPairingCode, normalizePairingCode } from '@yaply/crypto'
 import { getMyFingerprint } from '@/features/chat/hooks/useEncryption'
 import { useDevicePairing } from '@/features/pairing/hooks/useDevicePairing'
 import type { TrustRole } from '@/features/pairing/hooks/useDevicePairing'
-import { fetchDevices, renameDevice, revokeDevice } from '@/features/pairing/api/devices'
+import {
+  fetchDevices,
+  renameDevice,
+  revokeDevice,
+} from '@/features/pairing/api/devices'
 import type { DeviceRow } from '@/features/pairing/api/devices'
 import PairingQr from '@/features/pairing/components/PairingQr'
 import QrScanner, { hasCamera } from '@/features/pairing/components/QrScanner'
@@ -50,13 +54,24 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
   const [isRevoking, setIsRevoking] = useState(false)
   const [deviceError, setDeviceError] = useState<string | null>(null)
 
-  const { phase, role, code, sas, error, importedCount, start, confirmAndSend, cancel } =
-    useDevicePairing(userId)
+  const {
+    phase,
+    role,
+    code,
+    sas,
+    error,
+    importedCount,
+    start,
+    confirmAndSend,
+    cancel,
+  } = useDevicePairing(userId)
 
   const reloadDevices = useCallback(() => {
     void fetchDevices(userId)
       .then(setDevices)
-      .catch((err: unknown) => console.error('[yaply:devices] load failed', err))
+      .catch((err: unknown) =>
+        console.error('[yaply:devices] load failed', err),
+      )
   }, [userId])
 
   useEffect(() => {
@@ -65,7 +80,8 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
     reloadDevices()
   }, [userId, reloadDevices])
 
-  const isThisDevice = (d: DeviceRow) => !!d.key_fingerprint && d.key_fingerprint === myFp
+  const isThisDevice = (d: DeviceRow) =>
+    !!d.key_fingerprint && d.key_fingerprint === myFp
 
   const saveRename = async (d: DeviceRow) => {
     setRenamingId(null)
@@ -101,7 +117,9 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
     (raw: string) => {
       const normalized = normalizePairingCode(raw)
       if (!normalized) {
-        setTypedError('That code doesn’t look right — it should be 8 characters.')
+        setTypedError(
+          'That code doesn’t look right — it should be 8 characters.',
+        )
         return
       }
       setTypedError(null)
@@ -153,6 +171,8 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
           {devices.map((d) => (
             <div
               key={d.device_id}
+              data-testid="device-row"
+              data-device-id={d.device_id}
               className="rounded-xl border border-border bg-tint px-3 py-2.5 flex items-center justify-between gap-3"
             >
               <div className="min-w-0 flex-1">
@@ -174,13 +194,17 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
                   <p className="text-sm text-text truncate">
                     {d.device_name ?? `Device ${d.device_id}`}
                     {isThisDevice(d) && (
-                      <span className="ml-2 text-xs text-accent-mint">this device</span>
+                      <span className="ml-2 text-xs text-accent-mint">
+                        this device
+                      </span>
                     )}
                   </p>
                 )}
                 <p className="text-xs text-text-subtle">
                   Last active{' '}
-                  {d.last_active_at ? new Date(d.last_active_at).toLocaleDateString() : 'unknown'}
+                  {d.last_active_at
+                    ? new Date(d.last_active_at).toLocaleDateString()
+                    : 'unknown'}
                 </p>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
@@ -205,7 +229,9 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
             </div>
           ))}
           {devices.length === 0 && (
-            <p className="text-xs text-text-subtle">No devices registered yet.</p>
+            <p className="text-xs text-text-subtle">
+              No devices registered yet.
+            </p>
           )}
           {deviceError && <p className="text-xs text-danger">{deviceError}</p>}
         </div>
@@ -220,9 +246,10 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
           <p className="text-sm font-semibold text-text">Link a device</p>
         </div>
         <p className="text-xs text-text-subtle mb-4">
-          Each device gets its own encryption key, so a new one can’t read messages sent before
-          it existed. Linking copies your existing key across so history opens up. Both devices have
-          to be online at the same time.
+          Each device gets its own encryption key, so a new one can’t read
+          messages sent before it existed. Linking copies your existing key
+          across so history opens up. Both devices have to be online at the same
+          time.
         </p>
 
         {step === 'pick' && (
@@ -236,7 +263,8 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
             >
               <p className="text-sm font-medium text-text">Get history here</p>
               <p className="text-xs text-text-subtle mt-1">
-                This device is new. Pull the keys from a device that already has your messages.
+                This device is new. Pull the keys from a device that already has
+                your messages.
               </p>
             </button>
             <button
@@ -246,9 +274,12 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
               }}
               className="text-left rounded-2xl border border-border bg-tint p-4 hover:border-[#5b8def]/50 transition-colors"
             >
-              <p className="text-sm font-medium text-text">Send history from here</p>
+              <p className="text-sm font-medium text-text">
+                Send history from here
+              </p>
               <p className="text-xs text-text-subtle mt-1">
-                This device already reads your messages. Hand its keys to another one.
+                This device already reads your messages. Hand its keys to
+                another one.
               </p>
             </button>
           </div>
@@ -263,8 +294,8 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
               <ArrowLeft size={13} /> Back
             </button>
             <p className="text-xs text-text-subtle">
-              Either device can show the code — pick whichever is easier. A camera is never
-              required.
+              Either device can show the code — pick whichever is easier. A
+              camera is never required.
             </p>
             <button
               onClick={() => {
@@ -281,7 +312,10 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
               <span className="flex-1 h-px bg-border" />
             </div>
             <div className="space-y-2">
-              <label htmlFor="pairing-code" className="block text-xs font-medium text-text-subtle">
+              <label
+                htmlFor="pairing-code"
+                className="block text-xs font-medium text-text-subtle"
+              >
                 Enter the code shown on your other device
               </label>
               <div className="flex gap-2">
@@ -289,7 +323,9 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
                   id="pairing-code"
                   value={typedCode}
                   onChange={(e) => setTypedCode(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && beginEntrant(typedCode)}
+                  onKeyDown={(e) =>
+                    e.key === 'Enter' && beginEntrant(typedCode)
+                  }
                   placeholder="XXXX-XXXX"
                   autoCapitalize="characters"
                   autoComplete="off"
@@ -302,7 +338,9 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
                   Continue
                 </button>
               </div>
-              {typedError && <p className="text-xs text-danger">{typedError}</p>}
+              {typedError && (
+                <p className="text-xs text-danger">{typedError}</p>
+              )}
               {/* Only offered where a camera actually exists — a camera-less
                   desktop should never see a control that leads nowhere. */}
               {cameraAvailable && !scanning && (
@@ -314,7 +352,13 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
                 </button>
               )}
               {scanning && (
-                <QrScanner onScan={beginEntrant} onError={(m) => { setScanning(false); setTypedError(m) }} />
+                <QrScanner
+                  onScan={beginEntrant}
+                  onError={(m) => {
+                    setScanning(false)
+                    setTypedError(m)
+                  }}
+                />
               )}
             </div>
           </div>
@@ -332,16 +376,21 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
                       className="flex items-center gap-2 text-2xl font-mono tracking-[0.2em] text-text hover:opacity-80 transition-opacity"
                     >
                       {formatPairingCode(code)}
-                      {copied ? <Check size={16} className="text-accent-mint" /> : <Copy size={16} className="text-text-subtle" />}
+                      {copied ? (
+                        <Check size={16} className="text-accent-mint" />
+                      ) : (
+                        <Copy size={16} className="text-text-subtle" />
+                      )}
                     </button>
                     <p className="text-xs text-text-subtle text-center">
-                      Scan this, or type the code into your other device. yaply will never ask you
-                      to share this code with anyone else.
+                      Scan this, or type the code into your other device. yaply
+                      will never ask you to share this code with anyone else.
                     </p>
                   </div>
                 )}
                 <p className="flex items-center justify-center gap-2 text-xs text-text-subtle">
-                  <Loader2 size={13} className="animate-spin" /> Waiting for the other device…
+                  <Loader2 size={13} className="animate-spin" /> Waiting for the
+                  other device…
                 </p>
               </>
             )}
@@ -349,10 +398,12 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
             {phase === 'verifying' && (
               <div className="text-center space-y-3">
                 <p className="text-xs text-text-subtle">
-                  Check that this number matches on both screens. If it doesn’t, cancel — someone
-                  else may be in the middle.
+                  Check that this number matches on both screens. If it doesn’t,
+                  cancel — someone else may be in the middle.
                 </p>
-                <p className="text-4xl font-mono tracking-[0.25em] text-text">{sas}</p>
+                <p className="text-4xl font-mono tracking-[0.25em] text-text">
+                  {sas}
+                </p>
                 {role === 'sender' ? (
                   <button
                     onClick={() => void confirmAndSend()}
@@ -401,7 +452,9 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
             {(phase === 'expired' || phase === 'error') && (
               <div className="text-center space-y-3">
                 <p className="text-sm text-danger">
-                  {phase === 'expired' ? 'That code expired. Start over.' : error}
+                  {phase === 'expired'
+                    ? 'That code expired. Start over.'
+                    : error}
                 </p>
               </div>
             )}
@@ -426,7 +479,10 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
         )}
       </div>
 
-      <Dialog.Root open={!!pendingRevoke} onOpenChange={(o) => !o && setPendingRevoke(null)}>
+      <Dialog.Root
+        open={!!pendingRevoke}
+        onOpenChange={(o) => !o && setPendingRevoke(null)}
+      >
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50" />
           <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(26rem,calc(100vw-2rem))] rounded-2xl bg-surface border border-border p-5 z-50 shadow-xl">
@@ -436,7 +492,10 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
               </span>
               <div className="min-w-0">
                 <Dialog.Title className="text-sm font-semibold text-text">
-                  Sign out {pendingRevoke?.device_name ?? `Device ${pendingRevoke?.device_id ?? ''}`}?
+                  Sign out{' '}
+                  {pendingRevoke?.device_name ??
+                    `Device ${pendingRevoke?.device_id ?? ''}`}
+                  ?
                 </Dialog.Title>
                 <Dialog.Description className="text-xs text-text-subtle mt-1.5">
                   {pendingRevoke && isThisDevice(pendingRevoke)
@@ -457,7 +516,11 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
                 disabled={isRevoking}
                 className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-danger hover:opacity-90 text-sm font-medium text-white transition-opacity disabled:opacity-40"
               >
-                {isRevoking ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {isRevoking ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Trash2 size={14} />
+                )}
                 Sign out
               </button>
             </div>
@@ -467,8 +530,8 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
 
       <p className="flex items-start gap-2 text-xs text-text-subtle">
         <Smartphone size={13} className="mt-0.5 flex-shrink-0" />
-        If you lose every linked device at once, past messages can’t be recovered — nothing that
-        could unlock them is stored on our servers.
+        If you lose every linked device at once, past messages can’t be
+        recovered — nothing that could unlock them is stored on our servers.
       </p>
     </div>
   )

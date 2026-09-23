@@ -407,7 +407,7 @@ npm run format    # Prettier + ESLint fix
 Playwright drives the real app in Chromium against a **local Supabase stack**, so the
 database — not the DOM — is the oracle for wire-format invariants. Needs a Docker
 runtime — **OrbStack** (`brew install --cask orbstack`) locally; CI uses the Docker
-preinstalled on `ubuntu-latest`. 21 specs, ~45s.
+preinstalled on `ubuntu-latest`. 27 specs.
 
 Coverage: the `enc_v = 2` wire format and envelope fan-out, sender read-back, the
 phase-1 fallback, the per-user key cache, decrypt-failed rendering, thread/ChatView
@@ -475,6 +475,15 @@ Load-bearing rules when writing specs:
   `helpers/db.ts` bypasses RLS, so asserting with it proves nothing about the policies
   and SECURITY DEFINER guards that are the subject. `friendships` in particular has no
   INSERT or UPDATE policy at all.
+- **Give each browser context its own session** via `contextFor(browser, USERS.x)`.
+  Sharing one storageState shares one refresh token, and supabase-js refreshes
+  automatically — whichever context refreshes first rotates the token and the others
+  are left holding an invalid one. The symptom is a context bouncing to /auth in a
+  spec that has nothing to do with auth.
+- **Anchor on message ids, never timestamps** (`messageIdsIn` + `waitForNewMessage`).
+  A host-generated timestamp compared against `created_at` couples the runner's clock
+  to the database container's. OrbStack's VM clock drifted 27 minutes behind after a
+  sleep, and every send silently "never landed".
 - **Pending message requests live in a collapsed "Message requests" section**, not the
   conversation list — expand it before opening one, and pass
   `openConversation(..., { expectComposer: false })` since MessageRequestBar replaces

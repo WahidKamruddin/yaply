@@ -1,11 +1,13 @@
 import { test, expect } from '@playwright/test'
-import { USERS, storageStatePath } from '../fixtures/users'
+import { USERS } from '../fixtures/users'
+import { contextFor } from '../helpers/session'
 import {
   profileIdByUsername,
   directConversationBetween,
   waitForNewDevice,
   deviceCount,
   waitForNewMessage,
+  messageIdsIn,
 } from '../helpers/db'
 import {
   gotoChat,
@@ -37,12 +39,8 @@ test('a sent message appears in an already-open window without reloading', async
   const aliceBefore = await deviceCount(aliceId)
   const bobBefore = await deviceCount(bobId)
 
-  const aliceCtx = await browser.newContext({
-    storageState: storageStatePath('alice'),
-  })
-  const bobCtx = await browser.newContext({
-    storageState: storageStatePath('bob'),
-  })
+  const aliceCtx = await contextFor(browser, USERS.alice)
+  const bobCtx = await contextFor(browser, USERS.bob)
   const alice = await aliceCtx.newPage()
   const bob = await bobCtx.newPage()
 
@@ -66,7 +64,7 @@ test('a sent message appears in an already-open window without reloading', async
   // arrived over the subscription.
 
   const text = `realtime ${Date.now()}`
-  const sentAfter = new Date().toISOString()
+  const sentAfter = await messageIdsIn(conversationId!)
   await sendMessage(alice, text)
   const delivered = await waitForNewMessage(conversationId!, sentAfter)
 

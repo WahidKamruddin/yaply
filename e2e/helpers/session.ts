@@ -5,6 +5,7 @@ import type { Database } from '../../src/lib/database.types'
 import { ALL_USERS, storageStatePath } from '../fixtures/users'
 import type { TestUser } from '../fixtures/users'
 import { BASE_URL } from '../../playwright.config'
+import type { Browser, BrowserContext } from '@playwright/test'
 
 /**
  * Minting the browser sessions the specs run as.
@@ -15,7 +16,7 @@ import { BASE_URL } from '../../playwright.config'
  * leaves userStorage unset, so the whole Session object, user included, lives
  * under the single `yaply-auth` key.
  */
-export async function mintSession(user: TestUser): Promise<void> {
+async function signIn(user: TestUser) {
   const anon = createClient<Database>(
     process.env['VITE_SUPABASE_URL']!,
     process.env['VITE_SUPABASE_ANON_KEY']!,
@@ -29,6 +30,11 @@ export async function mintSession(user: TestUser): Promise<void> {
   if (error) {
     throw new Error(`[e2e] could not sign in ${user.email}: ${error.message}`)
   }
+  return data.session
+}
+
+export async function mintSession(user: TestUser): Promise<void> {
+  const session = await signIn(user)
 
   const state = {
     cookies: [],
@@ -37,9 +43,7 @@ export async function mintSession(user: TestUser): Promise<void> {
         // Must match the dev server's origin exactly, hence the import rather
         // than a second copy of the port.
         origin: BASE_URL,
-        localStorage: [
-          { name: 'yaply-auth', value: JSON.stringify(data.session) },
-        ],
+        localStorage: [{ name: 'yaply-auth', value: JSON.stringify(session) }],
       },
     ],
   }
@@ -64,3 +68,38 @@ export async function mintAllSessions(): Promise<void> {
  * call this in an afterAll, or it silently breaks whatever runs after it.
  */
 export const restoreSession = mintSession
+
+/**
+ * A browser context with its *own* freshly minted session for `user`.
+ *
+ * Prefer this over `storageState: storageStatePath(...)` for anything that opens
+ * more than one context, or that runs after a spec which signs out.
+ *
+ * Sharing one storageState across contexts shares one refresh token, and
+ * supabase-js refreshes automatically: whichever context refreshes first rotates
+ * the token and the others are left holding an invalidated one. The symptom is
+ * a context bouncing to /auth for no visible reason, in a spec that has nothing
+ * to do with auth. Minting per context costs one sign-in and removes the whole
+ * class of failure.
+ */
+export async function contextFor(
+  browser: Browser,
+  user: TestUser,
+  options: Parameters<Browser['newContext']>[0] = {},
+): Promise<BrowserContext> {
+  const session = await signIn(user)
+  return browser.newContext({
+    ...options,
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: BASE_URL,
+          localStorage: [
+            { name: 'yaply-auth', value: JSON.stringify(session) },
+          ],
+        },
+      ],
+    },
+  })
+}

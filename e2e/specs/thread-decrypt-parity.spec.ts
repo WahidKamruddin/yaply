@@ -1,10 +1,12 @@
 import { test, expect } from '@playwright/test'
-import { USERS, storageStatePath } from '../fixtures/users'
+import { USERS } from '../fixtures/users'
+import { contextFor } from '../helpers/session'
 import {
   profileIdByUsername,
   directConversationBetween,
   waitForNewDevice,
   waitForNewMessage,
+  messageIdsIn,
   deviceCount,
   envelopesFor,
 } from '../helpers/db'
@@ -34,12 +36,8 @@ test('a thread reply is sealed as v2 and decrypts in the thread pane', async ({
   const aliceBefore = await deviceCount(aliceId)
   const bobBefore = await deviceCount(bobId)
 
-  const aliceCtx = await browser.newContext({
-    storageState: storageStatePath('alice'),
-  })
-  const bobCtx = await browser.newContext({
-    storageState: storageStatePath('bob'),
-  })
+  const aliceCtx = await contextFor(browser, USERS.alice)
+  const bobCtx = await contextFor(browser, USERS.bob)
   const alice = await aliceCtx.newPage()
   const bob = await bobCtx.newPage()
 
@@ -51,11 +49,12 @@ test('a thread reply is sealed as v2 and decrypts in the thread pane', async ({
 
   // A root message to hang the thread off.
   const rootText = `thread-root ${Date.now()}`
-  const rootAfter = new Date().toISOString()
   await startDirectChat(alice, USERS.bob.username)
-  await sendMessage(alice, rootText)
 
   const conversationId = await directConversationBetween(aliceId, bobId)
+  const rootAfter = await messageIdsIn(conversationId!)
+  await sendMessage(alice, rootText)
+
   const root = await waitForNewMessage(conversationId!, rootAfter)
 
   // ── Open the thread from the root's hover action ──────────────────────────
@@ -68,7 +67,7 @@ test('a thread reply is sealed as v2 and decrypts in the thread pane', async ({
 
   // ── Reply through ThreadView's own composer and send path ─────────────────
   const replyText = `thread-reply ${Date.now()}`
-  const replyAfter = new Date().toISOString()
+  const replyAfter = await messageIdsIn(conversationId!)
   await threadComposer.fill(replyText)
 
   const written = alice.waitForResponse(
