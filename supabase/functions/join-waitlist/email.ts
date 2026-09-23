@@ -1,6 +1,7 @@
 // The "thanks for joining" email sent after a waitlist signup, via Resend.
 // Copy lives in the constants below and feeds both the HTML and plain-text
 // versions so they never drift; layout lives in renderHtml().
+import { EMAIL_IMAGES } from './images.ts'
 
 const SUBJECT = "You're on the Yaply waitlist"
 
@@ -13,7 +14,7 @@ const INTRO = [
 
 const SIGN_OFF = ['Talk soon,', 'Wahid @ Yaply']
 
-// Small icon links under the sign-off; each `icon` is public/email/<icon>.png.
+// Small icon links under the sign-off; each `icon` is a key of EMAIL_IMAGES.
 // X and Instagram are placeholders until the real profiles exist.
 const SOCIALS = [
   { icon: 'linkedin', label: 'LinkedIn', url: 'https://www.linkedin.com/in/wahid-kamruddin/' },
@@ -38,7 +39,7 @@ const C = {
 
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 
-const DEFAULT_SITE_URL = 'https://yaply.us'
+const SITE_URL = 'https://yaply.us'
 
 // Resend's shared onboarding@resend.dev sender only delivers to the Resend
 // account owner, so real signups need WAITLIST_FROM_EMAIL on a verified domain.
@@ -52,19 +53,21 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
-// Table layout and inline styles: the only thing email clients render
-// reliably. `siteUrl` hosts the header image; the override exists only for
-// local previews. Exported for the same reason.
-export function renderHtml(siteUrl = DEFAULT_SITE_URL): string {
-  const site = siteUrl.replace(/\/+$/, '')
+// Images default to `cid:` references to the inline attachments sent with the
+// email; a local preview can map them to <site>/email/<name>.png instead.
+const cidSrc = (name: string) => `cid:${name}`
 
-  // Logo + wordmark as one image (public/email/wordmark.png, 4x), because
+// Table layout and inline styles: the only thing email clients render
+// reliably. Exported for local previews.
+export function renderHtml(imageSrc: (name: string) => string = cidSrc): string {
+
+  // Logo + wordmark as one image (wordmark, 4x), because
   // Gmail and Outlook won't load the Bricolage Grotesque web font.
-  const header = `<a href="${escapeHtml(site)}" style="display:inline-block;text-decoration:none;"><img src="${escapeHtml(site)}/email/wordmark.png" width="108" height="36" alt="yaply" style="display:block;border:0;width:108px;height:36px;font-size:24px;font-weight:600;color:${C.ink};"></a>`
+  const header = `<a href="${SITE_URL}" style="display:inline-block;text-decoration:none;"><img src="${escapeHtml(imageSrc('wordmark'))}" width="108" height="36" alt="yaply" style="display:block;border:0;width:108px;height:36px;font-size:24px;font-weight:600;color:${C.ink};"></a>`
 
   const socials = SOCIALS.map(
     (s) =>
-      `<td style="padding-right:14px;"><a href="${escapeHtml(s.url)}" style="text-decoration:none;"><img src="${escapeHtml(site)}/email/${s.icon}.png" width="20" height="20" alt="${escapeHtml(s.label)}" style="display:block;border:0;width:20px;height:20px;font-size:11px;color:${C.dim};"></a></td>`,
+      `<td style="padding-right:14px;"><a href="${escapeHtml(s.url)}" style="text-decoration:none;"><img src="${escapeHtml(imageSrc(s.icon))}" width="20" height="20" alt="${escapeHtml(s.label)}" style="display:block;border:0;width:20px;height:20px;font-size:11px;color:${C.dim};"></a></td>`,
   ).join('')
 
   const intro = INTRO.map(
@@ -148,6 +151,12 @@ export async function sendWaitlistThankYou(email: string): Promise<void> {
       subject: SUBJECT,
       html: renderHtml(),
       text: renderText(),
+      attachments: Object.entries(EMAIL_IMAGES).map(([name, content]) => ({
+        filename: `${name}.png`,
+        content,
+        content_type: 'image/png',
+        content_id: name,
+      })),
     }),
   })
   if (!res.ok) throw new Error(`Resend delivery failed: ${await res.text()}`)
