@@ -90,21 +90,43 @@ create policy "media_owner_delete" on storage.objects
 -- CHANNEL_ERROR and pairing cannot start at all.
 --
 -- These live in the `realtime` schema, so the public-schema dump in
--- 00000_baseline.sql does not carry them — same reason the auth.users trigger
+-- 00000_baseline.sql does not carry them — the same reason the auth.users trigger
 -- and the storage buckets are restored here. Transcribed from production.
+--
+-- Privileges are fiddly here, hence the guard:
+--   * realtime.messages is owned by supabase_realtime_admin. `postgres` is a
+--     member, which is enough to pass the ownership check while it inherits.
+--   * RLS is already enabled on that table by the Realtime image, so there is no
+--     `enable row level security` — issuing one fails on ownership and achieves
+--     nothing.
+--   * SET ROLE to the owner does not help: supabase_realtime_admin has no USAGE
+--     on the auth schema, and the policy body calls auth.uid().
+-- If a future image tightens this further, a notice is far better than a failed
+-- `supabase start` that blocks every other spec; pairing-sas will fail loudly on
+-- its own and say why.
 --
 -- Scoping the topic to the caller's own uid is what stops one authenticated
 -- session from joining someone else's pairing channel. Only private channels are
 -- affected; typing, presence and invalidation channels stay public.
 
-alter table realtime.messages enable row level security;
+do $$
+begin
+  execute $ddl$drop policy if exists "pairing_channel_read" on realtime.messages$ddl$;
+  execute $ddl$
+    create policy "pairing_channel_read" on realtime.messages
+      for select to authenticated
+      using ((select realtime.topic()) like ('pairing:' || (select auth.uid())::text || ':%'))
+  $ddl$;
 
-drop policy if exists "pairing_channel_read" on realtime.messages;
-create policy "pairing_channel_read" on realtime.messages
-  for select to authenticated
-  using ((select realtime.topic()) like ('pairing:' || (select auth.uid())::text || ':%'));
-
-drop policy if exists "pairing_channel_write" on realtime.messages;
-create policy "pairing_channel_write" on realtime.messages
-  for insert to authenticated
-  with check ((select realtime.topic()) like ('pairing:' || (select auth.uid())::text || ':%'));
+  execute $ddl$drop policy if exists "pairing_channel_write" on realtime.messages$ddl$;
+  execute $ddl$
+    create policy "pairing_channel_write" on realtime.messages
+      for insert to authenticated
+      with check ((select realtime.topic()) like ('pairing:' || (select auth.uid())::text || ':%'))
+  $ddl$;
+exception
+  when insufficient_privilege then
+    raise notice
+      'could not create pairing channel policies on realtime.messages (%). Live '
+      'device pairing will fail with CHANNEL_ERROR until they exist.', sqlerrm;
+end $$;
