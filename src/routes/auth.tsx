@@ -1,6 +1,6 @@
 import { createFileRoute, redirect, useNavigate, Link } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Eye, EyeOff, Check, X } from 'lucide-react'
+import { Eye, EyeOff, Check, X, ArrowLeft } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getSession } from '@/lib/auth'
 import YaplyLogo from '@/components/YaplyLogo'
@@ -149,6 +149,10 @@ function AuthPage() {
       <div className="lp-orb lp-orb-c" aria-hidden="true" />
       <div className="lp-grid-tex" aria-hidden="true" />
 
+      <Link to="/" className="auth-back-corner" aria-label="Back to Yaply">
+        <ArrowLeft size={17} strokeWidth={2.2} />
+      </Link>
+
       <button
         type="button"
         className="lp-theme-corner"
@@ -173,7 +177,7 @@ function AuthPage() {
       <div className="auth-shell">
         <div className="auth-wrap">
           <div className="auth-card lp-glass" onMouseMove={spotlight}>
-            <Link to="/" aria-label="Go to yaply home" className="auth-brand">
+            <Link to="/" aria-label="Go to Yaply home" className="auth-brand">
               <YaplyLogo variant="mark" size={48} />
             </Link>
 
@@ -332,10 +336,6 @@ function AuthPage() {
               Continue with Google
             </button>
           </div>
-
-          <p className="auth-foot">
-            <Link to="/">← Back to yaply</Link>
-          </p>
         </div>
       </div>
     </div>
@@ -438,6 +438,22 @@ const AUTH_CSS = `
   transition: color 0.2s, background 0.2s, border-color 0.3s, transform 0.3s;
 }
 .lp-theme-corner:hover { color: var(--ink); background: var(--tint); transform: rotate(18deg); }
+
+.auth-back-corner {
+  position: fixed;
+  top: max(16px, var(--safe-top, 0px));
+  left: max(16px, var(--safe-left, 0px));
+  z-index: 55;
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  color: var(--dim); cursor: pointer;
+  box-shadow: 0 10px 28px rgba(3,7,18,0.35);
+  transition: color 0.2s, background 0.2s, border-color 0.3s, transform 0.3s;
+}
+.auth-back-corner:hover { color: var(--ink); background: var(--tint); transform: translateX(-2px); }
 
 /* ---- eyebrow badge ---- */
 .lp-eyebrow {
@@ -583,7 +599,7 @@ const AUTH_CSS = `
 .auth-form { width: 100%; display: flex; flex-direction: column; gap: 14px; }
 .auth-field { display: flex; flex-direction: column; gap: 6px; text-align: left; }
 .auth-field label {
-  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--faint);
 }
 .auth-field input {
@@ -638,9 +654,6 @@ const AUTH_CSS = `
 
 .auth-submit { width: 100%; margin-top: 4px; }
 
-.auth-foot { margin: 22px 0 0; text-align: center; font-size: 13px; }
-.auth-foot a { color: var(--dim); text-decoration: none; font-family: var(--mono); font-size: 12.5px; transition: color 0.2s; }
-.auth-foot a:hover { color: var(--ink); }
 
 @media (max-width: 420px) {
   .auth-card { padding: 32px 24px 28px; border-radius: 22px; }

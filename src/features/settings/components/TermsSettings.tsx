@@ -3,7 +3,7 @@ import { FileText } from 'lucide-react'
 const SECTIONS = [
   {
     title: '1. Acceptance of terms',
-    body: 'By using yaply you agree to these terms. yaply is currently in active development — features, availability, and these terms may change without prior notice.',
+    body: 'By using Yaply you agree to these terms. Yaply is currently in active development — features, availability, and these terms may change without prior notice.',
   },
   {
     title: '2. Your account',
@@ -19,11 +19,11 @@ const SECTIONS = [
   },
   {
     title: '5. No warranty',
-    body: 'yaply is provided "as is" during development, without warranty of any kind, including around uptime, data retention, or fitness for a particular purpose.',
+    body: 'Yaply is provided "as is" during development, without warranty of any kind, including around uptime, data retention, or fitness for a particular purpose.',
   },
   {
     title: '6. Termination',
-    body: 'You may stop using yaply and delete your account at any time. We may suspend accounts for violations of these terms.',
+    body: 'You may stop using Yaply and delete your account at any time. We may suspend accounts for violations of these terms.',
   },
 ]
 
