@@ -19,7 +19,7 @@ const SECTIONS = [
   },
   {
     title: 'Changes to this policy',
-    body: "This is a placeholder policy while yaply is in active development. We'll notify you in-app before any material change takes effect.",
+    body: "This is a placeholder policy while Yaply is in active development. We'll notify you in-app before any material change takes effect.",
   },
 ]
 

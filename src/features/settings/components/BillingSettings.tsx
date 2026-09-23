@@ -37,7 +37,7 @@ export default function BillingSettings() {
         <p className="text-sm font-semibold text-text">Plan & billing</p>
       </div>
       <p className="text-sm text-text-subtle mb-5">
-        yaply is free while we're building out the core experience. Paid plans are a preview of what's coming — nothing here is billed yet.
+        Yaply is free while we're building out the core experience. Paid plans are a preview of what's coming — nothing here is billed yet.
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">

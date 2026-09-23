@@ -383,7 +383,7 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
                       )}
                     </button>
                     <p className="text-xs text-text-subtle text-center">
-                      Scan this, or type the code into your other device. yaply
+                      Scan this, or type the code into your other device. Yaply
                       will never ask you to share this code with anyone else.
                     </p>
                   </div>

@@ -1125,7 +1125,7 @@ function LandingPage() {
 
       <footer className="lp-footer">
         <YaplyLogo variant="mark" size={18} />
-        <span>© {new Date().getFullYear()} yaply</span>
+        <span>© {new Date().getFullYear()} Yaply</span>
         <span className="lp-footer-mono">·&nbsp;&nbsp;Made by <a href="https://www.linkedin.com/in/wahid-kamruddin/" target="_blank" rel="noopener noreferrer">Wahid Kamruddin</a></span>
       </footer>
     </div>
