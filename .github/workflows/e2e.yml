@@ -36,9 +36,13 @@ jobs:
           npx tsc --noEmit
           npx tsc -p e2e/tsconfig.json --noEmit
 
+      # Pinned, not `latest`. An unpinned CLI silently pulls different Postgres
+      # and Realtime images than local, and the two diverged on whether
+      # `postgres` may create a policy on realtime.messages — which failed the
+      # whole `supabase start`, not just one spec.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.84.2
 
       # Docker is preinstalled on ubuntu-latest.
       - name: Start Supabase
