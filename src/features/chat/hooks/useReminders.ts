@@ -123,7 +123,7 @@ export function useReminderNotifications(currentUserId: string) {
 
         if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
           for (const reminder of data) {
-            new Notification('yaply reminder', { body: reminder.message, icon: '/favicon.ico' })
+            new Notification('Yaply reminder', { body: reminder.message, icon: '/favicon.ico' })
           }
         }
 
