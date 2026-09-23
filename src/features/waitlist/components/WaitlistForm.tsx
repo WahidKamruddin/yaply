@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Sparkles } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { submitWaitlist } from '../api/submitWaitlist'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -35,7 +35,7 @@ export default function WaitlistForm() {
           <Check size={22} strokeWidth={2.6} />
         </span>
         <h1 className="auth-title">You're on the list.</h1>
-        <p className="auth-subtitle">We'll email you the moment yaply opens up.</p>
+        <p className="auth-subtitle">We'll email you the moment Yaply opens up.</p>
       </div>
     )
   }
@@ -43,12 +43,9 @@ export default function WaitlistForm() {
   return (
     <>
       <div className="auth-head">
-        <span className="lp-eyebrow wl-eyebrow">
-          <Sparkles size={11} strokeWidth={2.4} />
-          Coming soon
-        </span>
+
         <h1 className="auth-title">Join the waitlist.</h1>
-        <p className="auth-subtitle">yaply isn't open yet — leave your email and we'll let you know the moment it is.</p>
+        <p className="auth-subtitle">Sign up to get notified when Yaply opens up.</p>
       </div>
 
       <form onSubmit={(e) => void handleSubmit(e)} className="auth-form">

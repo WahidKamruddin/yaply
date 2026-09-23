@@ -335,7 +335,7 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
                       {copied ? <Check size={16} className="text-accent-mint" /> : <Copy size={16} className="text-text-subtle" />}
                     </button>
                     <p className="text-xs text-text-subtle text-center">
-                      Scan this, or type the code into your other device. yaply will never ask you
+                      Scan this, or type the code into your other device. Yaply will never ask you
                       to share this code with anyone else.
                     </p>
                   </div>

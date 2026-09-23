@@ -12,7 +12,7 @@ const FAQS = [
   },
   {
     q: 'I signed in with Google — can I set a password?',
-    a: "No — password changes only apply to accounts created with email/password. Google accounts sign in through Google, so there's no yaply password to change.",
+    a: "No — password changes only apply to accounts created with email/password. Google accounts sign in through Google, so there's no Yaply password to change.",
   },
   {
     q: 'How do I change my username?',
