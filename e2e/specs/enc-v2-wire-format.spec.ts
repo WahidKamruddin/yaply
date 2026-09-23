@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
-import { USERS, storageStatePath } from '../fixtures/users'
+import { USERS } from '../fixtures/users'
+import { contextFor } from '../helpers/session'
 import {
   expectV2,
   envelopesFor,
@@ -29,12 +30,8 @@ import {
 test('a DM between two registered devices is sealed as enc_v = 2', async ({
   browser,
 }) => {
-  const aliceCtx = await browser.newContext({
-    storageState: storageStatePath('alice'),
-  })
-  const bobCtx = await browser.newContext({
-    storageState: storageStatePath('bob'),
-  })
+  const aliceCtx = await contextFor(browser, USERS.alice)
+  const bobCtx = await contextFor(browser, USERS.bob)
   const alice = await aliceCtx.newPage()
   const bob = await bobCtx.newPage()
 

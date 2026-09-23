@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
-import { USERS, storageStatePath } from '../fixtures/users'
+import { USERS } from '../fixtures/users'
+import { contextFor } from '../helpers/session'
 import {
   expectPhase1,
   envelopesFor,
@@ -30,9 +31,7 @@ import {
 test('a DM to a member with no devices falls back to phase-1, with iv and enc_v both NULL', async ({
   browser,
 }) => {
-  const ctx = await browser.newContext({
-    storageState: storageStatePath('alice'),
-  })
+  const ctx = await contextFor(browser, USERS.alice)
   const alice = await ctx.newPage()
 
   const aliceId = await profileIdByUsername(USERS.alice.username)

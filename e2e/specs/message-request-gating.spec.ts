@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
-import { USERS, storageStatePath } from '../fixtures/users'
+import { USERS } from '../fixtures/users'
+import { contextFor } from '../helpers/session'
 import {
   profileIdByUsername,
   directConversationBetween,
@@ -47,9 +48,7 @@ test('a DM from a non-friend lands as a request, and declining does not delete t
   const aliceId = await profileIdByUsername(USERS.alice.username)
   const daveId = await profileIdByUsername(USERS.dave.username)
 
-  const aliceCtx = await browser.newContext({
-    storageState: storageStatePath('alice'),
-  })
+  const aliceCtx = await contextFor(browser, USERS.alice)
   const alice = await aliceCtx.newPage()
   await gotoChat(alice)
   await startDirectChat(alice, USERS.dave.username)
@@ -67,9 +66,7 @@ test('a DM from a non-friend lands as a request, and declining does not delete t
   ).toBe('pending')
 
   // ── Dave sees a request bar, not a composer ───────────────────────────────
-  const daveCtx = await browser.newContext({
-    storageState: storageStatePath('dave'),
-  })
+  const daveCtx = await contextFor(browser, USERS.dave)
   const dave = await daveCtx.newPage()
   await gotoChat(dave)
 

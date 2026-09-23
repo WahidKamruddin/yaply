@@ -82,3 +82,29 @@ create policy "media_owner_delete" on storage.objects
   for delete using (
     bucket_id = 'media' and (auth.uid())::text = (storage.foldername(name))[1]
   );
+
+-- ─── Private pairing channels ─────────────────────────────────────────────────
+-- Live device pairing opens a Realtime channel `pairing:<userId>:<code>` with
+-- `{ config: { private: true } }`, and a private channel is authorised by RLS on
+-- realtime.messages. Without these policies every subscribe fails with
+-- CHANNEL_ERROR and pairing cannot start at all.
+--
+-- These live in the `realtime` schema, so the public-schema dump in
+-- 00000_baseline.sql does not carry them — same reason the auth.users trigger
+-- and the storage buckets are restored here. Transcribed from production.
+--
+-- Scoping the topic to the caller's own uid is what stops one authenticated
+-- session from joining someone else's pairing channel. Only private channels are
+-- affected; typing, presence and invalidation channels stay public.
+
+alter table realtime.messages enable row level security;
+
+drop policy if exists "pairing_channel_read" on realtime.messages;
+create policy "pairing_channel_read" on realtime.messages
+  for select to authenticated
+  using ((select realtime.topic()) like ('pairing:' || (select auth.uid())::text || ':%'));
+
+drop policy if exists "pairing_channel_write" on realtime.messages;
+create policy "pairing_channel_write" on realtime.messages
+  for insert to authenticated
+  with check ((select realtime.topic()) like ('pairing:' || (select auth.uid())::text || ':%'));
