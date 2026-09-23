@@ -4,6 +4,10 @@
 import { sendWaitlistThankYou } from './email.ts'
 import { appendWaitlistRow, hasWaitlistEmail } from './google.ts'
 
+// Supabase edge runtime global: keeps the worker alive for a promise that
+// outlives the response.
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void }
+
 const MAX_EMAIL_LEN = 254
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -46,13 +50,14 @@ Deno.serve(async (req) => {
     return json({ error: "Couldn't join the waitlist. Try again." }, 502)
   }
 
-  // The signup is recorded at this point, so a mail failure is logged, not
-  // surfaced — the user is on the list either way.
-  try {
-    await sendWaitlistThankYou(email)
-  } catch (err) {
-    console.error('join-waitlist thank-you email failed:', err)
-  }
+  // The signup is recorded at this point, so the email goes out after the
+  // response (it isn't worth making the user wait on Resend) and a failure is
+  // logged, not surfaced — the user is on the list either way.
+  EdgeRuntime.waitUntil(
+    sendWaitlistThankYou(email).catch((err) => {
+      console.error('join-waitlist thank-you email failed:', err)
+    }),
+  )
 
   return json({ ok: true })
 })

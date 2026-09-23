@@ -6,10 +6,12 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export default function WaitlistForm() {
   const [email, setEmail] = useState('')
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [joined, setJoined] = useState(false)
 
+  // Optimistic: the signup round-trip (Google Sheets read + append) takes a
+  // few seconds, so show success immediately and fall back to the form, email
+  // still filled in, with the error if it fails.
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -17,14 +19,12 @@ export default function WaitlistForm() {
       setError('Enter a valid email address.')
       return
     }
-    setLoading(true)
+    setJoined(true)
     try {
       await submitWaitlist(email.trim())
-      setJoined(true)
     } catch (err) {
+      setJoined(false)
       setError(err instanceof Error ? err.message : 'Something went wrong. Try again.')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -65,8 +65,8 @@ export default function WaitlistForm() {
 
         {error && <p className="auth-banner auth-error">{error}</p>}
 
-        <button type="submit" disabled={loading} className="lp-btn-primary auth-submit">
-          {loading ? 'Joining…' : 'Join the waitlist'}
+        <button type="submit" className="lp-btn-primary auth-submit">
+          Join the waitlist
         </button>
       </form>
     </>
