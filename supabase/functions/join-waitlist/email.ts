@@ -11,7 +11,15 @@ const INTRO = [
   "We're opening up in waves. When your spot comes up, we'll email you a link to create your account.",
 ]
 
-const SIGN_OFF = ['Talk soon,', 'The Yaply team']
+const SIGN_OFF = ['Talk soon,', 'Wahid @ Yaply']
+
+// Small icon links under the sign-off; each `icon` is public/email/<icon>.png.
+// X and Instagram are placeholders until the real profiles exist.
+const SOCIALS = [
+  { icon: 'linkedin', label: 'LinkedIn', url: 'https://www.linkedin.com/in/wahid-kamruddin/' },
+  { icon: 'x', label: 'X', url: 'https://x.com/' },
+  { icon: 'instagram', label: 'Instagram', url: 'https://www.instagram.com/' },
+]
 
 const FOOTER =
   "You're receiving this because this address was entered on the Yaply waitlist. If that wasn't you, you can safely ignore this email — we won't send anything else until Yaply is ready."
@@ -52,7 +60,12 @@ export function renderHtml(siteUrl = DEFAULT_SITE_URL): string {
 
   // Logo + wordmark as one image (public/email/wordmark.png, 4x), because
   // Gmail and Outlook won't load the Bricolage Grotesque web font.
-  const header = `<img src="${escapeHtml(site)}/email/wordmark.png" width="108" height="36" alt="yaply" style="display:block;border:0;width:108px;height:36px;font-size:24px;font-weight:600;color:${C.ink};">`
+  const header = `<a href="${escapeHtml(site)}" style="display:inline-block;text-decoration:none;"><img src="${escapeHtml(site)}/email/wordmark.png" width="108" height="36" alt="yaply" style="display:block;border:0;width:108px;height:36px;font-size:24px;font-weight:600;color:${C.ink};"></a>`
+
+  const socials = SOCIALS.map(
+    (s) =>
+      `<td style="padding-right:14px;"><a href="${escapeHtml(s.url)}" style="text-decoration:none;"><img src="${escapeHtml(site)}/email/${s.icon}.png" width="20" height="20" alt="${escapeHtml(s.label)}" style="display:block;border:0;width:20px;height:20px;font-size:11px;color:${C.dim};"></a></td>`,
+  ).join('')
 
   const intro = INTRO.map(
     (p) =>
@@ -89,6 +102,7 @@ export function renderHtml(siteUrl = DEFAULT_SITE_URL): string {
 
         <tr><td style="padding:28px 40px 40px;">
           <p style="margin:0;font-size:15px;line-height:1.6;color:${C.dim};">${SIGN_OFF.map(escapeHtml).join('<br>')}</p>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:20px;"><tr>${socials}</tr></table>
         </td></tr>
       </table>
 
@@ -110,6 +124,8 @@ function renderText(): string {
     '',
     ...INTRO.flatMap((p) => [p, '']),
     ...SIGN_OFF,
+    '',
+    ...SOCIALS.map((s) => `${s.label}: ${s.url}`),
     '',
     '—',
     FOOTER,
