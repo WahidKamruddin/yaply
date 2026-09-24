@@ -224,3 +224,111 @@ body,
     background-color: var(--tint);
   }
 }
+
+/* ---- Plan UI (event availability grid + confirmed card) ----
+   Ported from the landing page's EventFlowDemo (`.lp-cell`, `.lp-lvN`,
+   `.lp-mine`, `.lp-best`, `.lp-seg`, `.lp-event-badge`, `.lp-face`) onto the
+   app tokens. iOS mirrors these values in Features/Events/Views/PlanStyle.swift. */
+.plan-mono {
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+}
+.plan-badge {
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--primary-text);
+  padding: 3px 9px; border-radius: 999px;
+  background: var(--primary-tint);
+  border: 1px solid color-mix(in srgb, var(--primary-text) 28%, transparent);
+  white-space: nowrap;
+}
+.plan-pill {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px 14px; border-radius: 999px;
+  font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  color: var(--dim); background: var(--tint); border: 1px solid var(--border);
+  transition: background 0.2s, color 0.2s, opacity 0.2s, transform 0.15s;
+}
+.plan-pill:hover:not(:disabled) { color: var(--ink); background: var(--tint-strong); }
+.plan-pill:active:not(:disabled) { transform: scale(0.97); }
+.plan-pill:disabled { opacity: 0.5; cursor: not-allowed; }
+.plan-pill-primary,
+.plan-pill-primary:hover:not(:disabled) {
+  color: #fff; border-color: transparent;
+  background: linear-gradient(120deg, var(--primary), var(--primary-dark));
+}
+.plan-pill-primary:hover:not(:disabled) { filter: brightness(1.06); }
+
+.plan-seg {
+  display: inline-flex; gap: 3px; padding: 3px;
+  border-radius: 999px; background: var(--tint); border: 1px solid var(--border);
+}
+.plan-seg button {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 13px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; color: var(--dim);
+  transition: background 0.25s, color 0.25s;
+}
+.plan-seg button:hover { color: var(--ink); }
+.plan-seg .plan-seg-on,
+.plan-seg .plan-seg-on:hover {
+  color: #fff;
+  background: linear-gradient(120deg, var(--primary), var(--primary-dark));
+}
+
+.plan-round-btn {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--dim); background: var(--tint); border: 1px solid var(--border);
+  transition: color 0.2s, background 0.2s, transform 0.15s;
+}
+.plan-round-btn:hover { color: var(--ink); background: var(--tint-strong); }
+.plan-round-btn:active { transform: scale(0.94); }
+
+.plan-cell {
+  position: relative;
+  height: 22px; border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.2s, background 0.3s, opacity 0.2s;
+}
+.plan-cell:hover { transform: scale(1.06); z-index: 2; }
+.plan-lv0 { background: var(--tint); border-color: var(--border-soft); }
+.plan-lv1 { background: rgba(91, 141, 239, 0.22); }
+.plan-lv2 { background: rgba(91, 141, 239, 0.45); }
+.plan-lv3 { background: rgba(91, 141, 239, 0.8); border-color: rgba(143, 184, 255, 0.5); }
+.light .plan-lv1 { background: rgba(91, 141, 239, 0.18); }
+.light .plan-lv2 { background: rgba(91, 141, 239, 0.4); }
+.light .plan-lv3 { background: rgba(59, 111, 224, 0.85); border-color: transparent; }
+.plan-mine { outline: 2px solid var(--primary-text); outline-offset: -2px; }
+.plan-best { z-index: 1; animation: plan-best-glow 2.4s ease-in-out infinite; }
+@keyframes plan-best-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(143, 184, 255, 0); }
+  50% { box-shadow: 0 0 14px 2px rgba(143, 184, 255, 0.55); }
+}
+.plan-grid-in .plan-cell {
+  animation: plan-cell-in 0.35s ease both;
+  animation-delay: calc(var(--i) * 14ms);
+}
+.plan-grid-in .plan-cell.plan-best {
+  animation: plan-cell-in 0.35s ease both, plan-best-glow 2.4s ease-in-out 0.8s infinite;
+  animation-delay: calc(var(--i) * 14ms), 0.8s;
+}
+@keyframes plan-cell-in {
+  from { opacity: 0; transform: scale(0.7); }
+  to { opacity: 1; transform: none; }
+}
+
+.plan-face {
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--card);
+  margin-left: -7px;
+}
+.plan-face:first-child { margin-left: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-best,
+  .plan-grid-in .plan-cell,
+  .plan-grid-in .plan-cell.plan-best { animation: none; }
+  .plan-best { box-shadow: 0 0 10px 1px rgba(143, 184, 255, 0.45); }
+  .plan-cell:hover { transform: none; }
+}
