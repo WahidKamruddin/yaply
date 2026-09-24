@@ -199,6 +199,17 @@ body,
   }
 }
 
+/* Catch-all so every animation and transition (including Radix animate-in
+   dialogs and msgSlideIn / slideInRight) respects reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @keyframes slideInRight {
   from { transform: translateX(110%); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
