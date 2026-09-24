@@ -65,7 +65,7 @@ export default function StickerCreator({ onCreated }: Props) {
         placeholder="Sticker name"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full px-3 py-2 bg-tint border border-border rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition"
+        className="w-full px-3 py-2 bg-tint border border-border rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition"
       />
       <button
         onClick={() => void handleSave()}

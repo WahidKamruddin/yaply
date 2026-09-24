@@ -87,7 +87,7 @@ export default function ConversationPanel({ conversationId, currentUserId, membe
             onClick={() => setActiveTab(id)}
             className={`flex-1 flex flex-col items-center gap-0.5 px-1 pt-2 pb-1.5 text-xs font-medium transition-colors min-w-0 border-b-2 ${
               activeTab === id
-                ? 'border-[#5b8def] text-[#5b8def]'
+                ? 'border-primary text-primary'
                 : 'border-transparent text-text-subtle hover:text-text-muted'
             }`}
           >
@@ -102,7 +102,7 @@ export default function ConversationPanel({ conversationId, currentUserId, membe
             onClick={() => setMenuOpen((v) => !v)}
             className={`flex flex-col items-center gap-0.5 px-3 pt-2 pb-1.5 text-xs font-medium transition-colors border-b-2 ${
               isSecondaryActive
-                ? 'border-[#5b8def] text-[#5b8def]'
+                ? 'border-primary text-primary'
                 : 'border-transparent text-text-subtle hover:text-text-muted'
             }`}
           >
@@ -118,7 +118,7 @@ export default function ConversationPanel({ conversationId, currentUserId, membe
                   onClick={() => { setActiveTab(id); setMenuOpen(false) }}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs transition-colors text-left ${
                     activeTab === id
-                      ? 'bg-primary-tint text-[#5b8def] font-medium'
+                      ? 'bg-primary-tint text-primary font-medium'
                       : 'text-text-muted hover:bg-tint'
                   }`}
                 >

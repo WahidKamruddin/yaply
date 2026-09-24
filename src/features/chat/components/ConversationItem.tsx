@@ -186,7 +186,7 @@ export default function ConversationItem({ conversation, currentUserId, isActive
               {!isActive && displayUnreadCount > 0 && (
                 <span
                   className={`flex-shrink-0 min-w-[18px] h-[18px] flex items-center justify-center text-xs text-white font-semibold rounded-full px-1 ${
-                    isMentionOnlyBadge ? 'bg-[#5b8def]/70 ring-1 ring-[#5b8def]' : 'bg-[#5b8def]'
+                    isMentionOnlyBadge ? 'bg-primary/70 ring-1 ring-primary' : 'bg-primary'
                   }`}
                   title={isMentionOnlyBadge ? 'Unread @mentions in a muted chat' : undefined}
                 >
@@ -210,7 +210,7 @@ export default function ConversationItem({ conversation, currentUserId, isActive
               onClick={() => void handleUnmute()}
               className="w-full flex items-center gap-2 px-4 py-2 text-sm text-text hover:bg-tint transition-colors"
             >
-              <BellRing size={14} className="text-[#5b8def]" />
+              <BellRing size={14} className="text-primary" />
               Unmute
             </button>
           ) : (

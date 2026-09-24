@@ -95,7 +95,7 @@ function SplitwiseBudgetDetail({
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <button onClick={onBack} className="flex items-center gap-1 text-xs text-[#5b8def] hover:text-[#4a7de4] transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark transition-colors">
           <ArrowLeft size={12} /> Back
         </button>
         <button
@@ -137,7 +137,7 @@ function SplitwiseBudgetDetail({
         <span className="text-xs font-medium text-text-muted">
           Expenses · <span className="text-text">${totalSpent.toFixed(2)}</span> total
         </span>
-        <button onClick={() => setShowForm((v) => !v)} className="text-xs text-[#5b8def] hover:text-[#4a7de4] flex items-center gap-0.5">
+        <button onClick={() => setShowForm((v) => !v)} className="text-xs text-primary hover:text-primary-dark flex items-center gap-0.5">
           <Plus size={12} /> Add
         </button>
       </div>
@@ -153,7 +153,7 @@ function SplitwiseBudgetDetail({
             </select>
           </div>
           <p className="text-xs text-text-subtle">Split equally among {group.members.length} members</p>
-          <button type="submit" disabled={isPending} className="w-full py-1.5 bg-[#5b8def] hover:bg-[#4a7de4] text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
+          <button type="submit" disabled={isPending} className="w-full py-1.5 bg-primary hover:bg-primary-dark text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
             {isPending ? 'Adding…' : 'Add to Splitwise'}
           </button>
         </form>
@@ -225,7 +225,7 @@ function LocalBudgetDetail({
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <button onClick={onBack} className="flex items-center gap-1 text-xs text-[#5b8def] hover:text-[#4a7de4] transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark transition-colors">
           <ArrowLeft size={12} /> Back
         </button>
         <button
@@ -250,7 +250,7 @@ function LocalBudgetDetail({
       {splitwiseEnabled && (
         <button
           onClick={onLinkSplitwise}
-          className="w-full mb-3 flex items-center justify-center gap-1.5 py-1.5 border border-[#5b8def]/40 text-[#5b8def] text-xs rounded-xl hover:bg-primary-tint transition-colors"
+          className="w-full mb-3 flex items-center justify-center gap-1.5 py-1.5 border border-primary/40 text-primary text-xs rounded-xl hover:bg-primary-tint transition-colors"
         >
           <Link2 size={12} /> Link to Splitwise group
         </button>
@@ -258,7 +258,7 @@ function LocalBudgetDetail({
 
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-medium text-text-muted">Expenses</span>
-        <button onClick={() => setShowForm((v) => !v)} className="text-xs text-[#5b8def] hover:text-[#4a7de4] flex items-center gap-0.5">
+        <button onClick={() => setShowForm((v) => !v)} className="text-xs text-primary hover:text-primary-dark flex items-center gap-0.5">
           <Plus size={12} /> Add
         </button>
       </div>
@@ -272,7 +272,7 @@ function LocalBudgetDetail({
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <button type="submit" disabled={isPending} className="w-full py-1.5 bg-[#5b8def] hover:bg-[#4a7de4] text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
+          <button type="submit" disabled={isPending} className="w-full py-1.5 bg-primary hover:bg-primary-dark text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
             {isPending ? 'Adding…' : 'Add expense'}
           </button>
         </form>
@@ -403,7 +403,7 @@ function CreateBudgetForm({ conversationId, currentUserId, onDone }: { conversat
         placeholder="Budget name"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+        className="w-full px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40"
       />
       <input
         type="number"
@@ -412,9 +412,9 @@ function CreateBudgetForm({ conversationId, currentUserId, onDone }: { conversat
         onChange={(e) => setAmount(e.target.value)}
         min="0.01"
         step="0.01"
-        className="w-full px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+        className="w-full px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40"
       />
-      <button type="submit" disabled={isPending || !name.trim() || !amount} className="w-full py-1.5 text-xs font-medium bg-[#5b8def] text-white rounded-lg disabled:opacity-50">
+      <button type="submit" disabled={isPending || !name.trim() || !amount} className="w-full py-1.5 text-xs font-medium bg-primary text-white rounded-lg disabled:opacity-50">
         Create
       </button>
     </form>
@@ -446,7 +446,7 @@ export default function BudgetList({ conversationId, currentUserId, isCurrentUse
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-semibold text-text-subtle uppercase tracking-wide">Budgets</span>
         {!creating && (
-          <button onClick={() => setCreating(true)} className="text-text-subtle hover:text-[#5b8def] transition-colors">
+          <button onClick={() => setCreating(true)} className="text-text-subtle hover:text-primary transition-colors">
             <Plus size={14} />
           </button>
         )}
@@ -478,7 +478,7 @@ export default function BudgetList({ conversationId, currentUserId, isCurrentUse
                   <p className="text-[10px] text-text-subtle">by {b.creator?.display_name ?? b.creator?.username ?? 'Unknown'}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold text-[#5b8def]">${b.total_amount.toFixed(2)}</p>
+                  <p className="text-sm font-semibold text-primary">${b.total_amount.toFixed(2)}</p>
                   <p className="text-xs text-text-subtle">{b.currency}</p>
                 </div>
               </button>

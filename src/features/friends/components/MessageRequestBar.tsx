@@ -88,7 +88,7 @@ export default function MessageRequestBar({
         <button
           onClick={() => void handleAccept()}
           disabled={busy}
-          className="flex-1 px-4 py-2.5 rounded-xl bg-[#5b8def] hover:bg-[#4a7de4] text-sm font-medium text-white transition-colors disabled:opacity-50"
+          className="flex-1 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-sm font-medium text-white transition-colors disabled:opacity-50"
         >
           Accept
         </button>

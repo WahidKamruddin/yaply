@@ -213,12 +213,12 @@ export default function AccountSettings({ userId, userEmail }: Props) {
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="Your name"
-            className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition"
+            className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition"
           />
         </div>
         <div>
           <label htmlFor="username" className="block text-xs font-medium text-text-subtle mb-1.5">Username</label>
-          <div className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-tint border border-border focus-within:ring-1 focus-within:ring-[#5b8def]/50 focus-within:border-[#5b8def]/50 transition">
+          <div className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-tint border border-border focus-within:ring-1 focus-within:ring-primary/50 focus-within:border-primary/50 transition">
             <span className="text-text-subtle text-sm">@</span>
             <input
               id="username"
@@ -247,7 +247,7 @@ export default function AccountSettings({ userId, userEmail }: Props) {
             value={birthdate}
             onChange={(e) => setBirthdate(e.target.value)}
             max={new Date().toISOString().slice(0, 10)}
-            className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition"
+            className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition"
           />
         </div>
         <div>
@@ -257,7 +257,7 @@ export default function AccountSettings({ userId, userEmail }: Props) {
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             placeholder="Add a bio…"
-            className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition"
+            className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition"
           />
         </div>
       </div>
@@ -301,7 +301,7 @@ export default function AccountSettings({ userId, userEmail }: Props) {
                 onChange={(e) => setNewPassword(e.target.value)}
                 minLength={6}
                 autoComplete="new-password"
-                className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition"
+                className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition"
               />
             </div>
             <div>
@@ -313,7 +313,7 @@ export default function AccountSettings({ userId, userEmail }: Props) {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 minLength={6}
                 autoComplete="new-password"
-                className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition"
+                className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition"
               />
             </div>
             <div className="sm:col-span-2 flex items-center gap-3">

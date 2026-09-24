@@ -155,7 +155,7 @@ export default function VoiceRecorderBar({ onSend, onCancel, onError }: Props) {
           {Array.from({ length: 32 }).map((_, i) => {
             const phase = Math.sin(i * 0.7 + elapsed * 6)
             const h = 2 + Math.max(0, phase) * level * 14
-            return <span key={i} className="w-1 rounded-full bg-[#5b8def]/70" style={{ height: `${h}px` }} />
+            return <span key={i} className="w-1 rounded-full bg-primary/70" style={{ height: `${h}px` }} />
           })}
         </div>
       </div>

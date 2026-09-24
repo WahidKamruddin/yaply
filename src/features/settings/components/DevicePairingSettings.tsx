@@ -188,7 +188,7 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
                     }}
                     maxLength={60}
                     placeholder={`Device ${d.device_id}`}
-                    className="w-full px-2 py-1 rounded-lg bg-surface border border-border text-sm text-text outline-none focus:ring-1 focus:ring-[#5b8def]/50 transition"
+                    className="w-full px-2 py-1 rounded-lg bg-surface border border-border text-sm text-text outline-none focus:ring-1 focus:ring-primary/50 transition"
                   />
                 ) : (
                   <p className="text-sm text-text truncate">
@@ -259,7 +259,7 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
                 setPendingRole('receiver')
                 setStep('rendezvous')
               }}
-              className="text-left rounded-2xl border border-border bg-tint p-4 hover:border-[#5b8def]/50 transition-colors"
+              className="text-left rounded-2xl border border-border bg-tint p-4 hover:border-primary/50 transition-colors"
             >
               <p className="text-sm font-medium text-text">Get history here</p>
               <p className="text-xs text-text-subtle mt-1">
@@ -272,7 +272,7 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
                 setPendingRole('sender')
                 setStep('rendezvous')
               }}
-              className="text-left rounded-2xl border border-border bg-tint p-4 hover:border-[#5b8def]/50 transition-colors"
+              className="text-left rounded-2xl border border-border bg-tint p-4 hover:border-primary/50 transition-colors"
             >
               <p className="text-sm font-medium text-text">
                 Send history from here
@@ -329,7 +329,7 @@ export default function DevicePairingSettings({ userId, initialCode }: Props) {
                   placeholder="XXXX-XXXX"
                   autoCapitalize="characters"
                   autoComplete="off"
-                  className="flex-1 px-3 py-2.5 rounded-xl bg-tint border border-border text-sm font-mono tracking-widest text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition"
+                  className="flex-1 px-3 py-2.5 rounded-xl bg-tint border border-border text-sm font-mono tracking-widest text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition"
                 />
                 <button
                   onClick={() => beginEntrant(typedCode)}

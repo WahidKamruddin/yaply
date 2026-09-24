@@ -37,7 +37,7 @@ function RsvpButton({
       onClick={() => onSet(value)}
       className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
         active
-          ? 'bg-[#5b8def] text-white'
+          ? 'bg-primary text-white'
           : 'bg-tint text-text-muted hover:bg-tint-strong hover:text-text'
       }`}
     >
@@ -74,7 +74,7 @@ function LinkPicker({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 text-xs text-[#5b8def] hover:text-[#4a7de4] transition-colors mt-2"
+        className="flex items-center gap-1.5 text-xs text-primary hover:text-primary-dark transition-colors mt-2"
       >
         <Link size={12} />
         Link existing
@@ -86,7 +86,7 @@ function LinkPicker({
     return (
       <div className="mt-2 text-xs text-text-subtle">
         No unlinked {type} in this conversation.{' '}
-        <button onClick={() => setOpen(false)} className="text-[#5b8def]">Close</button>
+        <button onClick={() => setOpen(false)} className="text-primary">Close</button>
       </div>
     )
   }
@@ -157,7 +157,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
               {isPlanning && (
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-tint text-[#5b8def]">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-tint text-primary">
                   Planning
                 </span>
               )}
@@ -222,7 +222,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
               <div className="px-5 py-4 space-y-2 border-b border-border">
                 {event.starts_at && (
                   <div className="flex items-center gap-2 text-sm text-text">
-                    <Calendar size={14} className="text-[#5b8def] flex-shrink-0" />
+                    <Calendar size={14} className="text-primary flex-shrink-0" />
                     <span>{formatDateTime(event.starts_at)}</span>
                     {event.ends_at && (
                       <span className="text-text-subtle">→ {formatDateTime(event.ends_at)}</span>
@@ -231,7 +231,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                 )}
                 {event.location && (
                   <div className="flex items-center gap-2 text-sm text-text">
-                    <MapPin size={14} className="text-[#5b8def] flex-shrink-0" />
+                    <MapPin size={14} className="text-primary flex-shrink-0" />
                     <span>{event.location}</span>
                   </div>
                 )}
@@ -295,7 +295,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                       onClick={() => setSubTab(id)}
                       className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors ${
                         subTab === id
-                          ? 'border-[#5b8def] text-[#5b8def]'
+                          ? 'border-primary text-primary'
                           : 'border-transparent text-text-subtle hover:text-text-muted'
                       }`}
                     >
@@ -409,7 +409,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
           <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-sm bg-card rounded-2xl shadow-xl shadow-black/40 border border-border p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="w-12 h-12 rounded-full bg-primary-tint flex items-center justify-center">
-                <Link2 size={20} className="text-[#5b8def]" />
+                <Link2 size={20} className="text-primary" />
               </div>
               <div>
                 <Dialog.Title className="text-base font-semibold text-text">Unlink Album</Dialog.Title>
@@ -430,7 +430,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                       setPendingUnlinkAlbum(null)
                     }
                   }}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-[#5b8def] hover:bg-[#4a7de4] text-sm font-medium text-white transition-colors"
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-sm font-medium text-white transition-colors"
                 >
                   Unlink
                 </button>

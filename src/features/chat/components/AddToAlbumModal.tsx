@@ -50,7 +50,7 @@ export default function AddToAlbumModal({ conversationId, currentUserId, message
       <div className="bg-card border border-border rounded-2xl shadow-2xl shadow-black/40 w-full max-w-xs">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h2 className="text-sm font-semibold text-text flex items-center gap-2">
-            <Image size={15} className="text-[#5b8def]" /> Add to Album
+            <Image size={15} className="text-primary" /> Add to Album
           </h2>
           <button onClick={onClose} className="text-text-subtle hover:text-text transition-colors">
             <X size={18} />
@@ -90,9 +90,9 @@ export default function AddToAlbumModal({ conversationId, currentUserId, message
                 placeholder="Album name"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                className="flex-1 px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+                className="flex-1 px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40"
               />
-              <button type="submit" disabled={creating || !newName.trim()} className="px-3 py-1.5 text-xs font-medium bg-[#5b8def] text-white rounded-lg disabled:opacity-50">
+              <button type="submit" disabled={creating || !newName.trim()} className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg disabled:opacity-50">
                 {creating ? '…' : 'Create'}
               </button>
               <button type="button" onClick={() => setShowCreate(false)} className="text-text-subtle hover:text-text-muted">
@@ -102,7 +102,7 @@ export default function AddToAlbumModal({ conversationId, currentUserId, message
           ) : (
             <button
               onClick={() => setShowCreate(true)}
-              className="flex items-center gap-1.5 text-xs text-[#5b8def] hover:text-[#4a7de4] transition-colors mt-1"
+              className="flex items-center gap-1.5 text-xs text-primary hover:text-primary-dark transition-colors mt-1"
             >
               <Plus size={13} /> New album
             </button>

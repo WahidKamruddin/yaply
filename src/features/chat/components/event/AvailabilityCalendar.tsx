@@ -278,7 +278,7 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
                       {/* Confirm hint for creator */}
                       {isCreator && isHovered && count > 0 && !selected && (
                         <button
-                          className="absolute inset-0 bg-[#5b8def]/80 flex items-center justify-center z-10"
+                          className="absolute inset-0 bg-primary/80 flex items-center justify-center z-10"
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={() => handleConfirm(slot)}
                           title="Confirm this time"
@@ -377,7 +377,7 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
           ) : (
             <button
               onClick={() => setLockingTime(true)}
-              className="flex items-center gap-1.5 text-xs font-medium text-[#5b8def] hover:text-[#4a7de4] transition-colors"
+              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary-dark transition-colors"
             >
               <Lock size={12} /> Lock Time
             </button>
@@ -388,7 +388,7 @@ export default function AvailabilityCalendar({ event, currentUserId, members, on
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-3 py-1.5 text-xs font-medium bg-[#5b8def] hover:bg-[#4a7de4] text-white rounded-lg disabled:opacity-50 transition-colors flex-shrink-0"
+          className="px-3 py-1.5 text-xs font-medium bg-primary hover:bg-primary-dark text-white rounded-lg disabled:opacity-50 transition-colors flex-shrink-0"
         >
           {saving ? 'Saving…' : 'Save'}
         </button>

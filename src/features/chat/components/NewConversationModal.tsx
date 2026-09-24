@@ -88,7 +88,7 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
       <div className="bg-card border border-border rounded-2xl shadow-2xl shadow-black/40 w-full max-w-md mx-4">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h2 className="text-base font-semibold text-text flex items-center gap-2">
-            {selected.length > 1 ? <Users size={18} className="text-[#5b8def]" /> : <UserPlus size={18} className="text-[#5b8def]" />}
+            {selected.length > 1 ? <Users size={18} className="text-primary" /> : <UserPlus size={18} className="text-primary" />}
             {selected.length > 1 ? 'New Group' : 'New Conversation'}
           </h2>
           <button onClick={onClose} className="text-text-subtle hover:text-text transition-colors">
@@ -100,9 +100,9 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
           {selected.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {selected.map((p) => (
-                <span key={p.id} className="flex items-center gap-1 bg-primary-tint text-[#5b8def] text-xs rounded-full px-2.5 py-1">
+                <span key={p.id} className="flex items-center gap-1 bg-primary-tint text-primary text-xs rounded-full px-2.5 py-1">
                   {p.display_name ?? p.username}
-                  <button onClick={() => toggleSelect(p)} className="hover:text-[#4a7de4]">
+                  <button onClick={() => toggleSelect(p)} className="hover:text-primary-dark">
                     <X size={12} />
                   </button>
                 </span>
@@ -117,7 +117,7 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
                 placeholder="Group name (optional)"
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
-                className="w-full px-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+                className="w-full px-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40"
               />
               <p className="text-[11px] text-text-subtle">Groups can only include your friends.</p>
             </>
@@ -130,7 +130,7 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
               placeholder="Search by username..."
               value={query}
               onChange={(e) => void handleSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+              className="w-full pl-8 pr-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40"
             />
           </div>
 
@@ -156,7 +156,7 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
                       {!isFriend && <span className="text-text-faint"> · not a friend</span>}
                     </p>
                   </div>
-                  {isSelected && <span className="ml-auto w-4 h-4 rounded-full bg-[#5b8def] flex-shrink-0" />}
+                  {isSelected && <span className="ml-auto w-4 h-4 rounded-full bg-primary flex-shrink-0" />}
                 </button>
               )
             })}
@@ -171,7 +171,7 @@ export default function NewConversationModal({ currentUserId, onClose, onCreated
           <button
             onClick={() => void handleCreate()}
             disabled={selected.length === 0 || loading}
-            className="px-4 py-2 text-sm font-medium bg-[#5b8def] hover:bg-[#4a7de4] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 text-sm font-medium bg-primary hover:bg-primary-dark text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? 'Creating...' : selected.length > 1 ? 'Create Group' : 'Start Chat'}
           </button>

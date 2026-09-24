@@ -98,7 +98,7 @@ function FriendsPage() {
                 <Icon size={15} />
                 {label}
                 {id === 'requests' && pendingCount > 0 && (
-                  <span className="ml-auto min-w-[18px] h-[18px] flex items-center justify-center bg-[#5b8def] text-xs text-white font-semibold rounded-full px-1">
+                  <span className="ml-auto min-w-[18px] h-[18px] flex items-center justify-center bg-primary text-xs text-white font-semibold rounded-full px-1">
                     {pendingCount > 99 ? '99+' : pendingCount}
                   </span>
                 )}
@@ -117,7 +117,7 @@ function FriendsPage() {
                 placeholder="Search people by name or username"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-9 py-2.5 rounded-xl bg-tint border border-border text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition"
+                className="w-full pl-9 pr-9 py-2.5 rounded-xl bg-tint border border-border text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition"
               />
               {search && (
                 <button

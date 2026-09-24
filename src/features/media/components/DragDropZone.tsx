@@ -38,8 +38,8 @@ export default function DragDropZone({ onFileDrop, children, className = '' }: P
     >
       {children}
       {dragging && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#5b8def]/10 border-2 border-dashed border-[#5b8def] rounded-xl pointer-events-none">
-          <p className="text-[#5b8def] font-medium text-sm">Drop to send</p>
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded-xl pointer-events-none">
+          <p className="text-primary font-medium text-sm">Drop to send</p>
         </div>
       )}
     </div>

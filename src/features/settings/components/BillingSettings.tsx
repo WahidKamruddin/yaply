@@ -44,7 +44,7 @@ export default function BillingSettings() {
         {PLANS.map((plan) => (
           <div
             key={plan.name}
-            className={`rounded-2xl border p-5 ${plan.current ? 'border-[#5b8def]/50 bg-primary-tint' : 'border-border bg-card'}`}
+            className={`rounded-2xl border p-5 ${plan.current ? 'border-primary/50 bg-primary-tint' : 'border-border bg-card'}`}
           >
             <div className="flex items-center justify-between mb-1">
               <p className="text-sm font-semibold text-text">{plan.name}</p>

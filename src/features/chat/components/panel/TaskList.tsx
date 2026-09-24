@@ -27,7 +27,7 @@ function TaskItem({ task, currentUserId, isCurrentUserAdmin }: { task: Task; cur
     <>
       <div className="flex items-start gap-2.5 py-2.5 border-b border-border last:border-0">
         <button
-          className={`mt-0.5 flex-shrink-0 transition-colors ${canToggleStatus ? 'text-[#5b8def] hover:text-[#4a7de4]' : 'text-text-subtle cursor-not-allowed'}`}
+          className={`mt-0.5 flex-shrink-0 transition-colors ${canToggleStatus ? 'text-primary hover:text-primary-dark' : 'text-text-subtle cursor-not-allowed'}`}
           onClick={() => canToggleStatus && updateStatus({ taskId: task.id, status: isDone ? 'todo' : 'done' })}
           disabled={!canToggleStatus}
         >
@@ -45,7 +45,7 @@ function TaskItem({ task, currentUserId, isCurrentUserAdmin }: { task: Task; cur
                 {isCurrentUserAdmin && (
                   <button
                     onClick={() => { setDueValue(task.due_at?.slice(0, 16) ?? ''); setEditingDue(true) }}
-                    className="ml-0.5 text-text-subtle hover:text-[#5b8def] transition-colors"
+                    className="ml-0.5 text-text-subtle hover:text-primary transition-colors"
                   >
                     <Pencil size={9} />
                   </button>
@@ -55,7 +55,7 @@ function TaskItem({ task, currentUserId, isCurrentUserAdmin }: { task: Task; cur
             {!task.due_at && isCurrentUserAdmin && !editingDue && (
               <button
                 onClick={() => setEditingDue(true)}
-                className="text-[10px] text-text-subtle hover:text-[#5b8def] flex items-center gap-0.5 transition-colors"
+                className="text-[10px] text-text-subtle hover:text-primary flex items-center gap-0.5 transition-colors"
               >
                 <Pencil size={9} /> set due date
               </button>
@@ -67,11 +67,11 @@ function TaskItem({ task, currentUserId, isCurrentUserAdmin }: { task: Task; cur
                 type="datetime-local"
                 value={dueValue}
                 onChange={(e) => setDueValue(e.target.value)}
-                className="text-xs bg-tint rounded px-2 py-0.5 text-text outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+                className="text-xs bg-tint rounded px-2 py-0.5 text-text outline-none focus:ring-1 focus:ring-primary/40"
               />
               <button
                 onClick={() => { updateDueDate({ taskId: task.id, dueAt: dueValue ? new Date(dueValue).toISOString() : null }); setEditingDue(false) }}
-                className="text-xs text-[#5b8def] font-medium hover:text-[#4a7de4] transition-colors"
+                className="text-xs text-primary font-medium hover:text-primary-dark transition-colors"
               >Save</button>
               <button onClick={() => setEditingDue(false)} className="text-text-subtle hover:text-text-muted"><X size={12} /></button>
             </div>
@@ -151,9 +151,9 @@ function CreateTaskForm({ conversationId, currentUserId, onDone }: { conversatio
         placeholder="Task title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        className="flex-1 px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+        className="flex-1 px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40"
       />
-      <button type="submit" disabled={isPending || !title.trim()} className="px-3 py-1.5 text-xs font-medium bg-[#5b8def] text-white rounded-lg disabled:opacity-50">
+      <button type="submit" disabled={isPending || !title.trim()} className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg disabled:opacity-50">
         Add
       </button>
       <button type="button" onClick={onDone} className="text-text-subtle hover:text-text-muted">
@@ -172,7 +172,7 @@ export default function TaskList({ conversationId, currentUserId, isCurrentUserA
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-semibold text-text-subtle uppercase tracking-wide">Tasks</span>
         {!creating && (
-          <button onClick={() => setCreating(true)} className="text-text-subtle hover:text-[#5b8def] transition-colors">
+          <button onClick={() => setCreating(true)} className="text-text-subtle hover:text-primary transition-colors">
             <Plus size={14} />
           </button>
         )}

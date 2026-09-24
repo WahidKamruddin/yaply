@@ -349,12 +349,12 @@ export default function MessageInput({
                 key={cmd.name}
                 className={`w-full flex items-center px-3 py-2.5 transition-colors text-left border-l-2 ${
                   idx === selectedIndex
-                    ? 'bg-primary-tint border-[#5b8def]'
+                    ? 'bg-primary-tint border-primary'
                     : 'border-transparent hover:bg-tint'
                 }`}
                 onClick={() => selectCommand(cmd.name)}
               >
-                <span className="text-sm text-[#5b8def] font-mono font-medium flex-shrink-0">/{cmd.name}</span>
+                <span className="text-sm text-primary font-mono font-medium flex-shrink-0">/{cmd.name}</span>
                 {argTokens.map((token, i) => (
                   <span
                     key={i}
@@ -390,13 +390,13 @@ export default function MessageInput({
               key={option.id}
               className={`w-full flex items-center gap-2 px-3 py-2.5 transition-colors text-left border-l-2 ${
                 idx === mentionIndex
-                  ? 'bg-primary-tint border-[#5b8def]'
+                  ? 'bg-primary-tint border-primary'
                   : 'border-transparent hover:bg-tint'
               }`}
               onClick={() => selectMention(option)}
             >
               {option.everyone ? (
-                <span className="w-6 h-6 flex-shrink-0 rounded-full bg-[#5b8def] flex items-center justify-center">
+                <span className="w-6 h-6 flex-shrink-0 rounded-full bg-primary flex items-center justify-center">
                   <AtSign size={13} className="text-white" />
                 </span>
               ) : (
@@ -466,7 +466,7 @@ export default function MessageInput({
             placeholder={placeholder ?? 'Message...'}
             disabled={disabled}
             rows={1}
-            className={`w-full resize-none bg-tint border border-border rounded-2xl py-2.5 pl-4 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition max-h-40 leading-relaxed disabled:opacity-50 ${showAttachments ? 'pr-11' : 'pr-4'}`}
+            className={`w-full resize-none bg-tint border border-border rounded-2xl py-2.5 pl-4 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition max-h-40 leading-relaxed disabled:opacity-50 ${showAttachments ? 'pr-11' : 'pr-4'}`}
           />
           {showAttachments && (
             <button

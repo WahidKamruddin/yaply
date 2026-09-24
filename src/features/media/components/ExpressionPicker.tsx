@@ -42,7 +42,7 @@ export default function ExpressionPicker({ userId, onGifSelect, onStickerSelect,
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  tab === t.id ? 'bg-[#5b8def] text-white shadow-sm' : 'text-text-muted hover:text-text'
+                  tab === t.id ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:text-text'
                 }`}
               >
                 {t.icon}

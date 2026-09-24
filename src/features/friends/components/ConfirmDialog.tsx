@@ -42,7 +42,7 @@ export default function ConfirmDialog({
                 destructive ? 'bg-danger-tint' : 'bg-tint'
               }`}
             >
-              <Icon size={20} className={destructive ? 'text-danger' : 'text-[#5b8def]'} />
+              <Icon size={20} className={destructive ? 'text-danger' : 'text-primary'} />
             </div>
             <div>
               <Dialog.Title className="text-base font-semibold text-text">{title}</Dialog.Title>
@@ -60,7 +60,7 @@ export default function ConfirmDialog({
                 onClick={onConfirm}
                 disabled={busy}
                 className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                  destructive ? 'bg-red-500 hover:bg-red-600' : 'bg-[#5b8def] hover:bg-[#4a7de4]'
+                  destructive ? 'bg-red-500 hover:bg-red-600' : 'bg-primary hover:bg-primary-dark'
                 }`}
               >
                 {confirmLabel}

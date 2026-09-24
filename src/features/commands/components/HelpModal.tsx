@@ -36,7 +36,7 @@ export default function HelpModal({ onClose }: Props) {
         <div className="flex items-center justify-between px-5 py-3 border-b border-border flex-shrink-0">
           <div>
             <h2 className="text-sm font-semibold text-text tracking-tight">Commands</h2>
-            <p className="text-xs text-text-subtle mt-0.5">Type <span className="font-mono text-[#5b8def]">/</span> in any conversation to get started</p>
+            <p className="text-xs text-text-subtle mt-0.5">Type <span className="font-mono text-primary">/</span> in any conversation to get started</p>
           </div>
           <button
             onClick={onClose}
@@ -60,7 +60,7 @@ export default function HelpModal({ onClose }: Props) {
                     className="flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-tint transition-colors group"
                   >
                     {/* Usage slug */}
-                    <span className="flex-shrink-0 w-36 font-mono text-xs font-semibold text-[#5b8def] pt-0.5">
+                    <span className="flex-shrink-0 w-36 font-mono text-xs font-semibold text-primary pt-0.5">
                       {cmd.usage}
                     </span>
 

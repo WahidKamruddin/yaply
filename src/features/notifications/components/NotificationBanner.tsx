@@ -36,9 +36,9 @@ export default function NotificationBanner({ notification, onDismiss }: Props) {
     >
       <div className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-tint">
         {notification.kind === 'friend' ? (
-          <UserPlus size={18} className="text-[#5b8def]" />
+          <UserPlus size={18} className="text-primary" />
         ) : (
-          <MessageCircle size={18} className="text-[#5b8def]" />
+          <MessageCircle size={18} className="text-primary" />
         )}
       </div>
       <div className="flex-1 min-w-0 pt-0.5">

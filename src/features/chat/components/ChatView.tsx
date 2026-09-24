@@ -727,13 +727,13 @@ export default function ChatView({ currentUserId }: Props) {
           </button>
           <button
             onClick={() => { setSearchOpen((v) => !v); setSearchQuery('') }}
-            className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${searchOpen ? 'bg-[#5b8def] text-white' : 'text-text-subtle hover:text-primary-text hover:bg-primary-tint'}`}
+            className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${searchOpen ? 'bg-primary text-white' : 'text-text-subtle hover:text-primary-text hover:bg-primary-tint'}`}
           >
             <Search size={16} />
           </button>
           <button
             onClick={() => setPanelOpen((v) => !v)}
-            className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${panelOpen ? 'bg-[#5b8def] text-white' : 'text-text-subtle hover:text-primary-text hover:bg-primary-tint'}`}
+            className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${panelOpen ? 'bg-primary text-white' : 'text-text-subtle hover:text-primary-text hover:bg-primary-tint'}`}
             title="Conversation details"
           >
             <PanelRight size={16} />
@@ -795,7 +795,7 @@ export default function ChatView({ currentUserId }: Props) {
             <div
               key={msg.id}
               id={`msg-${msg.id}`}
-              className={`transition-opacity duration-300 rounded-lg ${highlightedMessageId === msg.id ? 'bg-[#5b8def]/15' : ''} ${pendingIdSet.has(msg.id) && !preAnimIds.has(msg.id) && !animatingIds.has(msg.id) ? 'opacity-60' : ''}`}
+              className={`transition-opacity duration-300 rounded-lg ${highlightedMessageId === msg.id ? 'bg-primary/15' : ''} ${pendingIdSet.has(msg.id) && !preAnimIds.has(msg.id) && !animatingIds.has(msg.id) ? 'opacity-60' : ''}`}
               style={
                 preAnimIds.has(msg.id) ? { opacity: 0 }
                 : animatingIds.has(msg.id) ? { animation: 'msgSlideIn 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both' }
@@ -866,7 +866,7 @@ export default function ChatView({ currentUserId }: Props) {
       {/* Upload indicator */}
       {mediaUploading && (
         <div className="px-4 py-1.5 flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full border-2 border-[#5b8def] border-t-transparent animate-spin" />
+          <div className="w-3 h-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
           <span className="text-xs text-text-subtle">Uploading…</span>
         </div>
       )}
