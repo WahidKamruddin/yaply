@@ -467,7 +467,7 @@ export default function MessageInput({
             placeholder={placeholder ?? 'Message...'}
             disabled={disabled}
             rows={1}
-            className={`w-full resize-none bg-tint border border-border rounded-2xl py-2.5 pl-4 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition max-h-40 leading-relaxed disabled:opacity-50 ${showAttachments ? 'pr-11' : 'pr-4'}`}
+            className={`w-full resize-none bg-tint border border-border rounded-2xl py-2.5 pl-4 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/50 transition max-h-40 leading-relaxed disabled:opacity-50 ${showAttachments ? 'pr-11' : 'pr-4'}`}
           />
           {showAttachments && (
             <button
