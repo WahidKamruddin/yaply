@@ -9,7 +9,7 @@
 }
 
 /* Prevent iOS rubber-band scroll on the root */
-html, body, #app { touch-action: pan-y; }
+html, body, #app { touch-action: manipulation; }
 
 /* Remove blue tap flash on all tappable elements */
 * { -webkit-tap-highlight-color: transparent; }
@@ -27,8 +27,10 @@ html, body, #app { touch-action: pan-y; }
 
 /* Prevent iOS input zoom: keep font-size ≥ 16px on mobile inputs */
 @media (max-width: 767px) {
-  input, textarea, select {
-    font-size: 16px !important;
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  textarea,
+  select {
+    font-size: 16px;
   }
 }
 
