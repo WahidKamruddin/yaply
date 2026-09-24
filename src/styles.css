@@ -14,6 +14,13 @@ html, body, #app { touch-action: pan-y; }
 /* Remove blue tap flash on all tappable elements */
 * { -webkit-tap-highlight-color: transparent; }
 
+/* Keyboard focus ring for buttons, links and ARIA widgets. Text fields keep
+   their own ring; :focus-visible means mouse clicks never show it. */
+:is(button, a, summary, [role="button"], [role="tab"], [role="menuitem"], [role="switch"], [role="checkbox"]):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 /* Bottom safe-area padding helpers */
 .pb-safe   { padding-bottom: var(--safe-bottom); }
 .mb-safe   { margin-bottom:  var(--safe-bottom); }
