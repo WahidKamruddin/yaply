@@ -161,7 +161,7 @@ export default function ConversationItem({ conversation, currentUserId, isActive
           className={`relative w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left select-none transition-colors ${
             isActive
               ? 'bg-primary-tint-strong'
-              : 'bg-transparent hover:bg-tint'
+              : 'bg-transparent hover:bg-tint active:bg-tint-strong'
           }`}
         >
           <Avatar src={avatarSrc} alt={displayName} size={40} online={!conversation.isGroup ? isOnline : undefined} />

@@ -52,14 +52,14 @@ export default function ConfirmDialog({
             </div>
             <div className="flex gap-3 w-full mt-1">
               <Dialog.Close asChild>
-                <button className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium text-text-muted hover:bg-tint transition-colors">
+                <button className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium text-text-muted hover:bg-tint active:scale-[0.97] transition">
                   Cancel
                 </button>
               </Dialog.Close>
               <button
                 onClick={onConfirm}
                 disabled={busy}
-                className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white active:scale-[0.97] transition disabled:opacity-50 disabled:cursor-not-allowed ${
                   destructive ? 'bg-red-500 hover:bg-red-600' : 'bg-primary hover:bg-primary-dark'
                 }`}
               >
