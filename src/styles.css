@@ -111,7 +111,7 @@ h1, h2, h3, h4, h5, h6 {
   --ink: #e9eefb;
   --dim: #8ba1c7;
   --faint: #5c718f;
-  --faint-2: #46587a;
+  --faint-2: #5f7396;
   --danger: #ff8080;
   --danger-tint: rgba(255, 99, 99, 0.12);
   --offline: #46587a;
@@ -130,10 +130,10 @@ h1, h2, h3, h4, h5, h6 {
   --primary-dark: #4a7de4;
   --primary-tint: #edf3ff;
   --primary-tint-strong: #e5edff;
-  --primary-text: #5b8def;
+  --primary-text: #3f72d8;
   --ink: #1a2744;
-  --dim: #6b84ab;
-  --faint: #9ab0cc;
+  --dim: #5a7399;
+  --faint: #8299b8;
   --faint-2: #c5d5e8;
   --danger: #ef4444;
   --danger-tint: #fef2f2;
