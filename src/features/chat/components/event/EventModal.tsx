@@ -7,6 +7,7 @@ import { useNotes } from '../../hooks/useNotes'
 import { useAlbums } from '../../hooks/useAlbums'
 import { useBudgets } from '../../hooks/useBudgets'
 import type { MemberSummary } from '../../types'
+import { formatMoney } from '@yaply/shared'
 import Avatar from '@/components/Avatar'
 import AvailabilityCalendar from './AvailabilityCalendar'
 
@@ -371,11 +372,11 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                         <p className="text-xs text-text-subtle py-2">No budgets linked to this event.</p>
                       ) : (
                         <div className="space-y-0 mb-1">
-                          {(linkedBudgets as Array<{ id: string; name: string; total_amount: number; currency: string }>).map((b) => (
+                          {(linkedBudgets as Array<{ id: string; name: string; total_amount: number | null; currency: string }>).map((b) => (
                             <div key={b.id} className="flex items-start gap-2 py-2 border-b border-border-soft last:border-0">
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-text">{b.name}</p>
-                                <p className="text-xs text-text-subtle mt-0.5">{b.currency} {b.total_amount.toFixed(2)}</p>
+                                <p className="text-xs text-text-subtle mt-0.5">{b.total_amount != null ? formatMoney(b.total_amount, b.currency) : `${b.currency} · no cap`}</p>
                               </div>
                               <button
                                 onClick={() => unlink({ table: 'budgets', itemId: b.id, eventId: null })}

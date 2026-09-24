@@ -185,21 +185,70 @@ export interface Budget {
   id: UUID
   conversation_id: UUID
   name: string
-  total_amount: number
+  /** null = no spending cap */
+  total_amount: number | null
   currency: string
   created_by: UUID
+  locked: boolean
+  event_id: UUID | null
   created_at: ISOTimestamp
+  updated_at: ISOTimestamp
+}
+
+export type SplitMode = 'equal' | 'exact'
+
+export interface ExpenseShare {
+  user_id: UUID
+  amount: number
 }
 
 export interface Expense {
   id: UUID
   budget_id: UUID
   paid_by: UUID
+  /** Who logged it; null if their account was deleted. */
+  created_by: UUID | null
   description: string
   amount: number
   category: ExpenseCategory
-  split_between: UUID[]
+  split_mode: SplitMode
+  spent_on: string
   created_at: ISOTimestamp
+  updated_at: ISOTimestamp
+  shares: ExpenseShare[]
+}
+
+/** "from_user paid to_user back `amount`". */
+export interface Settlement {
+  id: UUID
+  budget_id: UUID
+  from_user: UUID
+  to_user: UUID
+  amount: number
+  created_by: UUID | null
+  created_at: ISOTimestamp
+}
+
+export interface BudgetBalance {
+  user_id: UUID
+  paid: number
+  owed: number
+  settled_out: number
+  settled_in: number
+  /** Positive = is owed money. */
+  net: number
+}
+
+export interface BudgetDebt {
+  from_user: UUID
+  to_user: UUID
+  amount: number
+}
+
+export interface BudgetOverview {
+  budget_id: UUID
+  spent: number
+  my_net: number
 }
 
 // ─── AI ───────────────────────────────────────────────────────────────────────

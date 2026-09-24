@@ -181,8 +181,8 @@ export type Database = {
           id: string
           locked: boolean
           name: string
-          splitwise_group_id: string | null
-          total_amount: number
+          total_amount: number | null
+          updated_at: string
         }
         Insert: {
           conversation_id: string
@@ -193,8 +193,8 @@ export type Database = {
           id?: string
           locked?: boolean
           name: string
-          splitwise_group_id?: string | null
-          total_amount: number
+          total_amount?: number | null
+          updated_at?: string
         }
         Update: {
           conversation_id?: string
@@ -205,8 +205,8 @@ export type Database = {
           id?: string
           locked?: boolean
           name?: string
-          splitwise_group_id?: string | null
-          total_amount?: number
+          total_amount?: number | null
+          updated_at?: string
         }
         Relationships: [
           {
@@ -512,36 +512,78 @@ export type Database = {
           },
         ]
       }
+      expense_shares: {
+        Row: {
+          amount: number
+          expense_id: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          expense_id: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          expense_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_shares_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_shares_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           amount: number
           budget_id: string
           category: Database["public"]["Enums"]["expense_category"]
           created_at: string
+          created_by: string | null
           description: string
           id: string
           paid_by: string
-          split_between: string[]
+          spent_on: string
+          split_mode: string
+          updated_at: string
         }
         Insert: {
           amount: number
           budget_id: string
           category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
+          created_by?: string | null
           description: string
           id?: string
           paid_by: string
-          split_between?: string[]
+          spent_on?: string
+          split_mode?: string
+          updated_at?: string
         }
         Update: {
           amount?: number
           budget_id?: string
           category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
+          created_by?: string | null
           description?: string
           id?: string
           paid_by?: string
-          split_between?: string[]
+          spent_on?: string
+          split_mode?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -556,6 +598,44 @@ export type Database = {
             columns: ["paid_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      settlements: {
+        Row: {
+          amount: number
+          budget_id: string
+          created_at: string
+          created_by: string | null
+          from_user: string
+          id: string
+          to_user: string
+        }
+        Insert: {
+          amount: number
+          budget_id: string
+          created_at?: string
+          created_by?: string | null
+          from_user: string
+          id?: string
+          to_user: string
+        }
+        Update: {
+          amount?: number
+          budget_id?: string
+          created_at?: string
+          created_by?: string | null
+          from_user?: string
+          id?: string
+          to_user?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settlements_budget_id_fkey"
+            columns: ["budget_id"]
+            isOneToOne: false
+            referencedRelation: "budgets"
             referencedColumns: ["id"]
           },
         ]
@@ -1395,14 +1475,66 @@ export type Database = {
         Args: { target_user_id: string }
         Returns: string
       }
-      get_budget_summary: {
+      delete_expense: { Args: { p_expense_id: string }; Returns: undefined }
+      delete_settlement: {
+        Args: { p_settlement_id: string }
+        Returns: undefined
+      }
+      get_budget_balances: {
         Args: { p_budget_id: string }
         Returns: {
-          net_balance: number
-          total_owed: number
-          total_paid: number
+          net: number
+          owed: number
+          paid: number
+          settled_in: number
+          settled_out: number
           user_id: string
         }[]
+      }
+      get_budget_debts: {
+        Args: { p_budget_id: string }
+        Returns: {
+          amount: number
+          from_user: string
+          to_user: string
+        }[]
+      }
+      get_budget_overviews: {
+        Args: { p_conversation_id: string }
+        Returns: {
+          budget_id: string
+          my_net: number
+          spent: number
+        }[]
+      }
+      is_budget_member: { Args: { p_budget_id: string }; Returns: boolean }
+      is_conversation_admin: {
+        Args: { p_conversation_id: string }
+        Returns: boolean
+      }
+      record_settlement: {
+        Args: {
+          p_amount: number
+          p_budget_id: string
+          p_from: string
+          p_to: string
+        }
+        Returns: string
+      }
+      save_expense: {
+        Args: {
+          p_amount: number
+          p_budget_id: string
+          p_category: Database["public"]["Enums"]["expense_category"]
+          p_description: string
+          p_exact?: Json
+          p_expense_id: string | null
+          p_paid_by: string
+          p_participants: string[]
+          p_spent_on?: string
+          p_split_mode: string
+        }
+        Returns: string
       }
       get_friend_suggestions: {
         Args: { p_limit?: number }

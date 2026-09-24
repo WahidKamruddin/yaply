@@ -6,7 +6,7 @@ import EventList from './panel/EventList'
 import AlbumList from './panel/AlbumList'
 import TaskList from './panel/TaskList'
 import NoteList from './panel/NoteList'
-import BudgetList from './panel/BudgetList'
+import BudgetList from './panel/budget/BudgetList'
 import type { MemberSummary } from '../types'
 import { conversationPanelTargetAtom } from '../store/chat.atoms'
 import type { PanelTab } from '../lib/systemItem'
@@ -138,7 +138,7 @@ export default function ConversationPanel({ conversationId, currentUserId, membe
         {activeTab === 'albums'    && <AlbumList    conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} focusItemId={focusItemId} onFocusHandled={clearFocus} />}
         {activeTab === 'tasks'     && <TaskList     conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} />}
         {activeTab === 'notes'     && <NoteList     conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} focusItemId={focusItemId} onFocusHandled={clearFocus} />}
-        {activeTab === 'budgets'   && <BudgetList   conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} focusItemId={focusItemId} onFocusHandled={clearFocus} />}
+        {activeTab === 'budgets'   && <BudgetList   conversationId={conversationId} currentUserId={currentUserId} isCurrentUserAdmin={isCurrentUserAdmin} members={members} focusItemId={focusItemId} onFocusHandled={clearFocus} />}
       </div>
     </div>
   )

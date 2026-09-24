@@ -262,7 +262,7 @@ E2E here means **text message content is encrypted between a user's active devic
 - **`event_availability`:** `id, event_id, user_id, slots (jsonb ISO strings), updated_at`, UNIQUE `(event_id, user_id)`.
 - **`event_rsvp`:** `id, event_id, user_id, response ('going'|'maybe'|'not_going'|'pending'), updated_at`, UNIQUE `(event_id, user_id)`.
 - **`albums`:** `id, conversation_id, name, created_by, created_at, event_id`; **`album_media`:** `id, album_id, message_id, media_url, media_mime, created_at`.
-- **`budgets`:** `id, conversation_id, name, total_amount, currency, created_by, created_at, event_id`; **`expenses`:** `id, budget_id, paid_by, description, amount, category (enum), split_between (uuid[]), created_at`.
+- **Budgets** — see *Budgets (shared expenses)* below. `budgets`: `id, conversation_id, name, total_amount (NULL = no cap), currency, created_by, locked, event_id, created_at, updated_at`; `expenses`: `id, budget_id, paid_by, created_by, description, amount, category (enum), split_mode ('equal'|'exact'), spent_on, created_at, updated_at`; `expense_shares`: PK `(expense_id, user_id)`, `amount`; `settlements`: `id, budget_id, from_user, to_user, amount, created_by, created_at`.
 - `albums/notes/budgets.event_id` are `ON DELETE SET NULL` (00021) — deleting an event detaches them.
 
 **Account deletion cascade:** every FK to `profiles(id)` is `ON DELETE CASCADE` except `conversations.created_by` and `messages.sender_id` (`SET NULL` — the conversation and messages stay for others). `00031` closed the last gaps. Deleting `auth.users` (only via the `delete-account` function) triggers the whole cascade.
@@ -279,8 +279,24 @@ E2E here means **text message content is encrypted between a user's active devic
 - `search_users(p_query)` — username or display_name, excludes blocks in either direction. Use instead of querying `profiles`.
 - `get_friend_suggestions(p_limit)` — friends-of-friends by mutual count + shared-group co-members.
 - `revoke_device(p_device_id)` — signs out one of the **caller's own** devices. Security definer because `auth.sessions` is unreachable otherwise; the internal `auth.uid()` filter is the only guard, so it must never take a user id argument.
+- Budgets: `save_expense`, `delete_expense`, `record_settlement`, `delete_settlement`, `get_budget_balances`, `get_budget_debts`, `get_budget_overviews` — see *Budgets (shared expenses)*.
 
-**Helpers** (security definer, used by RLS and RPCs): `are_friends`, `is_blocked_between`, `mutual_friend_count`, `can_send_in_conversation`. Per `00028`'s recursion lesson, a policy on table T may never `EXISTS` over T — route cross-table checks through a helper. `sync_direct_request_state(a,b)` is **revoked from `anon`/`authenticated`** (no `auth.uid()` guard; exposing it would let anyone accept requests for others).
+**Helpers** (security definer, used by RLS and RPCs): `are_friends`, `is_blocked_between`, `mutual_friend_count`, `can_send_in_conversation`, `is_budget_member`, `is_conversation_admin`. Per `00028`'s recursion lesson, a policy on table T may never `EXISTS` over T — route cross-table checks through a helper. `sync_direct_request_state(a,b)` is **revoked from `anon`/`authenticated`** (no `auth.uid()` guard; exposing it would let anyone accept requests for others).
+
+### Budgets (shared expenses, `20260923000001_budget_splits.sql`)
+
+Splitwise-style: who paid, who owes, balances, "who pays whom", settle-up. Built in; the old Splitwise API integration was removed (it used the app owner's client credentials and shipped the secret in the bundle).
+
+- **All writes via RPC.** `expenses`, `expense_shares` and `settlements` have SELECT policies only (`is_budget_member`) and `insert/update/delete` revoked — a direct write fails. `budgets` itself is still written directly (create, lock, event link, delete).
+- **`save_expense(p_budget_id, p_expense_id|null, p_description, p_amount, p_category, p_paid_by, p_split_mode, p_participants, p_exact, p_spent_on)`** inserts or edits and **replaces all shares** in one transaction. Payer and every participant must be current members. Edit/delete: the logger, the payer, or an admin.
+- **Shares are stored, never recomputed by clients.** `equal`: `floor(total·100 / n)` cents each, leftover cents +1 each to participants in **ascending user_id order** ($100 three ways → 33.34/33.33/33.33); the one implementation is `budget_equal_shares`. `exact`: `{user_id: amount}` must sum exactly to the total; zeros are dropped. Clients may *preview* the equal split (`previewEqualSplit` in `@yaply/shared`) but render stored shares.
+- **Balance:** `net = paid + settled_out − owed − settled_in` (positive = is owed). Includes people who left the chat, so debts don't vanish. Nets sum to zero in exact cents.
+- **Debts** (`get_budget_debts`) are simplified **server-side only**: debtors most-owing first, creditors most-owed first, ties by user_id, matched greedily — at most n−1 transfers. Clients never simplify.
+- **Settlement** = "from_user paid to_user back". The caller must be one of the two; allowed even on a locked budget (lock freezes expenses, not paying back). Delete: creator or admin.
+- **Lock / edit rules** (trigger `budgets_guard_update`): only admins change `locked`; only creator/admin change `name`/`total_amount`/`currency`, never while locked unless admin; `currency` is immutable once expenses exist; any member may change `event_id`. A locked budget can only be deleted by an admin.
+- **One currency per budget** (`USD|EUR|GBP|CAD`), no FX. Money in forms is integer cents (`parseAmountToCents`, rejects > 2 decimals).
+- **Realtime:** only `budgets` is published. Every write RPC touches the parent's `updated_at`, so subscribing to `budgets` filtered by `conversation_id` covers expense/settlement changes; DELETE events are unfilterable (PK only), so match the id against the cached list.
+- **List cards** use `get_budget_overviews(conversation_id)` → `(budget_id, spent, my_net)` in one call — never per row.
 
 ### Friends System (migration 00033)
 
@@ -314,7 +330,7 @@ Features live in `src/features/<name>/` with `api/`, `components/`, `hooks/`. On
 - **Pinned messages:** `api/pins.ts`, `hooks/usePins.ts` (optimistic, rollback by refetch), `PinnedBanner.tsx` below the search bar. Pin/Unpin is a hover action for all members. `useRealtimeMessages` also invalidates `['pins', …]`.
 - **Username availability:** `useUsernameAvailability` debounces a `profiles` lookup (excluding own id when editing) so Save is blocked before a write; both call sites (`UsernameSetupModal`, `AccountSettings`) still catch `23505`.
 - **Slash commands** (`features/commands/`): feedback is local-only (`commandFeedbackAtom`); success is the pill.
-- **Productivity panel** (`ConversationPanel.tsx` tabs: Tasks, Notes, Reminders, Events, Albums, Budgets). Reminders poll every 60s + Web Notifications. Events: `/plan` → `planning` (when2meet grid, `AvailabilityCalendar.tsx`), `/event` → `confirmed`. Budgets include Splitwise (`src/lib/splitwise.ts`). Every destructive action uses a Radix confirm dialog.
+- **Productivity panel** (`ConversationPanel.tsx` tabs: Tasks, Notes, Reminders, Events, Albums, Budgets). Reminders poll every 60s + Web Notifications. Events: `/plan` → `planning` (when2meet grid, `AvailabilityCalendar.tsx`), `/event` → `confirmed`. Budgets (`panel/budget/`): list with cap bar + my balance, detail with Expenses | Balances, add/edit expense dialog (equal or exact split), settle-up. Every destructive action uses a Radix confirm dialog.
 - **Item-created pills** (`chat/lib/systemItem.ts`): every create path calls `postItemCreated`. Pill and Dashboard rows → `openItemRequestAtom` → `ChatView`: task/reminder open the tab, plan/event the `EventModal`, album/budget/note via `conversationPanelTargetAtom.itemId`.
 - **Settings** (`routes/settings.tsx`, `features/settings/components/`): Account (name, username, avatar to `avatars` bucket, bio, birthdate, email-only password change, account deletion via `delete-account`), Devices, Billing/Privacy/Terms (sample content), Help, Report a Problem (`report-problem` function).
 - **`Avatar`** is the only avatar renderer: photo or silhouette placeholder, never initials.
@@ -349,7 +365,7 @@ Per-feature iOS how-to lives in `yaply-ios/CLAUDE.md`; encryption, pairing, devi
 - **Stickers:** iOS has no library; it uploads a dropped/pasted *system* sticker as transparent PNG, `type='sticker'`, which web renders as-is.
 - **Voice (`type='voice'`):** iOS records AAC `.m4a`, `media_mime='audio/mp4'`; web records mp4 or webm. Both play either. Container/mime changes must land on both.
 - **Image aspect-ratio hint (`#ar=`):** both platforms append `#ar=<width/height>` (4 dp, clamped 0.5–3.0) to an uploaded image's `media_url` — web in `uploadMediaFile`, iOS in `MediaAspectRatio.annotate`. A URL **fragment**, so it never reaches Storage, needs no column, and is ignored by a client that doesn't read it. Its only job is letting a bubble reserve its final height before the image loads; without it every image load resizes its row mid-scroll. iOS also learns the ratio from the first successful decode, so images sent before this existed settle after one appearance. Presentation metadata only — never part of a cache key or an identity comparison, and `storageRef` stays clean.
-- **Splitwise:** REST `https://secure.splitwise.com/api/v3.0/`, OAuth2 client credentials. The payer's `paid_share` maps by index in the members array (not always 0); `simplified_debts` may be null.
+- **Budgets:** contract in *Budgets (shared expenses)* above. Both platforms render stored `expense_shares` and server-computed balances/debts; neither splits or simplifies locally.
 
 ---
 
