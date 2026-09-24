@@ -12,6 +12,7 @@ import { useConversationImages } from '@/features/chat/hooks/useAlbums'
 import { uploadMediaFile } from '@/features/media/api/upload'
 import type { SystemItem } from '@/features/chat/lib/systemItem'
 import { postItemCreated } from '@/features/chat/api/messages'
+import { parseAmountToCents } from '@yaply/shared'
 
 interface Props {
   type: CreateItemType
@@ -52,6 +53,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
   const [eventTime, setEventTime]     = useState<Date | null>(null)
   const [location, setLocation]       = useState('')
   const [amount, setAmount]           = useState('')
+  const budgetCapInvalid = type === 'budget' && amount.trim() !== '' && parseAmountToCents(amount) === null
   const [pollOptions, setPollOptions] = useState(['', ''])
   const [eventId, setEventId]         = useState<string>('')
   const [saving, setSaving]           = useState(false)
@@ -142,11 +144,14 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
         created = { kind: 'album', id: album.id, title }
 
       } else if (type === 'budget') {
+        // The cap is optional: blank = no spending limit.
+        const capCents = amount.trim() ? parseAmountToCents(amount) : null
+        if (budgetCapInvalid) return
         const { data: budget, error } = await supabase.from('budgets').insert({
           conversation_id: conversationId,
           created_by: userId,
           name: title,
-          total_amount: parseFloat(amount),
+          total_amount: capCents != null ? capCents / 100 : null,
           currency: 'USD',
           event_id: linkedEventId,
         }).select('id').single()
@@ -302,14 +307,11 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
           {/* Budget amount */}
           {type === 'budget' && (
             <input
-              required
-              type="number"
-              placeholder="Total budget amount"
+              inputMode="decimal"
+              placeholder="Spending cap (optional)"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              min="0.01"
-              step="0.01"
-              className="w-full px-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+              className={`w-full px-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40 ${budgetCapInvalid ? 'ring-1 ring-red-400' : ''}`}
             />
           )}
 
@@ -469,7 +471,7 @@ export default function CommandModal({ type, initialTitle = '', conversationId, 
             </button>
             <button
               type="submit"
-              disabled={saving || isEventRequired}
+              disabled={saving || isEventRequired || budgetCapInvalid}
               className="px-4 py-2 text-sm font-medium bg-[#5b8def] hover:bg-[#4a7de4] text-white rounded-lg disabled:opacity-50 transition-colors"
             >
               {saving ? 'Creating...' : 'Create'}

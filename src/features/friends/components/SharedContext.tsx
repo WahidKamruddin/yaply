@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   Users,
 } from 'lucide-react'
+import { formatMoney } from '@yaply/shared'
 import Avatar from '@/components/Avatar'
 import Skeleton from '@/components/Skeleton'
 import {
@@ -166,8 +167,10 @@ export default function SharedContext({ currentUserId, userId }: Props) {
             <p className="text-[10px] text-text-subtle truncate">{b.conversation?.name ?? 'Direct message'}</p>
           </div>
           <div className="text-right flex-shrink-0">
-            <p className="text-sm font-semibold text-[#5b8def]">${b.total_amount.toFixed(2)}</p>
-            <p className="text-[10px] text-text-subtle">{b.currency}</p>
+            <p className="text-sm font-semibold text-[#5b8def]">
+              {b.total_amount != null ? formatMoney(b.total_amount, b.currency) : b.currency}
+            </p>
+            <p className="text-[10px] text-text-subtle">{b.total_amount != null ? 'cap' : 'no cap'}</p>
           </div>
         </button>
       )),

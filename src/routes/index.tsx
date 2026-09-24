@@ -402,7 +402,7 @@ const CAROUSEL_SLIDES: CarouselSlide[] = [
     key: 'budgets',
     cmd: '/budget japan 2027',
     title: 'Budgets',
-    body: 'Tracks who paid, who owes, and settles it — with Splitwise sync once the trip gets real.',
+    body: 'Tracks who paid, splits it evenly or exactly, and shows who owes whom — down to the cent.',
     visual: (
       <div className="lp-mini-ledger">
         <div className="lp-ledger-row"><span>Hotel</span><span>$420</span></div>

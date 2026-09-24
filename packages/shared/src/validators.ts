@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { SUPPORTED_CURRENCIES, EXPENSE_CATEGORIES } from './money.js'
 import { ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE_MB, MAX_IMAGE_SIZE_MB } from './constants.js'
 
 // ─── User ─────────────────────────────────────────────────────────────────────
@@ -69,26 +70,24 @@ export const createNoteSchema = z.object({
 // ─── Budget ───────────────────────────────────────────────────────────────────
 export const createBudgetSchema = z.object({
   name: z.string().min(1).max(100),
-  total_amount: z.number().positive(),
-  currency: z.string().length(3).default('USD'),
+  // null = no spending cap
+  total_amount: z.number().positive().nullable(),
+  currency: z.enum(SUPPORTED_CURRENCIES).default('USD'),
   conversation_id: z.string().uuid(),
 })
 
-export const addExpenseSchema = z.object({
+// Arguments of the save_expense RPC. The server re-validates everything and
+// computes the shares; this only catches mistakes before the round trip.
+export const saveExpenseSchema = z.object({
   budget_id: z.string().uuid(),
-  description: z.string().min(1).max(200),
+  expense_id: z.string().uuid().nullable(),
+  description: z.string().trim().min(1).max(200),
   amount: z.number().positive(),
-  category: z.enum([
-    'food',
-    'transport',
-    'entertainment',
-    'utilities',
-    'rent',
-    'health',
-    'shopping',
-    'other',
-  ]),
-  split_between: z.array(z.string().uuid()).min(1),
+  category: z.enum(EXPENSE_CATEGORIES),
+  paid_by: z.string().uuid(),
+  split_mode: z.enum(['equal', 'exact']),
+  participants: z.array(z.string().uuid()),
+  exact: z.record(z.string().uuid(), z.number().nonnegative()).nullable(),
 })
 
 // ─── Media ────────────────────────────────────────────────────────────────────
