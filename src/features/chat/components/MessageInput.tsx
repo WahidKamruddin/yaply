@@ -7,6 +7,7 @@ import type { DecryptedMessage, MemberSummary } from '@/features/chat/types'
 import { COMMANDS } from '@yaply/shared/constants/commands'
 import { activeMentionQuery, MENTION_EVERYONE } from '@yaply/shared/mentions'
 import Avatar from '@/components/Avatar'
+import IconButton from '@/components/IconButton'
 
 interface Props {
   onSend: (text: string) => void
@@ -316,9 +317,9 @@ export default function MessageInput({
             </p>
             <p className="text-xs text-text-muted truncate">{replyMessage.content}</p>
           </div>
-          <button onClick={() => setReplyId(null)} className="text-text-subtle hover:text-text-muted ml-2 flex-shrink-0">
+          <IconButton onClick={() => setReplyId(null)} aria-label="Cancel reply" className="ml-2">
             <X size={14} />
-          </button>
+          </IconButton>
         </div>
       )}
 
@@ -329,9 +330,9 @@ export default function MessageInput({
             <Terminal size={13} className="text-text-subtle mt-0.5 flex-shrink-0" />
             <p className="text-xs text-text-muted whitespace-pre-wrap">{feedback}</p>
           </div>
-          <button onClick={() => setFeedback(null)} className="text-text-faint hover:text-text-subtle ml-2 flex-shrink-0">
+          <IconButton onClick={() => setFeedback(null)} aria-label="Dismiss" className="ml-2">
             <X size={13} />
-          </button>
+          </IconButton>
         </div>
       )}
 
