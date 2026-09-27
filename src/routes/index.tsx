@@ -4,7 +4,48 @@ import YaplyLogo from '@/components/YaplyLogo'
 import { HeartHandshake } from 'lucide-react'
 import { WAITLIST_MODE } from '@/lib/waitlistMode'
 
+const SITE_URL = 'https://yaply.us'
+const SEO_TITLE = 'Yaply — Encrypted Messaging With Built-in Planning'
+const SEO_DESCRIPTION =
+  'Yaply is an end-to-end encrypted messaging app that also plans events, splits shared expenses, and manages tasks in the same chat. Texting done right.'
+const OG_IMAGE = `${SITE_URL}/og-image.jpg`
+
 export const Route = createFileRoute('/')({
+  head: () => ({
+    meta: [
+      { title: SEO_TITLE },
+      { name: 'description', content: SEO_DESCRIPTION },
+      { name: 'robots', content: 'index, follow' },
+      { property: 'og:type', content: 'website' },
+      { property: 'og:url', content: SITE_URL },
+      { property: 'og:title', content: SEO_TITLE },
+      { property: 'og:description', content: SEO_DESCRIPTION },
+      { property: 'og:image', content: OG_IMAGE },
+      { property: 'og:image:width', content: '1200' },
+      { property: 'og:image:height', content: '630' },
+      { property: 'og:site_name', content: 'Yaply' },
+      { name: 'twitter:card', content: 'summary_large_image' },
+      { name: 'twitter:title', content: SEO_TITLE },
+      { name: 'twitter:description', content: SEO_DESCRIPTION },
+      { name: 'twitter:image', content: OG_IMAGE },
+    ],
+    links: [{ rel: 'canonical', href: SITE_URL }],
+    scripts: [
+      {
+        type: 'application/ld+json',
+        children: JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'SoftwareApplication',
+          name: 'Yaply',
+          applicationCategory: 'CommunicationApplication',
+          operatingSystem: 'Web, iOS',
+          description: SEO_DESCRIPTION,
+          url: SITE_URL,
+          offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+        }),
+      },
+    ],
+  }),
   component: LandingPage,
 })
 
