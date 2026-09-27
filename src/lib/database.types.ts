@@ -1536,6 +1536,21 @@ export type Database = {
         }
         Returns: string
       }
+      get_conversation_summaries: {
+        Args: never
+        Returns: {
+          conversation_id: string
+          last_content: string
+          last_created_at: string
+          last_enc_v: number
+          last_iv: string
+          last_message_id: string
+          last_sender_id: string
+          last_type: string
+          mention_unread_count: number
+          unread_count: number
+        }[]
+      }
       get_friend_suggestions: {
         Args: { p_limit?: number }
         Returns: {

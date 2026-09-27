@@ -29,7 +29,7 @@ import { fetchReactions,
   addReaction,
   removeReaction } from '@/features/chat/api/reactions'
 import type { ReactionGroup } from '@/features/chat/api/reactions'
-import { uploadMediaFile, uploadRawFile } from '@/features/media/api/upload'
+import { uploadMediaFile, uploadRawFile, withAspectRatio } from '@/features/media/api/upload'
 import type { GifResult } from '@/features/media/api/gifs'
 import { supabase } from '@/lib/supabase'
 import type { DecryptedMessage, ConversationListItem } from '@/features/chat/types'
@@ -651,7 +651,9 @@ export default function ChatView({ currentUserId }: Props) {
 
   const handleGifSelect = useCallback((gif: GifResult) => {
     setShowExpression(false)
-    sendMedia({ type: 'gif', mediaUrl: gif.url, mediaMime: 'image/gif' })
+    // Giphy reports the rendition's size, so GIFs carry the same #ar= hint as
+    // uploaded images and iOS can reserve the bubble's height before loading.
+    sendMedia({ type: 'gif', mediaUrl: withAspectRatio(gif.url, gif.width, gif.height), mediaMime: 'image/gif' })
   }, [sendMedia])
 
   const handleStickerSelect = useCallback((url: string) => {

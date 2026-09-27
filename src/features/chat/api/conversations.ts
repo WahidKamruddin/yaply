@@ -3,6 +3,20 @@ import { decryptV2ForUser, getCandidateFingerprints, decodePhase1 } from '@/feat
 import { fetchEnvelopesForMessages } from './messages'
 import type { ConversationListItem, DecryptedMessage, MemberSummary, Profile } from '../types'
 
+/** One row of `get_conversation_summaries()` (migration 20260927000001). */
+interface ConversationSummaryRow {
+  conversation_id: string
+  last_message_id: string | null
+  last_sender_id: string | null
+  last_content: string | null
+  last_iv: string | null
+  last_enc_v: number | null
+  last_type: string | null
+  last_created_at: string | null
+  unread_count: number
+  mention_unread_count: number
+}
+
 export async function fetchConversations(userId: string): Promise<ConversationListItem[]> {
   const { data: memberRows, error } = await supabase
     .from('conversation_members')
@@ -39,22 +53,23 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
   if (error) throw error
   if (!memberRows) return []
 
-  const convIds = memberRows
-    .map((r) => (r.conversations as unknown as { id: string } | null)?.id)
-    .filter((id): id is string => !!id)
-
-  // Map convId → my last_read_at so we can count unread messages below.
-  const myLastReadAt: Record<string, string | null> = {}
   // Message requests must not inflate the unread badge on the main list — they
   // are counted separately by the Message requests section.
   const myRequestState: Record<string, string> = {}
   for (const row of memberRows) {
     const conv = row.conversations as unknown as { id: string } | null
     if (!conv) continue
-    myLastReadAt[conv.id] = row.last_read_at
     myRequestState[conv.id] =
       (row as unknown as { request_state: string | null }).request_state ?? 'accepted'
   }
+
+  // One row per conversation: newest live message (still ciphertext) plus raw
+  // unread counts. Replaced a select of EVERY non-deleted message across every
+  // conversation (no limit) that was scanned here on each realtime event. The
+  // unread rule matches the push badge's: no system messages, nothing from me
+  // or a deleted sender, only after my last_read_at.
+  const { data: summaries, error: summariesError } = await supabase.rpc('get_conversation_summaries')
+  if (summariesError) throw summariesError
 
   const lastMessages: Record<string, DecryptedMessage> = {}
   const unreadCounts: Record<string, number> = {}
@@ -63,86 +78,45 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
   // fetch, and awaited before returning — no flash of ciphertext.
   const v2Previews: Array<{ convId: string; messageId: string; content: string; iv: string | null }> = []
 
-  if (convIds.length > 0) {
-    const { data: msgs } = await supabase
-      .from('messages')
-      .select(`
-        id,
-        conversation_id,
-        sender_id,
-        content,
-        iv,
-        enc_v,
-        type,
-        deleted_at,
-        created_at,
-        mentioned_user_ids,
-        mentions_everyone
-      `)
-      .in('conversation_id', convIds)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
+  for (const s of summaries as unknown as ConversationSummaryRow[]) {
+    if (myRequestState[s.conversation_id] === 'accepted') {
+      unreadCounts[s.conversation_id] = s.unread_count
+      mentionUnreadCounts[s.conversation_id] = s.mention_unread_count
+    }
+    if (!s.last_message_id || !s.last_created_at) continue
 
-    if (msgs) {
-      const seen = new Set<string>()
-      for (const m of msgs as unknown as Array<{
-        id: string; conversation_id: string; sender_id: string | null
-        content: string; iv: string | null; enc_v: number | null; type: string
-        deleted_at: string | null; created_at: string
-        mentioned_user_ids: string[] | null; mentions_everyone: boolean | null
-      }>) {
-        if (!seen.has(m.conversation_id)) {
-          seen.add(m.conversation_id)
+    const content = s.last_content ?? ''
+    let preview = content
+    let decryptFailed = false
 
-          let preview = m.content
-          let decryptFailed = false
+    if (s.last_enc_v === 2) {
+      // Envelope-encrypted — same for groups and DMs. Decrypted in one
+      // batched pass below; placeholder until then.
+      v2Previews.push({ convId: s.conversation_id, messageId: s.last_message_id, content, iv: s.last_iv })
+      preview = ''
+    } else if (!s.last_iv) {
+      // Phase-1 fallback / system messages: plain base64, no key needed.
+      preview = decodePhase1(content)
+    } else {
+      // Legacy pairwise ciphertext (pre-envelope migration) — unreadable.
+      console.debug('[yaply:crypto] sidebar preview: legacy pairwise ciphertext', { convId: s.conversation_id })
+      preview = ''
+      decryptFailed = true
+    }
 
-          if (m.enc_v === 2) {
-            // Envelope-encrypted — same for groups and DMs. Decrypted in one
-            // batched pass below; placeholder until then.
-            v2Previews.push({ convId: m.conversation_id, messageId: m.id, content: m.content, iv: m.iv })
-            preview = ''
-          } else if (!m.iv) {
-            // Phase-1 fallback / system messages: plain base64, no key needed.
-            preview = decodePhase1(m.content)
-          } else {
-            // Legacy pairwise ciphertext (pre-envelope migration) — unreadable.
-            console.debug('[yaply:crypto] sidebar preview: legacy pairwise ciphertext', { convId: m.conversation_id })
-            preview = ''
-            decryptFailed = true
-          }
-
-          lastMessages[m.conversation_id] = {
-            id: m.id,
-            conversationId: m.conversation_id,
-            senderId: m.sender_id,
-            content: preview,
-            decryptFailed,
-            type: m.type,
-            mediaUrl: null,
-            replyToId: null,
-            threadId: null,
-            editedAt: null,
-            deletedAt: m.deleted_at,
-            createdAt: m.created_at,
-          }
-        }
-
-        // Count messages from others that arrived after my last read timestamp.
-        if (m.sender_id !== userId && myRequestState[m.conversation_id] === 'accepted') {
-          const lastRead = myLastReadAt[m.conversation_id]
-          if (!lastRead || new Date(m.created_at) > new Date(lastRead)) {
-            unreadCounts[m.conversation_id] = (unreadCounts[m.conversation_id] ?? 0) + 1
-            // Mirrors push_targets_for_message's badge subquery: a mention
-            // counts separately so it can surface through a "mute chat" (not
-            // "mute everything") conversation.
-            const isMention = m.mentions_everyone || (m.mentioned_user_ids ?? []).includes(userId)
-            if (isMention) {
-              mentionUnreadCounts[m.conversation_id] = (mentionUnreadCounts[m.conversation_id] ?? 0) + 1
-            }
-          }
-        }
-      }
+    lastMessages[s.conversation_id] = {
+      id: s.last_message_id,
+      conversationId: s.conversation_id,
+      senderId: s.last_sender_id,
+      content: preview,
+      decryptFailed,
+      type: s.last_type ?? 'text',
+      mediaUrl: null,
+      replyToId: null,
+      threadId: null,
+      editedAt: null,
+      deletedAt: null,
+      createdAt: s.last_created_at,
     }
   }
 

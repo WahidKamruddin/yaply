@@ -35,7 +35,7 @@ async function compressImage(
 // change. iOS parses the same key — see `MediaAspectRatio` in yaply-ios.
 const AR_MIN = 0.5
 const AR_MAX = 3
-function withAspectRatio(publicUrl: string, width: number, height: number): string {
+export function withAspectRatio(publicUrl: string, width: number, height: number): string {
   if (!width || !height) return publicUrl
   const base = publicUrl.split('#')[0]
   const ratio = Math.min(Math.max(width / height, AR_MIN), AR_MAX)
