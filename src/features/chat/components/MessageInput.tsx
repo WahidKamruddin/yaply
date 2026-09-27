@@ -7,6 +7,7 @@ import type { DecryptedMessage, MemberSummary } from '@/features/chat/types'
 import { COMMANDS } from '@yaply/shared/constants/commands'
 import { activeMentionQuery, MENTION_EVERYONE } from '@yaply/shared/mentions'
 import Avatar from '@/components/Avatar'
+import IconButton from '@/components/IconButton'
 
 interface Props {
   onSend: (text: string) => void
@@ -316,9 +317,9 @@ export default function MessageInput({
             </p>
             <p className="text-xs text-text-muted truncate">{replyMessage.content}</p>
           </div>
-          <button onClick={() => setReplyId(null)} className="text-text-subtle hover:text-text-muted ml-2 flex-shrink-0">
+          <IconButton onClick={() => setReplyId(null)} aria-label="Cancel reply" className="ml-2">
             <X size={14} />
-          </button>
+          </IconButton>
         </div>
       )}
 
@@ -329,9 +330,9 @@ export default function MessageInput({
             <Terminal size={13} className="text-text-subtle mt-0.5 flex-shrink-0" />
             <p className="text-xs text-text-muted whitespace-pre-wrap">{feedback}</p>
           </div>
-          <button onClick={() => setFeedback(null)} className="text-text-faint hover:text-text-subtle ml-2 flex-shrink-0">
+          <IconButton onClick={() => setFeedback(null)} aria-label="Dismiss" className="ml-2">
             <X size={13} />
-          </button>
+          </IconButton>
         </div>
       )}
 
@@ -349,12 +350,12 @@ export default function MessageInput({
                 key={cmd.name}
                 className={`w-full flex items-center px-3 py-2.5 transition-colors text-left border-l-2 ${
                   idx === selectedIndex
-                    ? 'bg-primary-tint border-[#5b8def]'
+                    ? 'bg-primary-tint border-primary'
                     : 'border-transparent hover:bg-tint'
                 }`}
                 onClick={() => selectCommand(cmd.name)}
               >
-                <span className="text-sm text-[#5b8def] font-mono font-medium flex-shrink-0">/{cmd.name}</span>
+                <span className="text-sm text-primary font-mono font-medium flex-shrink-0">/{cmd.name}</span>
                 {argTokens.map((token, i) => (
                   <span
                     key={i}
@@ -390,13 +391,13 @@ export default function MessageInput({
               key={option.id}
               className={`w-full flex items-center gap-2 px-3 py-2.5 transition-colors text-left border-l-2 ${
                 idx === mentionIndex
-                  ? 'bg-primary-tint border-[#5b8def]'
+                  ? 'bg-primary-tint border-primary'
                   : 'border-transparent hover:bg-tint'
               }`}
               onClick={() => selectMention(option)}
             >
               {option.everyone ? (
-                <span className="w-6 h-6 flex-shrink-0 rounded-full bg-[#5b8def] flex items-center justify-center">
+                <span className="w-6 h-6 flex-shrink-0 rounded-full bg-primary flex items-center justify-center">
                   <AtSign size={13} className="text-white" />
                 </span>
               ) : (
@@ -466,7 +467,7 @@ export default function MessageInput({
             placeholder={placeholder ?? 'Message...'}
             disabled={disabled}
             rows={1}
-            className={`w-full resize-none bg-tint border border-border rounded-2xl py-2.5 pl-4 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition max-h-40 leading-relaxed disabled:opacity-50 ${showAttachments ? 'pr-11' : 'pr-4'}`}
+            className={`w-full resize-none bg-tint border border-border rounded-2xl py-2.5 pl-4 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/50 transition max-h-40 leading-relaxed disabled:opacity-50 ${showAttachments ? 'pr-11' : 'pr-4'}`}
           />
           {showAttachments && (
             <button
@@ -485,7 +486,7 @@ export default function MessageInput({
           aria-label="Send message"
           data-testid="send-message"
           disabled={!text.trim() || disabled}
-          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark hover:brightness-110 text-white shadow-[0_6px_18px_rgba(91,141,239,0.35)] disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed transition-all"
+          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark hover:brightness-110 active:scale-95 text-white shadow-glow disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed transition-all"
         >
           <Send size={16} />
         </button>

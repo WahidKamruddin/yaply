@@ -75,7 +75,7 @@ export default function FriendsList({ currentUserId, onOpenProfile, onFindFriend
                   <button
                     onClick={() => void openChat(friend.profile.id)}
                     title="Message"
-                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary-tint text-[#5b8def] hover:bg-primary-tint-strong text-xs font-medium transition-colors"
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary-tint text-primary hover:bg-primary-tint-strong text-xs font-medium transition-colors"
                   >
                     <MessageCircle size={13} />
                     <span className="hidden sm:inline">Message</span>

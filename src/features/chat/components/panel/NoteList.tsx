@@ -133,16 +133,16 @@ function CreateNoteForm({ conversationId, currentUserId, onDone }: { conversatio
         placeholder="Title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        className="w-full px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+        className="w-full px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40"
       />
       <textarea
         placeholder="Content (optional)"
         value={content}
         onChange={(e) => setContent(e.target.value)}
         rows={3}
-        className="w-full px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40 resize-none"
+        className="w-full px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40 resize-none"
       />
-      <button type="submit" disabled={isPending || !title.trim()} className="w-full py-1.5 text-xs font-medium bg-[#5b8def] text-white rounded-lg disabled:opacity-50">
+      <button type="submit" disabled={isPending || !title.trim()} className="w-full py-1.5 text-xs font-medium bg-primary text-white rounded-lg disabled:opacity-50">
         Save
       </button>
     </form>
@@ -166,7 +166,7 @@ export default function NoteList({ conversationId, currentUserId, isCurrentUserA
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-semibold text-text-subtle uppercase tracking-wide">Notes</span>
         {!creating && (
-          <button onClick={() => setCreating(true)} className="text-text-subtle hover:text-[#5b8def] transition-colors">
+          <button onClick={() => setCreating(true)} className="text-text-subtle hover:text-primary transition-colors">
             <Plus size={14} />
           </button>
         )}

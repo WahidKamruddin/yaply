@@ -53,7 +53,7 @@ export default function ConversationList({ currentUserId }: Props) {
             >
               <Users size={18} strokeWidth={2.5} />
               {pendingCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] flex items-center justify-center bg-[#5b8def] text-[10px] text-white font-semibold rounded-full px-1 border-2 border-surface box-content">
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] flex items-center justify-center bg-primary text-[10px] text-white font-semibold rounded-full px-1 border-2 border-surface box-content">
                   {pendingCount > 9 ? '9+' : pendingCount}
                 </span>
               )}
@@ -87,7 +87,7 @@ export default function ConversationList({ currentUserId }: Props) {
             placeholder="Search conversations..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-2 bg-tint border border-border rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition"
+            className="w-full pl-8 pr-3 py-2 bg-tint border border-border rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition"
           />
         </div>
       </div>

@@ -62,7 +62,7 @@ function CreateReminderForm({ conversationId, currentUserId, onDone }: { convers
         placeholder="Message"
         value={message}
         onChange={(e) => setMessage(e.target.value)}
-        className="w-full px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+        className="w-full px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40"
       />
       <div className="grid grid-cols-2 gap-2">
         <div>
@@ -72,7 +72,7 @@ function CreateReminderForm({ conversationId, currentUserId, onDone }: { convers
             placeholder="today / MM/DD/YYYY"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="w-full px-2 py-1.5 text-xs bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+            className="w-full px-2 py-1.5 text-xs bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40"
           />
         </div>
         <div>
@@ -82,12 +82,12 @@ function CreateReminderForm({ conversationId, currentUserId, onDone }: { convers
             placeholder="3:00pm / 15:00"
             value={time}
             onChange={(e) => setTime(e.target.value)}
-            className="w-full px-2 py-1.5 text-xs bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+            className="w-full px-2 py-1.5 text-xs bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40"
           />
         </div>
       </div>
       {error && <p className="text-xs text-red-400">{error}</p>}
-      <button type="submit" disabled={isPending || !message.trim()} className="w-full py-1.5 text-xs font-medium bg-[#5b8def] text-white rounded-lg disabled:opacity-50">
+      <button type="submit" disabled={isPending || !message.trim()} className="w-full py-1.5 text-xs font-medium bg-primary text-white rounded-lg disabled:opacity-50">
         Set reminder
       </button>
     </form>
@@ -110,7 +110,7 @@ export default function ReminderList({ conversationId, currentUserId, isCurrentU
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-semibold text-text-subtle uppercase tracking-wide">Reminders</span>
           {!creating && (
-            <button onClick={() => setCreating(true)} className="text-text-subtle hover:text-[#5b8def] transition-colors">
+            <button onClick={() => setCreating(true)} className="text-text-subtle hover:text-primary transition-colors">
               <Plus size={14} />
             </button>
           )}
@@ -135,7 +135,7 @@ export default function ReminderList({ conversationId, currentUserId, isCurrentU
 
               return (
                 <div key={r.id} className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border ${isPast ? 'border-amber-200 bg-amber-50' : 'border-border bg-card'}`}>
-                  <Bell size={14} className={`mt-0.5 flex-shrink-0 ${isPast ? 'text-amber-500' : 'text-[#5b8def]'}`} />
+                  <Bell size={14} className={`mt-0.5 flex-shrink-0 ${isPast ? 'text-amber-500' : 'text-primary'}`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-text">{r.message}</p>
                     {isEditingTime ? (
@@ -144,11 +144,11 @@ export default function ReminderList({ conversationId, currentUserId, isCurrentU
                           type="datetime-local"
                           value={editTimeValue}
                           onChange={(e) => setEditTimeValue(e.target.value)}
-                          className="text-xs bg-tint rounded px-2 py-0.5 text-text outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+                          className="text-xs bg-tint rounded px-2 py-0.5 text-text outline-none focus:ring-1 focus:ring-primary/40"
                         />
                         <button
                           onClick={() => { updateTime({ reminderId: r.id, remindAt: new Date(editTimeValue).toISOString() }); setEditingTimeId(null) }}
-                          className="text-xs text-[#5b8def] font-medium"
+                          className="text-xs text-primary font-medium"
                         >Save</button>
                         <button onClick={() => setEditingTimeId(null)} className="text-text-subtle"><X size={12} /></button>
                       </div>
@@ -160,7 +160,7 @@ export default function ReminderList({ conversationId, currentUserId, isCurrentU
                         {isCurrentUserAdmin && (
                           <button
                             onClick={() => { setEditTimeValue(r.remind_at.slice(0, 16)); setEditingTimeId(r.id) }}
-                            className="text-text-subtle hover:text-[#5b8def] transition-colors"
+                            className="text-text-subtle hover:text-primary transition-colors"
                           >
                             <Pencil size={9} />
                           </button>

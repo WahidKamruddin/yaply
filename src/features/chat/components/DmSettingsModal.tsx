@@ -129,7 +129,7 @@ export default function DmSettingsModal({ conversation, currentUserId, onClose, 
           >
             {muted ? <BellOff size={15} className="text-text-subtle" /> : <Bell size={15} className="text-text-subtle" />}
             <span className="text-sm text-text flex-1 text-left">Mute notifications</span>
-            <span className={`relative w-9 h-5 rounded-full transition-colors ${muted ? 'bg-[#5b8def]' : 'bg-border'}`}>
+            <span className={`relative w-9 h-5 rounded-full transition-colors ${muted ? 'bg-primary' : 'bg-border'}`}>
               <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${muted ? 'left-4' : 'left-0.5'}`} />
             </span>
           </button>

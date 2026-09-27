@@ -28,7 +28,7 @@ function EventItem({ event, currentUserId, isCurrentUserAdmin, onOpen, onDelete 
         onClick={() => onOpen(event)}
         className="flex-1 text-left flex items-start gap-3 py-2.5 hover:bg-tint transition-colors -mx-1 px-1 rounded"
       >
-        <div className={`mt-0.5 w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg ${isPlanning ? 'bg-tint text-[#5b8def]' : 'bg-green-50 text-green-600'}`}>
+        <div className={`mt-0.5 w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg ${isPlanning ? 'bg-tint text-primary' : 'bg-green-50 text-green-600'}`}>
           {isPlanning ? <Map size={12} /> : <Calendar size={12} />}
         </div>
         <div className="flex-1 min-w-0">
@@ -38,7 +38,7 @@ function EventItem({ event, currentUserId, isCurrentUserAdmin, onOpen, onDelete 
           </div>
           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
             {isPlanning && (
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-tint text-[#5b8def]">
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-tint text-primary">
                 Planning
               </span>
             )}
@@ -48,7 +48,7 @@ function EventItem({ event, currentUserId, isCurrentUserAdmin, onOpen, onDelete 
                 {isCurrentUserAdmin && (
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditStartsAt(event.starts_at?.slice(0, 16) ?? ''); setEditingTime(true) }}
-                    className="text-text-subtle hover:text-[#5b8def] transition-colors ml-0.5"
+                    className="text-text-subtle hover:text-primary transition-colors ml-0.5"
                   >
                     <Pencil size={9} />
                   </button>
@@ -66,7 +66,7 @@ function EventItem({ event, currentUserId, isCurrentUserAdmin, onOpen, onDelete 
               />
               <button
                 onClick={() => { updateEventTime({ eventId: event.id, startsAt: new Date(editStartsAt).toISOString() }); setEditingTime(false) }}
-                className="text-xs text-[#5b8def] font-medium"
+                className="text-xs text-primary font-medium"
               >Save</button>
               <button onClick={() => setEditingTime(false)} className="text-text-subtle"><Map size={10} /></button>
             </div>
@@ -120,14 +120,14 @@ export default function EventList({ conversationId, currentUserId, members, isCu
           <div className="flex items-center gap-1">
             <button
               onClick={() => setCreating('plan')}
-              className="flex items-center gap-0.5 text-[10px] text-text-subtle hover:text-[#5b8def] transition-colors"
+              className="flex items-center gap-0.5 text-[10px] text-text-subtle hover:text-primary transition-colors"
               title="New plan"
             >
               <Map size={12} />
             </button>
             <button
               onClick={() => setCreating('event')}
-              className="text-text-subtle hover:text-[#5b8def] transition-colors ml-1"
+              className="text-text-subtle hover:text-primary transition-colors ml-1"
               title="New event"
             >
               <Plus size={14} />
@@ -143,7 +143,7 @@ export default function EventList({ conversationId, currentUserId, members, isCu
                 onClick={() => setFilter(f)}
                 className={`text-[10px] font-medium px-2 py-0.5 rounded-full transition-colors capitalize ${
                   filter === f
-                    ? 'bg-[#5b8def] text-white'
+                    ? 'bg-primary text-white'
                     : 'bg-tint text-text-muted hover:bg-tint-strong'
                 }`}
               >
@@ -160,8 +160,8 @@ export default function EventList({ conversationId, currentUserId, members, isCu
             <Calendar size={24} className="mx-auto text-text-subtle mb-2" />
             <p className="text-xs text-text-subtle">No events yet.</p>
             <div className="flex items-center justify-center gap-3 mt-2">
-              <button onClick={() => setCreating('plan')} className="text-xs text-[#5b8def] hover:underline">+ Plan</button>
-              <button onClick={() => setCreating('event')} className="text-xs text-[#5b8def] hover:underline">+ Event</button>
+              <button onClick={() => setCreating('plan')} className="text-xs text-primary hover:underline">+ Plan</button>
+              <button onClick={() => setCreating('event')} className="text-xs text-primary hover:underline">+ Event</button>
             </div>
           </div>
         ) : filtered.length === 0 ? (

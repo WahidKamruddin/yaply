@@ -130,7 +130,7 @@ export default function ReportProblemSettings() {
             placeholder="Short summary"
             required
             maxLength={150}
-            className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition"
+            className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition"
           />
         </div>
         <div>
@@ -143,7 +143,7 @@ export default function ReportProblemSettings() {
             required
             rows={6}
             maxLength={5000}
-            className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text placeholder:text-text-subtle outline-none resize-none focus:ring-1 focus:ring-[#5b8def]/50 focus:border-[#5b8def]/50 transition"
+            className="w-full px-3 py-2.5 rounded-xl bg-tint border border-border text-sm text-text placeholder:text-text-subtle outline-none resize-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition"
           />
         </div>
 

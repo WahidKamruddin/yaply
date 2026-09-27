@@ -83,7 +83,7 @@ export default function FriendActionButton({ userId, relationship, compact = fal
       <button
         onClick={handleAccept}
         disabled={acceptRequest.isPending}
-        className={`${BASE} ${size} bg-[#5b8def] hover:bg-[#4a7de4] text-white disabled:opacity-50`}
+        className={`${BASE} ${size} bg-primary hover:bg-primary-dark text-white disabled:opacity-50`}
       >
         <Check size={13} />
         Accept
@@ -95,7 +95,7 @@ export default function FriendActionButton({ userId, relationship, compact = fal
     <button
       onClick={handleAdd}
       disabled={sendRequest.isPending}
-      className={`${BASE} ${size} bg-primary-tint text-[#5b8def] hover:bg-primary-tint-strong disabled:opacity-50`}
+      className={`${BASE} ${size} bg-primary-tint text-primary hover:bg-primary-tint-strong disabled:opacity-50`}
     >
       <UserPlus size={13} />
       Add Friend

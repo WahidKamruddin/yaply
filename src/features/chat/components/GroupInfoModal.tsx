@@ -174,7 +174,7 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
 
         {/* Group identity */}
         <div className="flex flex-col items-center gap-2 pt-5 pb-4 border-b border-border">
-          <div className="w-14 h-14 rounded-full bg-[#5b8def] flex items-center justify-center text-white text-xl font-semibold">
+          <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center text-white text-xl font-semibold">
             {(conversation.name ?? 'G').charAt(0).toUpperCase()}
           </div>
           <p className="text-sm font-semibold text-text">{conversation.name ?? 'Group'}</p>
@@ -209,16 +209,16 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
                 </div>
               </button>
               {m.isAdmin && (
-                <Crown size={11} className="text-[#5b8def] flex-shrink-0" />
+                <Crown size={11} className="text-primary flex-shrink-0" />
               )}
               {isAdminOrOwner && m.userId !== currentUserId && !m.isAdmin && (
                 <button
                   onClick={() => setConfirmPromote({ id: m.userId, name: m.profile.display_name ?? m.profile.username })}
                   disabled={promoting === m.userId}
                   title="Make admin"
-                  className="w-6 h-6 flex items-center justify-center rounded-full text-text-subtle hover:text-[#5b8def] hover:bg-tint transition-colors disabled:opacity-40"
+                  className="w-6 h-6 flex items-center justify-center rounded-full text-text-subtle hover:text-primary hover:bg-tint transition-colors disabled:opacity-40"
                 >
-                  {promoting === m.userId ? <span className="w-3 h-3 border border-[#5b8def] border-t-transparent rounded-full animate-spin" /> : <ShieldCheck size={12} />}
+                  {promoting === m.userId ? <span className="w-3 h-3 border border-primary border-t-transparent rounded-full animate-spin" /> : <ShieldCheck size={12} />}
                 </button>
               )}
               {isAdminOrOwner && m.userId !== currentUserId && (
@@ -249,7 +249,7 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
                 {muted ? (muteMentions ? 'Nothing will notify you' : '@mentions still notify you') : 'On'}
               </span>
             </div>
-            <span className={`relative w-9 h-5 rounded-full transition-colors ${muted ? 'bg-[#5b8def]' : 'bg-border'}`}>
+            <span className={`relative w-9 h-5 rounded-full transition-colors ${muted ? 'bg-primary' : 'bg-border'}`}>
               <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${muted ? 'left-4' : 'left-0.5'}`} />
             </span>
           </button>
@@ -260,7 +260,7 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
               className="w-full flex items-center gap-3 pl-9 pr-2 py-2.5 rounded-xl hover:bg-tint transition-colors disabled:opacity-50"
             >
               <span className="text-sm text-text flex-1 text-left">Also mute @mentions</span>
-              <span className={`relative w-9 h-5 rounded-full transition-colors ${muteMentions ? 'bg-[#5b8def]' : 'bg-border'}`}>
+              <span className={`relative w-9 h-5 rounded-full transition-colors ${muteMentions ? 'bg-primary' : 'bg-border'}`}>
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${muteMentions ? 'left-4' : 'left-0.5'}`} />
               </span>
             </button>
@@ -280,7 +280,7 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
             {!showSearch ? (
               <button
                 onClick={() => { setShowSearch(true); handleSearch('') }}
-                className="flex items-center gap-2 text-sm text-[#5b8def] font-medium hover:text-[#4a7de4] transition-colors"
+                className="flex items-center gap-2 text-sm text-primary font-medium hover:text-primary-dark transition-colors"
               >
                 <UserPlus size={14} />
                 Add member
@@ -295,7 +295,7 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
                     placeholder="Search your friends…"
                     value={searchQuery}
                     onChange={(e) => handleSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+                    className="w-full pl-8 pr-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40"
                   />
                 </div>
                 {searchResults.length === 0 && (
@@ -364,7 +364,7 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
           <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-sm bg-card rounded-2xl shadow-xl border border-border p-6">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="w-12 h-12 rounded-full bg-tint flex items-center justify-center">
-                <ShieldCheck size={22} className="text-[#5b8def]" />
+                <ShieldCheck size={22} className="text-primary" />
               </div>
               <div>
                 <Dialog.Title className="text-base font-semibold text-text">Make {confirmPromote?.name} an admin?</Dialog.Title>
@@ -381,7 +381,7 @@ export default function GroupInfoModal({ conversation, currentUserId, onClose, o
                 <button
                   onClick={() => confirmPromote && void handlePromote(confirmPromote.id)}
                   disabled={!!promoting}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-[#5b8def] hover:bg-[#4a7de4] text-sm font-medium text-white transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-sm font-medium text-white transition-colors disabled:opacity-50"
                 >
                   Make Admin
                 </button>

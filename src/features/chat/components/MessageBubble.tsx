@@ -36,7 +36,7 @@ function renderMentions(
       ? 'font-semibold rounded px-0.5 bg-primary-tint text-primary-text'
       : isOwn
         ? 'font-medium underline decoration-white/40'
-        : 'font-medium text-[#5b8def]'
+        : 'font-medium text-primary'
     return (
       <span key={i} className={className}>
         {t.value}
@@ -243,7 +243,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
             {onOpenItem && (
               <button
                 onClick={() => onOpenItem(item)}
-                className="flex-shrink-0 flex items-center text-primary-text hover:text-[#5b8def] font-medium transition-colors"
+                className="flex-shrink-0 flex items-center text-primary-text hover:text-primary font-medium transition-colors"
               >
                 Open<ChevronRight size={12} />
               </button>
@@ -260,7 +260,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
           {panelTab && onOpenPanel && (
             <button
               onClick={() => onOpenPanel(panelTab)}
-              className="flex-shrink-0 text-primary-text hover:text-[#5b8def] font-medium hover:underline underline-offset-2 transition-colors"
+              className="flex-shrink-0 text-primary-text hover:text-primary font-medium hover:underline underline-offset-2 transition-colors"
             >
               Open {TAB_LABELS[panelTab]} →
             </button>
@@ -523,7 +523,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                 {isOwn && isRead !== undefined && (
                   <CheckCheck
                     size={12}
-                    className={isRead ? 'text-[#5b8def]' : 'text-text-subtle'}
+                    className={isRead ? 'text-primary' : 'text-text-subtle'}
                   />
                 )}
               </div>
@@ -540,8 +540,8 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                 onClick={() => onReact?.(message.id, r.emoji)}
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-colors ${
                   r.reactedByMe
-                    ? 'bg-[#5b8def]/15 border-[#5b8def]/40 text-primary-text'
-                    : 'bg-tint border-border text-text hover:border-[#5b8def]/40'
+                    ? 'bg-primary/15 border-primary/40 text-primary-text'
+                    : 'bg-tint border-border text-text hover:border-primary/40'
                 }`}
               >
                 <span>{r.emoji}</span>
@@ -555,7 +555,7 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
         {threadCount > 0 && (
           <button
             onClick={() => onOpenThread?.(message.id)}
-            className="flex items-center gap-1.5 mt-1 px-1 text-[11px] text-primary-text hover:text-[#5b8def] hover:underline transition-colors"
+            className="flex items-center gap-1.5 mt-1 px-1 text-[11px] text-primary-text hover:text-primary hover:underline transition-colors"
           >
             <MessageSquare size={11} />
             {threadCount} {threadCount === 1 ? 'reply' : 'replies'} · Open thread

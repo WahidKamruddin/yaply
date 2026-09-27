@@ -30,7 +30,7 @@ export default function GifPicker({ onSelect }: Props) {
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
           disabled={!hasGiphyKey}
-          className="w-full pl-8 pr-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40 border border-border disabled:opacity-50"
+          className="w-full pl-8 pr-3 py-2 bg-tint rounded-lg text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40 border border-border disabled:opacity-50"
         />
       </div>
 

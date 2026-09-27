@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Pin, X } from 'lucide-react'
+import IconButton from '@/components/IconButton'
 import type { DecryptedMessage } from '@/features/chat/types'
 
 interface Props {
@@ -47,14 +48,9 @@ export default function PinnedBanner({ pins, messages, onJump, onUnpin }: Props)
           {previewText(msg)}
         </p>
       </button>
-      <button
-        onClick={() => onUnpin(topId)}
-        title="Unpin"
-        aria-label="Unpin message"
-        className="flex-shrink-0 text-text-subtle hover:text-text transition-colors"
-      >
+      <IconButton onClick={() => onUnpin(topId)} title="Unpin" aria-label="Unpin message">
         <X size={15} />
-      </button>
+      </IconButton>
     </div>
   )
 }

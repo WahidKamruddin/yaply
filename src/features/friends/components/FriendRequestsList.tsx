@@ -89,7 +89,7 @@ export default function FriendRequestsList({ currentUserId, direction, onOpenPro
                         acceptRequest.mutate(request.id, { onError: fail })
                       }
                       disabled={acceptRequest.isPending}
-                      className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#5b8def] hover:bg-[#4a7de4] text-white text-xs font-medium transition-colors disabled:opacity-50"
+                      className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-xs font-medium transition-colors disabled:opacity-50"
                     >
                       <Check size={13} />
                       Accept

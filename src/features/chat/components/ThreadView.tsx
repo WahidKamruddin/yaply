@@ -231,12 +231,12 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
               placeholder="Reply in thread…"
               rows={1}
               disabled={sending}
-              className="flex-1 resize-none bg-tint rounded-2xl px-4 py-2.5 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40 max-h-32 leading-relaxed disabled:opacity-50"
+              className="flex-1 resize-none bg-tint rounded-2xl px-4 py-2.5 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40 max-h-32 leading-relaxed disabled:opacity-50"
             />
             <button
               onClick={() => void handleSend()}
               disabled={!text.trim() || sending}
-              className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[#5b8def] hover:bg-[#4a7de4] text-white disabled:opacity-40 transition-colors"
+              className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-primary hover:bg-primary-dark text-white disabled:opacity-40 transition-colors"
             >
               <Send size={16} />
             </button>

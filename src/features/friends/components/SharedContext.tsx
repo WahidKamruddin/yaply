@@ -109,7 +109,7 @@ export default function SharedContext({ currentUserId, userId }: Props) {
         >
           <span
             className={`w-2 h-2 rounded-full flex-shrink-0 ${
-              e.status === 'confirmed' ? 'bg-green-500' : 'bg-[#5b8def]'
+              e.status === 'confirmed' ? 'bg-green-500' : 'bg-primary'
             }`}
           />
           <div className="flex-1 min-w-0">
@@ -167,7 +167,7 @@ export default function SharedContext({ currentUserId, userId }: Props) {
             <p className="text-[10px] text-text-subtle truncate">{b.conversation?.name ?? 'Direct message'}</p>
           </div>
           <div className="text-right flex-shrink-0">
-            <p className="text-sm font-semibold text-[#5b8def]">
+            <p className="text-sm font-semibold text-primary">
               {b.total_amount != null ? formatMoney(b.total_amount, b.currency) : b.currency}
             </p>
             <p className="text-[10px] text-text-subtle">{b.total_amount != null ? 'cap' : 'no cap'}</p>

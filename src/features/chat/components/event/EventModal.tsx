@@ -70,7 +70,7 @@ function LinkPicker({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 text-xs text-[#5b8def] hover:text-[#4a7de4] transition-colors mt-2"
+        className="flex items-center gap-1.5 text-xs text-primary hover:text-primary-dark transition-colors mt-2"
       >
         <Link size={12} />
         Link existing
@@ -82,7 +82,7 @@ function LinkPicker({
     return (
       <div className="mt-2 text-xs text-text-subtle">
         No unlinked {type} in this conversation.{' '}
-        <button onClick={() => setOpen(false)} className="text-[#5b8def]">Close</button>
+        <button onClick={() => setOpen(false)} className="text-primary">Close</button>
       </div>
     )
   }
@@ -417,7 +417,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
           <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-sm bg-card rounded-2xl shadow-xl shadow-black/40 border border-border p-6 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="w-12 h-12 rounded-full bg-primary-tint flex items-center justify-center">
-                <Link2 size={20} className="text-[#5b8def]" />
+                <Link2 size={20} className="text-primary" />
               </div>
               <div>
                 <Dialog.Title className="text-base font-semibold text-text">Unlink Album</Dialog.Title>
@@ -438,7 +438,7 @@ export default function EventModal({ event, currentUserId, conversationId, membe
                       setPendingUnlinkAlbum(null)
                     }
                   }}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-[#5b8def] hover:bg-[#4a7de4] text-sm font-medium text-white transition-colors"
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-sm font-medium text-white transition-colors"
                 >
                   Unlink
                 </button>

@@ -80,7 +80,7 @@ function AlbumGallery({ album, conversationId, currentUserId, isCurrentUserAdmin
 
   return (
     <div>
-      <button onClick={onBack} className="flex items-center gap-1 text-xs text-[#5b8def] mb-3 hover:text-[#4a7de4] transition-colors">
+      <button onClick={onBack} className="flex items-center gap-1 text-xs text-primary mb-3 hover:text-primary-dark transition-colors">
         <ArrowLeft size={12} /> Back to albums
       </button>
 
@@ -109,7 +109,7 @@ function AlbumGallery({ album, conversationId, currentUserId, isCurrentUserAdmin
           </button>
           <button
             onClick={() => setShowAddPhotos((v) => !v)}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${showAddPhotos ? 'bg-[#5b8def] text-white' : 'bg-tint text-[#5b8def] hover:bg-tint-strong'}`}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${showAddPhotos ? 'bg-primary text-white' : 'bg-tint text-primary hover:bg-tint-strong'}`}
           >
             <Plus size={12} /> Add photos
           </button>
@@ -142,14 +142,14 @@ function AlbumGallery({ album, conversationId, currentUserId, isCurrentUserAdmin
               <button
                 key={t}
                 onClick={() => setPhotoTab(t)}
-                className={`flex-1 py-2 text-xs font-medium transition-colors ${photoTab === t ? 'bg-card text-[#5b8def] border-b-2 border-[#5b8def]' : 'bg-tint text-text-subtle hover:text-text-muted'}`}
+                className={`flex-1 py-2 text-xs font-medium transition-colors ${photoTab === t ? 'bg-card text-primary border-b-2 border-primary' : 'bg-tint text-text-subtle hover:text-text-muted'}`}
               >
                 {t === 'chat' ? 'From chat' : 'From device'}
                 {t === 'chat' && selectedChatImages.size > 0 && (
-                  <span className="ml-1 px-1 py-0.5 bg-[#5b8def] text-white rounded-full text-[10px]">{selectedChatImages.size}</span>
+                  <span className="ml-1 px-1 py-0.5 bg-primary text-white rounded-full text-[10px]">{selectedChatImages.size}</span>
                 )}
                 {t === 'device' && deviceFiles.length > 0 && (
-                  <span className="ml-1 px-1 py-0.5 bg-[#5b8def] text-white rounded-full text-[10px]">{deviceFiles.length}</span>
+                  <span className="ml-1 px-1 py-0.5 bg-primary text-white rounded-full text-[10px]">{deviceFiles.length}</span>
                 )}
               </button>
             ))}
@@ -167,11 +167,11 @@ function AlbumGallery({ album, conversationId, currentUserId, isCurrentUserAdmin
                       <button
                         key={img.id}
                         onClick={() => toggleChatImage(img.id)}
-                        className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${sel ? 'border-[#5b8def]' : 'border-transparent'}`}
+                        className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${sel ? 'border-primary' : 'border-transparent'}`}
                       >
                         <img src={img.media_url} alt="" className="w-full h-full object-cover" />
                         {sel && (
-                          <div className="absolute inset-0 bg-[#5b8def]/30 flex items-center justify-center">
+                          <div className="absolute inset-0 bg-primary/30 flex items-center justify-center">
                             <Check size={14} className="text-white" />
                           </div>
                         )}
@@ -185,7 +185,7 @@ function AlbumGallery({ album, conversationId, currentUserId, isCurrentUserAdmin
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full flex flex-col items-center gap-1.5 py-4 border-2 border-dashed border-border rounded-xl text-text-subtle hover:border-[#5b8def]/40 hover:text-[#5b8def] transition-colors mb-2"
+                  className="w-full flex flex-col items-center gap-1.5 py-4 border-2 border-dashed border-border rounded-xl text-text-subtle hover:border-primary/40 hover:text-primary transition-colors mb-2"
                 >
                   <Upload size={16} />
                   <span className="text-xs">Click to upload images</span>
@@ -219,7 +219,7 @@ function AlbumGallery({ album, conversationId, currentUserId, isCurrentUserAdmin
               <button
                 onClick={handleAddPhotos}
                 disabled={selectedCount === 0 || uploading || adding}
-                className="flex-1 py-1.5 text-xs font-medium bg-[#5b8def] text-white rounded-lg disabled:opacity-50 transition-opacity"
+                className="flex-1 py-1.5 text-xs font-medium bg-primary text-white rounded-lg disabled:opacity-50 transition-opacity"
               >
                 {uploading || adding ? 'Adding…' : `Add ${selectedCount > 0 ? selectedCount : ''} photo${selectedCount !== 1 ? 's' : ''}`}
               </button>
@@ -295,9 +295,9 @@ function CreateAlbumForm({ conversationId, currentUserId, onDone }: { conversati
         placeholder="Album name"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="flex-1 px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40"
+        className="flex-1 px-3 py-1.5 text-sm bg-tint rounded-lg text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40"
       />
-      <button type="submit" disabled={isPending || !name.trim()} className="px-3 py-1.5 text-xs font-medium bg-[#5b8def] text-white rounded-lg disabled:opacity-50">
+      <button type="submit" disabled={isPending || !name.trim()} className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg disabled:opacity-50">
         Add
       </button>
       <button type="button" onClick={onDone} className="text-text-subtle hover:text-text-muted">
@@ -337,7 +337,7 @@ export default function AlbumList({ conversationId, currentUserId, isCurrentUser
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-semibold text-text-subtle uppercase tracking-wide">Albums</span>
         {!creating && (
-          <button onClick={() => setCreating(true)} className="text-text-subtle hover:text-[#5b8def] transition-colors">
+          <button onClick={() => setCreating(true)} className="text-text-subtle hover:text-primary transition-colors">
             <Plus size={14} />
           </button>
         )}

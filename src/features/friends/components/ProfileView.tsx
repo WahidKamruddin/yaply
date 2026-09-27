@@ -127,7 +127,7 @@ export default function ProfileView({ username, currentUserId }: Props) {
           <button
             onClick={() => setPhotoOpen(true)}
             aria-label={`View ${name}'s profile photo`}
-            className="rounded-full transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5b8def]"
+            className="rounded-full transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             <Avatar
               src={profile.avatar_url}
