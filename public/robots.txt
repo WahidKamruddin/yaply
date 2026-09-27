@@ -1,3 +1,10 @@
 # https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Disallow: /auth
+Disallow: /chat
+Disallow: /friends
+Disallow: /settings
+Disallow: /profile
+Disallow: /link
+
+Sitemap: https://yaply.us/sitemap.xml

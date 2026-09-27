@@ -14,6 +14,9 @@ export const Route = createRootRoute({
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
       { title: 'Yaply' },
+      { name: 'description', content: 'Yaply — encrypted messaging with planning, tasks, and shared budgets built in.' },
+      { name: 'theme-color', content: '#1a2744' },
+      { name: 'robots', content: 'noindex' },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
