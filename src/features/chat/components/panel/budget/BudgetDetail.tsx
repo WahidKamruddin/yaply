@@ -54,7 +54,7 @@ export default function BudgetDetail({ budget, currentUserId, isCurrentUserAdmin
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <button onClick={onBack} className="flex items-center gap-1 text-xs text-[#5b8def] hover:text-[#4a7de4] transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark transition-colors">
           <ArrowLeft size={12} /> Back
         </button>
         <div className="flex items-center gap-3">
@@ -108,7 +108,7 @@ export default function BudgetDetail({ budget, currentUserId, isCurrentUserAdmin
             aria-selected={tab === t}
             onClick={() => setTab(t)}
             className={`flex-1 pb-1.5 text-xs font-medium capitalize transition-colors border-b-2 -mb-px ${
-              tab === t ? 'text-[#5b8def] border-[#5b8def]' : 'text-text-subtle border-transparent hover:text-text-muted'
+              tab === t ? 'text-primary border-primary' : 'text-text-subtle border-transparent hover:text-text-muted'
             }`}
           >
             {t}
@@ -121,7 +121,7 @@ export default function BudgetDetail({ budget, currentUserId, isCurrentUserAdmin
           {canWriteExpenses && (
             <button
               onClick={() => setEditing('new')}
-              className="w-full mb-3 flex items-center justify-center gap-1 py-1.5 border border-[#5b8def]/40 text-[#5b8def] text-xs rounded-xl hover:bg-primary-tint transition-colors"
+              className="w-full mb-3 flex items-center justify-center gap-1 py-1.5 border border-primary/40 text-primary text-xs rounded-xl hover:bg-primary-tint transition-colors"
             >
               <Plus size={12} /> Add expense
             </button>
@@ -234,7 +234,7 @@ function ExpenseRow({
         <span className="text-xs font-semibold text-text">{money(expense.amount)}</span>
         {editable && (
           <span className="flex gap-2 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-            <button onClick={onEdit} className="text-text-faint hover:text-[#5b8def]" aria-label="Edit expense">
+            <button onClick={onEdit} className="text-text-faint hover:text-primary" aria-label="Edit expense">
               <Pencil size={12} />
             </button>
             <button onClick={onDelete} className="text-text-faint hover:text-red-400" aria-label="Delete expense">

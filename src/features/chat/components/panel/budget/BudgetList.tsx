@@ -59,7 +59,7 @@ export default function BudgetList({ conversationId, currentUserId, isCurrentUse
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-semibold text-text-subtle uppercase tracking-wide">Budgets</span>
         {!creating && (
-          <button onClick={() => setCreating(true)} className="text-text-subtle hover:text-[#5b8def] transition-colors" aria-label="New budget">
+          <button onClick={() => setCreating(true)} className="text-text-subtle hover:text-primary transition-colors" aria-label="New budget">
             <Plus size={14} />
           </button>
         )}
@@ -93,7 +93,7 @@ export default function BudgetList({ conversationId, currentUserId, isCurrentUse
                       <p className="text-[10px] text-text-subtle">by {b.creator?.display_name ?? b.creator?.username ?? 'Unknown'}</p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-semibold text-[#5b8def]">{formatMoney(spent, b.currency)}</p>
+                      <p className="text-sm font-semibold text-primary">{formatMoney(spent, b.currency)}</p>
                       <p className="text-[10px] text-text-subtle">
                         {b.total_amount != null ? `of ${formatMoney(b.total_amount, b.currency)}` : 'spent'}
                       </p>

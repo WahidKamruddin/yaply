@@ -56,7 +56,7 @@ export default function BalancesView({ budget, currentUserId, isCurrentUserAdmin
                     {mine && (
                       <button
                         onClick={() => setSettling(d)}
-                        className="text-[11px] px-2 py-0.5 rounded-md bg-[#5b8def] hover:bg-[#4a7de4] text-white transition-colors"
+                        className="text-[11px] px-2 py-0.5 rounded-md bg-primary hover:bg-primary-dark text-white transition-colors"
                       >
                         Settle up
                       </button>
@@ -160,7 +160,7 @@ function SettleUpDialog({ budget, debt, nameOf, onClose }: { budget: Budget; deb
       <form onSubmit={submit} className="space-y-3">
         <div className="flex flex-col items-center gap-2 py-1">
           <div className="w-12 h-12 rounded-full bg-tint flex items-center justify-center">
-            <HandCoins size={20} className="text-[#5b8def]" />
+            <HandCoins size={20} className="text-primary" />
           </div>
           <p className="text-sm text-text text-center">
             {nameOf(debt.from_user)} paid {nameOf(debt.to_user, { object: true })}

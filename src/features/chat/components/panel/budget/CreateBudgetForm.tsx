@@ -60,7 +60,7 @@ export default function CreateBudgetForm({ conversationId, currentUserId, onDone
         </select>
       </div>
       {error && <p className="text-[11px] text-red-500">{budgetErrorMessage(error)}</p>}
-      <button type="submit" disabled={!canSubmit} className="w-full py-1.5 text-xs font-medium bg-[#5b8def] text-white rounded-lg disabled:opacity-50">
+      <button type="submit" disabled={!canSubmit} className="w-full py-1.5 text-xs font-medium bg-primary text-white rounded-lg disabled:opacity-50">
         {isPending ? 'Creating…' : 'Create'}
       </button>
     </form>

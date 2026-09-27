@@ -3,10 +3,10 @@ import { X } from 'lucide-react'
 import { formatMoney } from '@yaply/shared'
 
 export const inputClass =
-  'w-full px-2.5 py-1.5 bg-tint rounded-lg text-xs text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-[#5b8def]/40'
+  'w-full px-2.5 py-1.5 bg-tint rounded-lg text-xs text-text placeholder:text-text-subtle outline-none focus:ring-1 focus:ring-primary/40'
 
 export const primaryButtonClass =
-  'w-full py-2 bg-[#5b8def] hover:bg-[#4a7de4] text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors'
+  'w-full py-2 bg-primary hover:bg-primary-dark text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors'
 
 /** Spent vs. cap. Turns red once over. */
 export function CapBar({ spent, cap, className = '' }: { spent: number; cap: number; className?: string }) {
@@ -20,7 +20,7 @@ export function CapBar({ spent, cap, className = '' }: { spent: number; cap: num
       aria-valuemax={100}
       aria-valuenow={Math.round(pct)}
     >
-      <div className={`h-full rounded-full ${over ? 'bg-red-500' : 'bg-[#5b8def]'}`} style={{ width: `${pct}%` }} />
+      <div className={`h-full rounded-full ${over ? 'bg-red-500' : 'bg-primary'}`} style={{ width: `${pct}%` }} />
     </div>
   )
 }

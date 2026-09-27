@@ -167,7 +167,7 @@ export default function ExpenseDialog({ open, onOpenChange, budget, members, cur
                   role="tab"
                   aria-selected={mode === m}
                   onClick={() => setMode(m)}
-                  className={`px-2.5 py-1 rounded-md transition-colors ${mode === m ? 'bg-[#5b8def] text-white' : 'text-text-muted hover:text-text'}`}
+                  className={`px-2.5 py-1 rounded-md transition-colors ${mode === m ? 'bg-primary text-white' : 'text-text-muted hover:text-text'}`}
                 >
                   {m === 'equal' ? 'Equally' : 'Exact amounts'}
                 </button>
@@ -180,7 +180,7 @@ export default function ExpenseDialog({ open, onOpenChange, budget, members, cur
               mode === 'equal' ? (
                 <label key={id} className="flex items-center justify-between px-2.5 py-2 cursor-pointer">
                   <span className="flex items-center gap-2 text-xs text-text">
-                    <input type="checkbox" checked={participants.has(id)} onChange={() => toggleParticipant(id)} className="accent-[#5b8def]" />
+                    <input type="checkbox" checked={participants.has(id)} onChange={() => toggleParticipant(id)} className="accent-primary" />
                     {nameOf(id)}
                   </span>
                   <span className="text-xs text-text-muted">{equalPreview.has(id) ? money(equalPreview.get(id) ?? 0) : '—'}</span>
