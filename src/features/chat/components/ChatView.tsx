@@ -336,17 +336,36 @@ export default function ChatView({ currentUserId }: Props) {
     return () => { abort.current = true }
   }, [allDbMessages, activeId, currentUserId, decryptV2])
 
-  // Realtime reactions subscription
+  // Realtime reactions. Inserts are filtered to this conversation server-side
+  // (message_reactions.conversation_id, migration 20260927000002); deletes
+  // can't be filtered, so they're matched against the loaded messages here.
+  // Either way only the one message is refetched — this used to refetch
+  // reactions for every loaded message on any reaction in the database.
   useEffect(() => {
     if (!activeId) return
+    const reloadOne = async (messageId: string | undefined) => {
+      if (!messageId || !decryptedIdsRef.current.includes(messageId)) return
+      const raw = await fetchReactions([messageId])
+      const groups = buildReactionGroups(raw, currentUserId)[messageId] as ReactionGroup[] | undefined
+      setReactionsMap((prev) => {
+        const next = { ...prev }
+        if (groups) next[messageId] = groups
+        else delete next[messageId]
+        return next
+      })
+    }
     const channel = supabase
       .channel(`reactions:${activeId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions' }, async () => {
-        if (decryptedIdsRef.current.length) {
-          const raw = await fetchReactions(decryptedIdsRef.current)
-          setReactionsMap(buildReactionGroups(raw, currentUserId))
-        }
-      })
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'message_reactions', filter: `conversation_id=eq.${activeId}` },
+        (payload) => void reloadOne((payload.new as { message_id?: string }).message_id),
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'message_reactions' },
+        (payload) => void reloadOne((payload.old as { message_id?: string }).message_id),
+      )
       .subscribe()
     return () => { void supabase.removeChannel(channel) }
   }, [activeId, currentUserId])

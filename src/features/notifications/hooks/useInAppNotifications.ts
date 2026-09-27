@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { inFilter } from '@/lib/realtimeFilters'
 import type { InAppNotification } from '@/features/notifications/components/NotificationBanner'
 import type { ConversationListItem } from '@/features/chat/types'
 
@@ -14,19 +15,35 @@ export function useInAppNotifications(
   const activeIdRef = useRef(activeConversationId)
   const navigateRef = useRef(onNavigate)
   const friendsNavRef = useRef(onNavigateToFriends)
+  // Read through a ref so a list refetch doesn't tear the channel down; only a
+  // change in *which* conversations exist does (see conversationKey).
+  const conversationsRef = useRef(conversations)
+  useEffect(() => { conversationsRef.current = conversations }, [conversations])
+  const conversationKey = useMemo(
+    () => conversations.map((c) => c.id).sort().join(','),
+    [conversations],
+  )
 
   useEffect(() => { activeIdRef.current = activeConversationId }, [activeConversationId])
   useEffect(() => { navigateRef.current = onNavigate }, [onNavigate])
   useEffect(() => { friendsNavRef.current = onNavigateToFriends }, [onNavigateToFriends])
 
   useEffect(() => {
-    if (!currentUserId) return
+    if (!currentUserId || !conversationKey) return
 
+    // Filtered to my conversations: this used to hear every message insert in
+    // the database. A fresh topic per run so a rebuild can't collide with the
+    // channel still being removed.
     const channel = supabase
-      .channel('in-app-notifications')
+      .channel(`in-app-notifications-${Date.now()}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: inFilter('conversation_id', conversationKey.split(',')),
+        },
         (payload) => {
           const msg = payload.new as { conversation_id: string; sender_id: string | null; type: string }
 
@@ -34,7 +51,7 @@ export function useInAppNotifications(
           if (msg.sender_id === currentUserId) return
           if (msg.conversation_id === activeIdRef.current) return
 
-          const conv = conversations.find((c) => c.id === msg.conversation_id)
+          const conv = conversationsRef.current.find((c) => c.id === msg.conversation_id)
           if (!conv) return
           // A pending or declined message request must not pop a banner — the
           // whole point of a request is that it stays quiet until accepted.
@@ -58,7 +75,7 @@ export function useInAppNotifications(
       .subscribe()
 
     return () => { void supabase.removeChannel(channel) }
-  }, [currentUserId, conversations])
+  }, [currentUserId, conversationKey])
 
   // Friend requests and acceptances. Unlike the messages channel this one has to
   // read the payload (there is no list to look the row up in), so it fetches the

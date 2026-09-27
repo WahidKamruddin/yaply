@@ -2,14 +2,8 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { fetchConversations } from '../api/conversations'
+import { inFilter } from '@/lib/realtimeFilters'
 import type { ConversationListItem } from '../types'
-
-/** Supabase Realtime's cap on an `in.(…)` filter; past it we go unfiltered rather than miss events. */
-const MAX_FILTER_VALUES = 100
-
-function inFilter(column: string, ids: string[]): string | undefined {
-  return ids.length <= MAX_FILTER_VALUES ? `${column}=in.(${ids.join(',')})` : undefined
-}
 
 export function useConversations(userId: string | undefined) {
   const queryClient = useQueryClient()
