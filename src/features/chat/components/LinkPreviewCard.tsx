@@ -12,11 +12,19 @@ interface Props {
 // download link elsewhere in this file — tap anywhere to open the URL.
 export default function LinkPreviewCard({ preview, isOwn, hasText }: Props) {
   let hostname = preview.url
+  // Defense in depth: decodeTextMessage already strips non-http(s) preview
+  // URLs, but this card renders `preview.url` straight into an <a href>, so
+  // it never trusts a caller that might skip that check — a javascript:
+  // URL here is a direct XSS sink.
+  let isSafeUrl = false
   try {
-    hostname = new URL(preview.url).hostname.replace(/^www\./, '')
+    const parsed = new URL(preview.url)
+    isSafeUrl = parsed.protocol === 'http:' || parsed.protocol === 'https:'
+    hostname = parsed.hostname.replace(/^www\./, '')
   } catch {
-    // Keep the raw url as a fallback label.
+    // Keep the raw url as a fallback label; isSafeUrl stays false.
   }
+  if (!isSafeUrl) return null
 
   return (
     <a

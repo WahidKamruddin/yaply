@@ -118,10 +118,30 @@ export function decodeTextMessage(raw: string): { text: string; linkPreview?: Li
       typeof (parsed as { text?: unknown }).text === 'string'
     ) {
       const { text, linkPreview } = parsed as EncodedTextMessage
-      return linkPreview ? { text, linkPreview } : { text }
+      if (
+        linkPreview &&
+        isHttpUrl(linkPreview.url) &&
+        (linkPreview.imageUrl === null || isHttpUrl(linkPreview.imageUrl))
+      ) {
+        return { text, linkPreview }
+      }
+      return { text }
     }
   } catch {
     // Not our envelope — fall through to raw text.
   }
   return { text: raw }
+}
+
+// Only http(s) may reach the UI as a clickable/renderable URL. The decrypted
+// message is attacker-controlled plaintext (the server never inspects it),
+// so this is what stands between a crafted `javascript:` URL and the <a
+// href> in LinkPreviewCard.
+function isHttpUrl(url: string): boolean {
+  try {
+    const protocol = new URL(url).protocol
+    return protocol === 'http:' || protocol === 'https:'
+  } catch {
+    return false
+  }
 }

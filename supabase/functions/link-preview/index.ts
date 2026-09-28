@@ -9,9 +9,10 @@
 // learns which URLs a user resolves a preview for (see CLAUDE.md's Known Gaps).
 //
 // Because this fetches an arbitrary user-supplied URL server-side, it is an
-// SSRF surface: `resolveIsSafeHost` below rejects loopback/private/link-local
+// SSRF surface: `resolveSafeIp` below rejects loopback/private/link-local
 // targets (including the 169.254.169.254 cloud-metadata class of address)
-// before *and* after following redirects.
+// before *and* after following redirects, and http:// requests are pinned
+// to the exact validated IP to close the DNS-rebinding TOCTOU window.
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -59,9 +60,16 @@ function isPrivateIPv6(ip: string): boolean {
   return false
 }
 
-async function isSafeHost(hostname: string): Promise<boolean> {
+// Resolves and validates a hostname, returning one of its validated IPs (not
+// just a boolean). Callers must connect to *this exact IP* rather than
+// re-resolving the hostname a second time — `fetch()` does its own
+// independent DNS lookup, and a boolean-only check here would leave a
+// classic DNS-rebinding TOCTOU: an attacker's nameserver can answer this
+// lookup with a public IP and the next lookup (fetch()'s own) with
+// 169.254.169.254 or an RFC1918 address.
+async function resolveSafeIp(hostname: string): Promise<string | null> {
   const lower = hostname.toLowerCase()
-  if (lower === 'localhost' || lower.endsWith('.localhost') || lower === '0') return false
+  if (lower === 'localhost' || lower.endsWith('.localhost') || lower === '0') return null
 
   let records: string[] = []
   try {
@@ -72,11 +80,13 @@ async function isSafeHost(hostname: string): Promise<boolean> {
     if (a.status === 'fulfilled') records = records.concat(a.value)
     if (aaaa.status === 'fulfilled') records = records.concat(aaaa.value)
   } catch {
-    return false
+    return null
   }
-  if (records.length === 0) return false
+  if (records.length === 0) return null
+  if (!records.every((ip) => (ip.includes(':') ? !isPrivateIPv6(ip) : !isPrivateIPv4(ip)))) return null
 
-  return records.every((ip) => (ip.includes(':') ? !isPrivateIPv6(ip) : !isPrivateIPv4(ip)))
+  // Prefer IPv4 — it's what the pinned http:// connection below rewrites in.
+  return records.find((ip) => !ip.includes(':')) ?? records[0]
 }
 
 function isAllowedUrl(url: URL): boolean {
@@ -91,16 +101,34 @@ async function safeFetch(
 ): Promise<{ res: Response; finalUrl: URL } | null> {
   let current = startUrl
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    if (!isAllowedUrl(current) || !(await isSafeHost(current.hostname))) return null
+    if (!isAllowedUrl(current)) return null
+    const safeIp = await resolveSafeIp(current.hostname)
+    if (!safeIp) return null
+
+    // Pin the connection to the exact IP just validated, for http:// only.
+    // https:// keeps the original hostname: Deno's fetch() derives TLS SNI
+    // and certificate-hostname validation from the URL host with no way to
+    // pin the IP separately, so rewriting it to a bare IP would break
+    // virtually every real HTTPS site. This leaves a narrower residual gap
+    // (rebinding to an internal host that itself serves HTTPS), but the
+    // realistic target class here — cloud metadata endpoints and typical
+    // internal services — is plain HTTP, which this pin fully covers.
+    const connectUrl =
+      current.protocol === 'http:'
+        ? new URL(`http://${safeIp.includes(':') ? `[${safeIp}]` : safeIp}:${current.port || '80'}${current.pathname}${current.search}`)
+        : current
 
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
     let res: Response
     try {
-      res = await fetch(current, {
+      res = await fetch(connectUrl, {
         redirect: 'manual',
         signal: controller.signal,
-        headers: { 'User-Agent': 'yaplyLinkPreview/1.0 (+https://yaply.app)' },
+        headers: {
+          'User-Agent': 'yaplyLinkPreview/1.0 (+https://yaply.app)',
+          ...(connectUrl !== current ? { Host: current.host } : {}),
+        },
       })
     } catch {
       return null

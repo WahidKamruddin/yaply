@@ -36,6 +36,9 @@ begin
   if v_msg.deleted_at is not null then
     raise exception 'cannot edit a deleted message';
   end if;
+  if not public.can_send_in_conversation(auth.uid(), v_msg.conversation_id) then
+    raise exception 'cannot send in this conversation';
+  end if;
 
   if p_envelopes is null
      or jsonb_typeof(p_envelopes) <> 'array'
