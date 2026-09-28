@@ -1282,6 +1282,11 @@ const LP_CSS = `
 .lp-nav-links a:hover { color: var(--ink); }
 .lp-nav-cta { display: flex; gap: 8px; align-items: center; }
 @media (max-width: 620px) { .lp-nav-links { display: none; } .lp-nav-cta { margin-left: auto; } }
+/* Once the dock's right edge would reach the corner theme toggle (viewport
+   < ~884px = 760 dock + 16 gutter + 38 toggle + 8 gap, both sides), reserve
+   the toggle's column so the CTA button never slides under it. */
+@media (max-width: 900px) { .lp-nav { padding-right: 62px; } }
+@media (max-width: 480px) { .lp-nav { padding-left: 12px; padding-right: 54px; } }
 
 /* Independent of the centered nav dock — pinned to the page's real corner,
    not the dock's edge, so it stays put regardless of dock width/content. */
