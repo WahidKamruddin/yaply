@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       ai_conversations: {
@@ -238,9 +213,10 @@ export type Database = {
           id: string
           is_muted: boolean | null
           joined_at: string | null
+          last_delivered_at: string | null
           last_read_at: string | null
-          muted_until: string | null
           mute_mentions: boolean
+          muted_until: string | null
           request_state: string
           role: string | null
           user_id: string
@@ -250,9 +226,10 @@ export type Database = {
           id?: string
           is_muted?: boolean | null
           joined_at?: string | null
+          last_delivered_at?: string | null
           last_read_at?: string | null
-          muted_until?: string | null
           mute_mentions?: boolean
+          muted_until?: string | null
           request_state?: string
           role?: string | null
           user_id: string
@@ -262,9 +239,10 @@ export type Database = {
           id?: string
           is_muted?: boolean | null
           joined_at?: string | null
+          last_delivered_at?: string | null
           last_read_at?: string | null
-          muted_until?: string | null
           mute_mentions?: boolean
+          muted_until?: string | null
           request_state?: string
           role?: string | null
           user_id?: string
@@ -594,48 +572,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "expenses_paid_by_fkey"
-            columns: ["paid_by"]
+            foreignKeyName: "expenses_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      settlements: {
-        Row: {
-          amount: number
-          budget_id: string
-          created_at: string
-          created_by: string | null
-          from_user: string
-          id: string
-          to_user: string
-        }
-        Insert: {
-          amount: number
-          budget_id: string
-          created_at?: string
-          created_by?: string | null
-          from_user: string
-          id?: string
-          to_user: string
-        }
-        Update: {
-          amount?: number
-          budget_id?: string
-          created_at?: string
-          created_by?: string | null
-          from_user?: string
-          id?: string
-          to_user?: string
-        }
-        Relationships: [
           {
-            foreignKeyName: "settlements_budget_id_fkey"
-            columns: ["budget_id"]
+            foreignKeyName: "expenses_paid_by_fkey"
+            columns: ["paid_by"]
             isOneToOne: false
-            referencedRelation: "budgets"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -732,24 +679,34 @@ export type Database = {
       }
       message_reactions: {
         Row: {
+          conversation_id: string
           created_at: string
           emoji: string
           message_id: string
           user_id: string
         }
         Insert: {
+          conversation_id: string
           created_at?: string
           emoji: string
           message_id: string
           user_id: string
         }
         Update: {
+          conversation_id?: string
           created_at?: string
           emoji?: string
           message_id?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "message_reactions_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "message_reactions_message_id_fkey"
             columns: ["message_id"]
@@ -1291,6 +1248,65 @@ export type Database = {
           },
         ]
       }
+      settlements: {
+        Row: {
+          amount: number
+          budget_id: string
+          created_at: string
+          created_by: string | null
+          from_user: string
+          id: string
+          to_user: string
+        }
+        Insert: {
+          amount: number
+          budget_id: string
+          created_at?: string
+          created_by?: string | null
+          from_user: string
+          id?: string
+          to_user: string
+        }
+        Update: {
+          amount?: number
+          budget_id?: string
+          created_at?: string
+          created_by?: string | null
+          from_user?: string
+          id?: string
+          to_user?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settlements_budget_id_fkey"
+            columns: ["budget_id"]
+            isOneToOne: false
+            referencedRelation: "budgets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlements_from_user_fkey"
+            columns: ["from_user"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlements_to_user_fkey"
+            columns: ["to_user"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stickers: {
         Row: {
           created_at: string
@@ -1454,6 +1470,13 @@ export type Database = {
       }
       are_friends: { Args: { p_a: string; p_b: string }; Returns: boolean }
       block_user: { Args: { p_user_id: string }; Returns: undefined }
+      budget_equal_shares: {
+        Args: { p_amount: number; p_users: string[] }
+        Returns: {
+          amount: number
+          user_id: string
+        }[]
+      }
       can_send_in_conversation: {
         Args: { p_conversation_id: string; p_user: string }
         Returns: boolean
@@ -1469,16 +1492,48 @@ export type Database = {
         Args: { p_member_ids: string[]; p_name: string }
         Returns: string
       }
-      dispatch_due_reminders: { Args: never; Returns: number }
-      enqueue_push: { Args: { p_body: Json }; Returns: undefined }
-      find_or_create_direct_conversation: {
-        Args: { target_user_id: string }
-        Returns: string
-      }
       delete_expense: { Args: { p_expense_id: string }; Returns: undefined }
       delete_settlement: {
         Args: { p_settlement_id: string }
         Returns: undefined
+      }
+      dispatch_due_reminders: { Args: never; Returns: number }
+      edit_message_with_envelopes: {
+        Args: {
+          p_content: string
+          p_envelopes: Json
+          p_iv: string
+          p_message_id: string
+        }
+        Returns: {
+          content: string
+          conversation_id: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          enc_v: number | null
+          id: string
+          iv: string | null
+          media_mime: string | null
+          media_url: string | null
+          mentioned_user_ids: string[]
+          mentions_everyone: boolean
+          reply_to_id: string | null
+          sender_id: string | null
+          thread_id: string | null
+          type: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "messages"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      enqueue_push: { Args: { p_body: Json }; Returns: undefined }
+      find_or_create_direct_conversation: {
+        Args: { target_user_id: string }
+        Returns: string
       }
       get_budget_balances: {
         Args: { p_budget_id: string }
@@ -1506,35 +1561,6 @@ export type Database = {
           my_net: number
           spent: number
         }[]
-      }
-      is_budget_member: { Args: { p_budget_id: string }; Returns: boolean }
-      is_conversation_admin: {
-        Args: { p_conversation_id: string }
-        Returns: boolean
-      }
-      record_settlement: {
-        Args: {
-          p_amount: number
-          p_budget_id: string
-          p_from: string
-          p_to: string
-        }
-        Returns: string
-      }
-      save_expense: {
-        Args: {
-          p_amount: number
-          p_budget_id: string
-          p_category: Database["public"]["Enums"]["expense_category"]
-          p_description: string
-          p_exact?: Json
-          p_expense_id: string | null
-          p_paid_by: string
-          p_participants: string[]
-          p_spent_on?: string
-          p_split_mode: string
-        }
-        Returns: string
       }
       get_conversation_summaries: {
         Args: never
@@ -1581,6 +1607,16 @@ export type Database = {
         Args: { p_a: string; p_b: string }
         Returns: boolean
       }
+      is_budget_member: { Args: { p_budget_id: string }; Returns: boolean }
+      is_conversation_admin: {
+        Args: { p_conversation_id: string }
+        Returns: boolean
+      }
+      mark_conversation_read: {
+        Args: { p_conversation_id: string }
+        Returns: undefined
+      }
+      mark_delivered: { Args: { p_until: string }; Returns: undefined }
       mutual_friend_count: {
         Args: { p_a: string; p_b: string }
         Returns: number
@@ -1605,6 +1641,7 @@ export type Database = {
           device_id: number
           environment: string
           eph_pub: string
+          is_mention: boolean
           key_iv: string
           recipient_fp: string
           recipient_id: string
@@ -1617,7 +1654,31 @@ export type Database = {
         Args: { p_token: string }
         Returns: undefined
       }
+      record_settlement: {
+        Args: {
+          p_amount: number
+          p_budget_id: string
+          p_from: string
+          p_to: string
+        }
+        Returns: string
+      }
       revoke_device: { Args: { p_device_id: number }; Returns: undefined }
+      save_expense: {
+        Args: {
+          p_amount: number
+          p_budget_id: string
+          p_category: Database["public"]["Enums"]["expense_category"]
+          p_description: string
+          p_exact?: Json
+          p_expense_id: string
+          p_paid_by: string
+          p_participants: string[]
+          p_spent_on?: string
+          p_split_mode: string
+        }
+        Returns: string
+      }
       search_users: {
         Args: { p_query: string }
         Returns: {
@@ -1830,9 +1891,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       expense_category: [

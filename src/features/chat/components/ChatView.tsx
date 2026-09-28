@@ -14,8 +14,10 @@ import { useEncryption, getCandidateFingerprints, decodePhase1 } from '@/feature
 import type { DbEnvelope } from '@/features/chat/hooks/useEncryption'
 import { useProfile } from '@/features/chat/hooks/useProfile'
 import { markConversationRead } from '@/features/chat/api/conversations'
-import { deleteMessage, fetchThreadCounts, fetchEnvelopesForMessages } from '@/features/chat/api/messages'
-import { useReadReceipts } from '@/features/chat/hooks/useReadReceipts'
+import { deleteMessage, fetchThreadCounts, fetchEnvelopesForMessages, editMessageWithEnvelopes } from '@/features/chat/api/messages'
+import { useReadWatermarks } from '@/features/chat/hooks/useReadWatermarks'
+import { formatStatus, messageStatus, seenHeads, withImpliedReads } from '@/features/chat/lib/readReceipts'
+import SeenHeads from '@/features/chat/components/SeenHeads'
 import GroupInfoModal from './GroupInfoModal'
 import DmSettingsModal from './DmSettingsModal'
 import ConversationPanel from './ConversationPanel'
@@ -34,6 +36,8 @@ import type { GifResult } from '@/features/media/api/gifs'
 import { supabase } from '@/lib/supabase'
 import type { DecryptedMessage, ConversationListItem } from '@/features/chat/types'
 import { extractMentions } from '@yaply/shared/mentions'
+import { encodeTextMessage, decodeTextMessage } from '@yaply/shared/linkPreview'
+import type { LinkPreview } from '@yaply/shared/linkPreview'
 import MessageBubble from './MessageBubble'
 import { getGroupPositions } from '@/features/chat/lib/messageGrouping'
 import MessageInput from './MessageInput'
@@ -182,10 +186,11 @@ export default function ChatView({ currentUserId }: Props) {
   )
   const replyMessage = replyId ? decrypted.find((m) => m.id === replyId) : null
 
-  const readByOtherSet = useReadReceipts(activeId, currentUserId, decrypted)
+  const rawWatermarks = useReadWatermarks(activeId)
 
   // Pending IDs for optimistic-update styling
   const pendingIdSet = useMemo(() => new Set(pendingMessages.map((m) => m.id)), [pendingMessages])
+
 
   // Clear all pending and reset initial-scroll flag when switching conversations
   useEffect(() => {
@@ -207,10 +212,30 @@ export default function ChatView({ currentUserId }: Props) {
 
   const groupPositions = useMemo(() => getGroupPositions(displayMessages), [displayMessages])
 
-  const lastOwnMessageId = useMemo(() => {
-    const own = displayMessages.filter((m) => m.senderId === currentUserId && !m.deletedAt)
-    return own.at(-1)?.id ?? null
-  }, [displayMessages, currentUserId])
+  // Messenger-style receipts: each other member's avatar under the newest
+  // message they've read, and a Sent / Delivered / Seen label on tap.
+  // Sending a message means you'd read up to it.
+  const watermarks = useMemo(
+    () => withImpliedReads(allMessages, rawWatermarks, pendingIdSet),
+    [allMessages, rawWatermarks, pendingIdSet],
+  )
+  const headsByMessage = useMemo(
+    () => seenHeads(allMessages, watermarks, currentUserId, pendingIdSet),
+    [allMessages, watermarks, currentUserId, pendingIdSet],
+  )
+  const memberProfile = useCallback(
+    (userId: string) => conversation?.members.find((m) => m.userId === userId)?.profile,
+    [conversation],
+  )
+  const statusLabel = useCallback(
+    (msg: DecryptedMessage) =>
+      formatStatus(
+        messageStatus(msg, watermarks, currentUserId, pendingIdSet.has(msg.id)),
+        conversation?.isGroup ?? false,
+        (id) => memberProfile(id)?.display_name ?? memberProfile(id)?.username ?? 'Someone',
+      ),
+    [watermarks, currentUserId, pendingIdSet, conversation, memberProfile],
+  )
 
   // Fetch thread reply counts from DB (separate from main messages since those are filtered to thread_id IS NULL)
   const { data: threadCounts = {} } = useQuery({
@@ -291,6 +316,15 @@ export default function ChatView({ currentUserId }: Props) {
           content = ''
           decryptCacheRef.current.set(cacheKey, null)
         }
+        // Only type='text' ever carries a link-preview envelope; decode is a
+        // no-op (returns the string unchanged) for anything else that isn't
+        // our known JSON shape.
+        let linkPreview: LinkPreview | undefined
+        if (!decryptFailed && msg.type === 'text') {
+          const decoded = decodeTextMessage(content)
+          content = decoded.text
+          linkPreview = decoded.linkPreview
+        }
         results.push({
           id: msg.id,
           conversationId: msg.conversation_id,
@@ -306,6 +340,7 @@ export default function ChatView({ currentUserId }: Props) {
           deletedAt: msg.deleted_at,
           createdAt: msg.created_at,
           senderProfile: msg.sender_profile,
+          linkPreview,
         })
       }
       if (isAborted()) return
@@ -379,18 +414,35 @@ export default function ChatView({ currentUserId }: Props) {
   // round-trip (and a 30s-stale-time refetch) made the sidebar badge look
   // stuck even when the read state was fine. Errors are now surfaced
   // instead of silently swallowed by an unhandled rejection.
+  //
+  // Only while the tab is visible — Messenger doesn't mark a thread seen until
+  // you're actually looking at it — and again the moment it becomes visible.
+  // Debounced so a burst of arrivals is one watermark write.
   useEffect(() => {
     if (!activeId) return
-    queryClient.setQueryData<ConversationListItem[]>(['conversations', currentUserId], (prev) =>
-      prev?.map((c) => (c.id === activeId ? { ...c, unreadCount: 0 } : c)),
-    )
-    markConversationRead(activeId, currentUserId)
-      .then(() => {
-        void queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] })
-      })
-      .catch((err: unknown) => {
-        console.error('[yaply] failed to mark conversation read', err)
-      })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const markRead = () => {
+      if (document.visibilityState !== 'visible') return
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        queryClient.setQueryData<ConversationListItem[]>(['conversations', currentUserId], (prev) =>
+          prev?.map((c) => (c.id === activeId ? { ...c, unreadCount: 0, mentionUnreadCount: 0 } : c)),
+        )
+        markConversationRead(activeId)
+          .then(() => {
+            void queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] })
+          })
+          .catch((err: unknown) => {
+            console.error('[yaply] failed to mark conversation read', err)
+          })
+      }, 500)
+    }
+    markRead()
+    document.addEventListener('visibilitychange', markRead)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', markRead)
+    }
   }, [activeId, currentUserId, queryClient, allDbMessages.length])
 
   // Scroll to show typing indicator when it appears and user is near bottom
@@ -433,20 +485,56 @@ export default function ChatView({ currentUserId }: Props) {
     }
   }, [fetchNextPage, hasNextPage, isFetchingNextPage])
 
-  const handleSend = useCallback(async (text: string) => {
+  // Re-seals an already-sent message once a preview that was still in flight
+  // at send time resolves. The sender's own view picks it up by invalidating
+  // the messages query — the decrypt cache is keyed by `edited_at`
+  // (see the decrypt effect above), so this is treated as "never seen this
+  // edited_at" and re-decrypts fresh. Every other client gets it for free via
+  // the existing UPDATE-invalidates-messages realtime wiring. Silent no-op on
+  // failure — an attach that never lands just leaves the message as plain
+  // text, matching today's behavior when a preview fails outright.
+  const attachLinkPreview = useCallback(async (
+    messageId: string,
+    text: string,
+    preview: LinkPreview,
+    memberIds: string[],
+  ) => {
+    try {
+      const result = await encrypt(memberIds, encodeTextMessage(text, preview))
+      await editMessageWithEnvelopes(
+        result.mode === 'v2'
+          ? { messageId, content: result.content, iv: result.iv, envelopes: result.envelopes }
+          : { messageId, content: result.content, iv: null },
+      )
+      void queryClient.invalidateQueries({ queryKey: ['messages', activeId] })
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] })
+    } catch (err) {
+      console.error('[yaply] failed to attach a late-resolved link preview', err)
+    }
+  }, [encrypt, queryClient, activeId])
+
+  const handleSend = useCallback(async (
+    text: string,
+    linkPreview?: LinkPreview,
+    latePreview?: Promise<LinkPreview | null>,
+  ) => {
     if (!activeId) return
 
     // Capture before clearing state
     const capturedReplyId = replyId
     const capturedThreadId = replyMessage?.threadId ?? null
 
-    // Optimistic: push the message into the UI immediately
+    // Optimistic: push the message into the UI immediately. content stays the
+    // plain display text here (never the encoded envelope) — linkPreview is
+    // threaded separately so MessageBubble renders instantly, matching what
+    // every decrypt site produces once the real message round-trips.
     const tempId = crypto.randomUUID()
     const tempMsg: DecryptedMessage = {
       id: tempId,
       conversationId: activeId,
       senderId: currentUserId,
       content: text,
+      linkPreview,
       type: 'text',
       mediaUrl: null,
       replyToId: capturedReplyId,
@@ -478,8 +566,12 @@ export default function ChatView({ currentUserId }: Props) {
     // Envelope-encrypt for every member device (groups and DMs alike).
     // encrypt() falls back to mode 'phase1' (enc_v = NULL, iv = NULL) when a
     // member has no registered device yet — never a mislabeled v2.
+    // A link preview is sealed alongside the text (encodeTextMessage is a
+    // no-op passthrough when there's no preview) rather than sent as a
+    // plaintext side-channel like mentions, so every recipient sees the exact
+    // same card with zero re-fetching. See CLAUDE.md's "Link previews".
     const memberIds = conversation?.members.map((m) => m.userId) ?? []
-    const result = await encrypt(memberIds, text)
+    const result = await encrypt(memberIds, encodeTextMessage(text, linkPreview))
 
     // Extracted from plaintext before encryption — mention targeting is the
     // one piece of this send that travels unencrypted, since the server needs
@@ -500,6 +592,14 @@ export default function ChatView({ currentUserId }: Props) {
         onSuccess: (data) => {
           pendingConfirmedRef.current.set(tempId, data.id)
           setSendError(null)
+          // The message already sent as plain text (never blocked on the
+          // fetch) — if a preview was still resolving, attach it once it's
+          // ready instead of discarding it.
+          if (!linkPreview && latePreview) {
+            void latePreview.then((resolved) => {
+              if (resolved) void attachLinkPreview(data.id, text, resolved, memberIds)
+            })
+          }
         },
         onError: (err) => {
           setPendingMessages((prev) => prev.filter((m) => m.id !== tempId))
@@ -515,7 +615,7 @@ export default function ChatView({ currentUserId }: Props) {
         },
       },
     )
-  }, [activeId, currentUserId, currentUserProfile, encrypt, conversation, replyId, replyMessage?.threadId, send, setReplyId])
+  }, [activeId, currentUserId, currentUserProfile, encrypt, conversation, replyId, replyMessage?.threadId, send, setReplyId, attachLinkPreview])
 
   const handleDelete = useCallback(async (messageId: string) => {
     await deleteMessage(messageId)
@@ -827,7 +927,7 @@ export default function ChatView({ currentUserId }: Props) {
               <MessageBubble
                 message={msg}
                 isOwn={msg.senderId === currentUserId}
-                isRead={msg.senderId === currentUserId && msg.id === lastOwnMessageId ? readByOtherSet.has(msg.id) : undefined}
+                statusLabel={msg.senderId === currentUserId && !msg.deletedAt ? statusLabel(msg) : undefined}
                 replyMessage={msg.replyToId ? decrypted.find((m) => m.id === msg.replyToId) ?? null : null}
                 threadCount={threadCounts[msg.id] ?? 0}
                 conversationId={activeId ?? undefined}
@@ -847,6 +947,7 @@ export default function ChatView({ currentUserId }: Props) {
                 showSenderName={conversation.isGroup}
                 mentionMembers={conversation.isGroup ? conversation.members : undefined}
               />
+              <SeenHeads profiles={(headsByMessage[msg.id] ?? []).flatMap((id) => memberProfile(id) ?? [])} />
             </div>
           )
         })}
@@ -923,7 +1024,7 @@ export default function ChatView({ currentUserId }: Props) {
         />
       ) : (
         <MessageInput
-          onSend={(text) => { void handleSend(text); notifyStopTyping() }}
+          onSend={(text, linkPreview, latePreview) => { void handleSend(text, linkPreview, latePreview); notifyStopTyping() }}
           onTyping={notifyTyping}
           onStopTyping={notifyStopTyping}
           onPickFile={() => fileInputRef.current?.click()}

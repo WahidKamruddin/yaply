@@ -2,6 +2,16 @@ import { supabase } from '@/lib/supabase'
 import { decryptV2ForUser, getCandidateFingerprints, decodePhase1 } from '@/features/chat/hooks/useEncryption'
 import { fetchEnvelopesForMessages } from './messages'
 import type { ConversationListItem, DecryptedMessage, MemberSummary, Profile } from '../types'
+import type { MemberWatermark } from '../lib/readReceipts'
+import { decodeTextMessage } from '@yaply/shared/linkPreview'
+
+// A link-only message (no text) previews as its title/site rather than a
+// blank sidebar line.
+function previewTextFor(text: string, linkPreview: ReturnType<typeof decodeTextMessage>['linkPreview']): string {
+  if (text) return text
+  if (linkPreview) return `🔗 ${linkPreview.title ?? linkPreview.siteName ?? linkPreview.url}`
+  return text
+}
 
 /** One row of `get_conversation_summaries()` (migration 20260927000001). */
 interface ConversationSummaryRow {
@@ -97,6 +107,10 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
     } else if (!s.last_iv) {
       // Phase-1 fallback / system messages: plain base64, no key needed.
       preview = decodePhase1(content)
+      if (s.last_type === 'text') {
+        const decoded = decodeTextMessage(preview)
+        preview = previewTextFor(decoded.text, decoded.linkPreview)
+      }
     } else {
       // Legacy pairwise ciphertext (pre-envelope migration) — unreadable.
       console.debug('[yaply:crypto] sidebar preview: legacy pairwise ciphertext', { convId: s.conversation_id })
@@ -130,7 +144,14 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
       await Promise.all(
         v2Previews.map(async (p) => {
           try {
-            lastMessages[p.convId].content = await decryptV2ForUser(userId, envelopes.get(p.messageId), p.content, p.iv)
+            const plain = await decryptV2ForUser(userId, envelopes.get(p.messageId), p.content, p.iv)
+            if (lastMessages[p.convId].type === 'text') {
+              const decoded = decodeTextMessage(plain)
+              lastMessages[p.convId].content = previewTextFor(decoded.text, decoded.linkPreview)
+              lastMessages[p.convId].linkPreview = decoded.linkPreview
+            } else {
+              lastMessages[p.convId].content = plain
+            }
             console.debug('[yaply:crypto] sidebar preview v2 decrypt ok', { convId: p.convId })
           } catch (err: unknown) {
             console.error('[yaply:crypto] sidebar preview v2 decrypt FAILED', { convId: p.convId, err })
@@ -311,23 +332,34 @@ export async function deleteGroupForEveryone(conversationId: string): Promise<vo
   if (error) throw error
 }
 
-export async function markConversationRead(
-  conversationId: string,
-  userId: string,
-): Promise<void> {
-  // .select('user_id') forces the response to include the touched row(s) —
-  // without it a silently-mismatched WHERE clause (e.g. a stale userId)
-  // "succeeds" while updating zero rows, and last_read_at never advances
-  // with nothing in the client to indicate why.
+/**
+ * Advances my read (and delivery) watermark for one conversation to the
+ * server's now(). Server clock on purpose: a client clock running behind never
+ * reached a message's created_at, so it could never show as seen.
+ */
+export async function markConversationRead(conversationId: string): Promise<void> {
+  const { error } = await supabase.rpc('mark_conversation_read', { p_conversation_id: conversationId })
+  if (error) throw error
+}
+
+/**
+ * Advances my delivery watermark in every conversation to `until` — the newest
+ * created_at this client has actually received. Forward-only and a no-op when
+ * nothing would change, so it's safe to call on every fetch.
+ */
+export async function markDelivered(until: string): Promise<void> {
+  const { error } = await supabase.rpc('mark_delivered', { p_until: until })
+  if (error) throw error
+}
+
+/** Every member's read and delivery watermark in one conversation. */
+export async function fetchMemberWatermarks(conversationId: string): Promise<MemberWatermark[]> {
   const { data, error } = await supabase
     .from('conversation_members')
-    .update({ last_read_at: new Date().toISOString() })
+    .select('user_id, last_read_at, last_delivered_at')
     .eq('conversation_id', conversationId)
-    .eq('user_id', userId)
-    .select('user_id')
-
   if (error) throw error
-  if (data.length === 0) {
-    console.error('[yaply] markConversationRead touched 0 rows', { conversationId, userId })
-  }
+  return (data as unknown as Array<{ user_id: string; last_read_at: string | null; last_delivered_at: string | null }>).map(
+    (r) => ({ userId: r.user_id, readAt: r.last_read_at, deliveredAt: r.last_delivered_at }),
+  )
 }

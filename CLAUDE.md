@@ -108,7 +108,7 @@ One ephemeral keypair per message; fresh random mk and nonces every time. iOS: C
 
 **Phase-1 fallback:** if **any** member has zero registered devices (never logged in), send plain base64 (`enc_v = NULL`, `iv = NULL`) so they aren't handed undecryptable ciphertext. Always `TextEncoder`/`TextDecoder` — never `btoa()`/`atob()` on raw text (breaks on non-Latin-1). Decode via `decodePhase1`.
 
-**Editing (contract only, no UI):** a re-seal — fresh mk, new `content`/`iv`, replace ALL envelopes in one transaction (future `edit_message_with_envelopes` RPC). Never reuse the old mk.
+**Editing:** a re-seal — fresh mk, new `content`/`iv`, replace ALL envelopes in one transaction (`edit_message_with_envelopes` RPC, mirrors `send_message_with_envelopes`; phase-1 messages get a plain column update instead, no envelopes to replace). Never reuse the old mk. **Implemented, but only as an internal mechanism — there is no compose-time "edit your message" UI.** Its one caller today is attaching a link preview that resolved after the message already sent; see "Link previews" below for the full flow.
 
 **Registration must be single-flight (critical):** `useEncryption` is mounted by both `ChatView` and `ThreadView`, so concurrent calls on a fresh install would each generate a different keypair and race to publish, desyncing the stored private key from the published public key. `registrationInFlight: Map<userId, Promise>` shares one registration; `encryptForMembers` and `decryptV2ForUser` **await** it so a message right after login is never downgraded to phase-1 or reported as a false failure. iOS applies the same rule.
 
@@ -142,6 +142,19 @@ A new install can't read messages sealed before it existed. Live pairing lets an
 - **Candidate fingerprints:** `getCandidateFingerprints()` returns own fp first, then escrowed; `fetchEnvelopesForMessages` filters `.in('recipient_fp', candidateFps)` and `decryptV2ForUser` picks the private key matching `envelope.recipient_fp` — at all three decrypt sites.
 
 **Accepted limitation:** both devices must be online at once. Lose every linked device and history is permanently `decryptFailed` — the deliberate trade for storing no recovery secret. Anyone with an unlocked linked device can mint new ones, as in Signal/WhatsApp.
+
+---
+
+## Read receipts (watermarks, Messenger-style)
+
+Messenger models reads and deliveries as per-member, per-thread **watermarks** ("all messages sent at or before this timestamp were read"), not per-message rows. So do we. Migration `20260927000003`; web `lib/readReceipts.ts` (+ tests) ⟷ iOS `Features/Chat/Support/ReadReceipts.swift` must agree rule for rule.
+
+- **Columns:** `conversation_members.last_read_at` (read) and `last_delivered_at` (delivery). Written **only** through `mark_conversation_read(p_conversation_id)` (both → server `now()`; a device clock running behind never reached `created_at`) and `mark_delivered(p_until)` (all my rows → `least(p_until + 1ms, now())`; the 1ms covers iOS's millisecond Dates vs microsecond `created_at`). Both forward-only, own rows only, and a no-op write when nothing moves. `message_reads` is **retired** (kept only until old builds are gone — then drop it).
+- **When:** mark read on open, on each arrival while open, and on return to foreground — only while the app is active / the tab visible, debounced 500ms. Mark delivered after every conversation-list fetch (every realtime insert refetches it) with `p_until` = newest `lastMessage.createdAt`, debounced 500ms. **Limitation:** a backgrounded phone doesn't mark delivered until the app opens (the NSE has no Supabase client); Messenger marks it on push arrival.
+- **Live:** `conversation_members` UPDATE filtered `conversation_id=eq.<open>` on the chat channel — members can read each other's rows.
+- **Implied reads:** sending a message means you'd read up to it, so each member's effective read *and* delivery watermark is `max(stored, their own latest sent message)` (`withImpliedReads`). Heads and the tapped status both use the effective values — a reply after your message makes it "Seen".
+- **Seen heads:** each other member's avatar (~14pt, right-aligned, max 4 + "+N") sits under the newest loaded non-system, non-pending message with `created_at <= effective readAt` — where they left off, which is never above a message they sent. They move down as the watermark advances.
+- **Status (own messages, only when tapped):** pending → "Sending…"; any other member `readAt >= created_at` → "Seen" (DM) / "Seen by everyone" / "Seen by Ana, Ben" (group); all others `deliveredAt >= created_at` → "Delivered"; else "Sent". **The seen avatars are the only receipt ever shown without a tap** — no checkmarks, no automatic "Sending…".
 
 ---
 
@@ -208,6 +221,93 @@ of its own (it only ever decrypts).
 
 ---
 
+## Link previews (URL unfurling)
+
+Pasting a URL into a `text` message resolves an Open Graph preview card
+(title/description/image/site name), sealed into the same encrypted envelope as
+the text — every recipient renders an identical card, with zero re-fetching.
+Shared encode/decode module — must match: `packages/shared/src/linkPreview.ts`
+(web) ⟷ `yaply-ios/yaply/yaply/Features/Chat/Support/LinkPreview.swift` (iOS).
+
+**Not a new column — an encoding of what gets sealed.** `encryptWithEnvelopes`/
+`EnvelopeEncryption.encryptForMembers` are content-agnostic; they seal whatever
+string they're handed. For `type='text'` only, that string is:
+- **No preview attached (every message before this feature, and most since):**
+  the raw text, byte-identical to the original wire format.
+- **A preview is attached:** `JSON.stringify({ v: 1, text, linkPreview })`.
+
+`decodeTextMessage` is the inverse, applied at **every** decrypt site right after
+getting the plaintext string, for `type='text'` messages only: if the string
+starts with `{` and parses to `{ v: 1, text: string, ... }`, unwrap to
+`{ content: text, linkPreview }`; anything else (parse failure, wrong shape, or a
+message that never had a preview) falls back to treating the whole string as
+plain `content` with no preview. Same "JSON-if-it-parses-else-legacy-text" shape
+already used for `type='system'` messages. A user who literally types that exact
+JSON is a documented, accepted edge case, not a bug.
+
+**Decrypt sites (must all apply the same rule):**
+- Web: `ChatView.tsx`'s decrypt effect, `ThreadView.loadReplies`, `api/conversations.ts`
+  sidebar preview batch decrypt.
+- iOS: `ChatViewModel.decryptAll`/`decryptDbMessage`, `ThreadViewModel.decryptDbMessage`,
+  `ConversationRepository.decryptPreviews`.
+
+`LinkPreview = { url, title, description, imageUrl, siteName }` — only `url` is
+non-nullable. `imageUrl`, when present, is **always our own Storage URL** (see
+below), never the original third-party domain.
+
+**Compose-time flow:** the client detects the first link in the composed text —
+either a full `http(s)://` URL or a bare `example.com`-style domain against a
+common-TLD allowlist (`findUrls`/`extractFirstUrl`, best-effort — this governs
+UX only, not a security boundary; not every TLD is covered, extend the list
+rather than loosening the pattern to a bare `\.[a-z]{2,}`, which false-positives
+on ordinary sentences). A bare domain gets `https://` prepended before it's
+fetched or linked. Debounces ~600ms, then calls the `link-preview` edge
+function. A dismissible chip shows the pending/resolved preview above the
+composer; dismissal persists until the URL itself changes.
+
+**Sending never waits on the fetch.** If a preview has already resolved by the
+time the user hits send, `encodeTextMessage(text, preview)` seals it in
+immediately, same as before. If the fetch is still in flight, the message
+sends as **plain text right away** — the fetch is *not* cancelled, its promise
+(web) / `Task` (iOS) is instead handed to the send handler, which attaches the
+preview once it resolves via `edit_message_with_envelopes` (see the encryption
+wire-format section's "Editing"): re-seal the same text with the preview now
+included, replacing all envelopes. The sender's own view picks this up locally
+(web: query invalidation, keyed by the now-bumped `edited_at`; iOS: a direct
+`messages[idx]` patch, since its own realtime subscription skips own-sender
+updates) and every other client gets it for free through the existing
+UPDATE-invalidates-messages realtime wiring — no separate "preview attached"
+event exists. A slow or failing fetch just leaves the message as permanent
+plain text, silently, matching what already happens when a preview fails
+outright. **Accepted limitation:** a second device signed into the *same*
+account as the sender won't see the live attach on iOS (matches the existing
+own-message-realtime-skip limitation already true there for deletes); web has
+no such gap since its invalidation isn't sender-filtered.
+
+**`link-preview` edge function** (`supabase/functions/link-preview/`,
+`verify_jwt = true`): fetches the URL **server-side** — most sites block
+cross-origin fetch, and a client-side fetch would leak the sender's IP/UA to every
+domain they ever paste. This makes the function an SSRF surface, guarded by
+`isSafeHost`: rejects loopback/private/link-local targets (including the
+169.254.169.254 cloud-metadata class of address) before *and* after following
+each redirect hop, plus a fetch timeout and page/image size caps. Parses
+`og:title`/`og:description`/`og:image`/`og:site_name` with fallback to
+`<title>`/meta description. **Proxies `og:image` into the `link-preview-images`
+Storage bucket** (public, keyed by a hash of the *page* URL so a re-shared link
+reuses the same stored image) rather than returning the original domain — this is
+why no CSP `img-src` change was needed; it already allows `https://*.supabase.co`.
+
+**Rendering:** `MessageBubble`'s `LinkPreviewCard` (web), `LinkPreviewCardView`
+(iOS) — image, site name, title, description, whole card links out to the
+original `url`. Every `http(s)` URL and bare domain match from `findUrls` in
+plain message text is also linkified — a bare domain's *displayed* text is left
+exactly as typed, only its `href` gets `https://` prepended (presentation-only,
+not a byte-for-byte cross-platform contract like the mention grammar above).
+
+Only `type='text'` messages ever carry this — media/system/etc. are unaffected.
+
+---
+
 ## Security Model — Known Gaps & Limitations
 
 E2E here means **text message content is encrypted between a user's active devices** — do not overstate it. These are documented limitations, not bugs:
@@ -223,6 +323,7 @@ E2E here means **text message content is encrypted between a user's active devic
 - **Push payloads carry ciphertext through APNs** (plus that device's `wrapped_key`), stored up to 24h by Apple. Still E2E, but a threat-model change versus no pushes. Non-message pushes are plaintext.
 - **Search** covers only loaded, decrypted messages. **Fan-out** is messages × recipients × devices.
 - **Browser-E2E trust:** the server ships the crypto JS, so a malicious update could exfiltrate keys — an active, detectable attack.
+- **Link preview resolution:** the sender's device sends the raw URL to our own `link-preview` edge function (never a third party directly) to fetch OG metadata and proxy the image. The server therefore learns which URLs a user resolves previews for, though never the rest of the message content. Deliberate, consistent with the plaintext-metadata and public-media gaps above.
 
 ---
 
@@ -236,7 +337,7 @@ E2E here means **text message content is encrypted between a user's active devic
 
 **`conversations`:** `id, type ('direct'|'group'|'ai'), name, avatar_url, created_by, created_at, updated_at`
 
-**`conversation_members`:** `conversation_id, user_id, role ('owner'|'admin'|'member'), joined_at, last_read_at, muted_until, mute_mentions (00045), request_state ('accepted'|'pending'|'declined', default 'accepted')`. `muted_until`: null = not muted, future = muted until then, `8640000000000` ms epoch (JS max Date) = forever. `mute_mentions`: only meaningful while `muted_until` is in the future — `true` = "mute everything" (even @mentions), `false` (default) = "mute chat" (mentions still notify). See @mentions below.
+**`conversation_members`:** `conversation_id, user_id, role ('owner'|'admin'|'member'), joined_at, last_read_at, last_delivered_at, muted_until, mute_mentions (00045), request_state ('accepted'|'pending'|'declined', default 'accepted')`. `muted_until`: null = not muted, future = muted until then, `8640000000000` ms epoch (JS max Date) = forever. `mute_mentions`: only meaningful while `muted_until` is in the future — `true` = "mute everything" (even @mentions), `false` (default) = "mute chat" (mentions still notify). See @mentions below.
 
 **`messages`:** `id, conversation_id, sender_id, type ('text'|'image'|'gif'|'sticker'|'file'|'voice'|'system'|'ai'), content, iv, enc_v, media_url, media_mime, reply_to_id, thread_id, mentioned_user_ids, mentions_everyone, edited_at, deleted_at, created_at`. `voice` added in `00037`. `mentioned_user_ids`/`mentions_everyone` added in `00045`, see @mentions below. See the wire format above for `content`/`iv`/`enc_v`.
 
@@ -519,5 +620,5 @@ as the migration test — the only place migrations are applied to a virgin data
 - **Realtime as invalidation:** channel events trigger a TanStack Query refetch rather than parsing the (encrypted) payload, so decryption logic isn't duplicated.
 - **Scope list subscriptions server-side.** The conversation-list channel (web `useConversations`, iOS `ConversationListViewModel`) filters `messages` INSERT to `conversation_id=in.(my conversations)` and `profiles` UPDATE to `id=in.(my members)` (unfiltered past Realtime's 100-value cap), plus `conversation_members` INSERT for `user_id=eq.me`, and rebuilds when that set changes. Unfiltered, every write in the database was RLS-checked for every connected client and delayed message events. Presence updates patch the cached profile in place; only a name/username/avatar change refetches.
   - Also scoped: the web in-app banner channel (`useInAppNotifications`, `messages` INSERT on my conversations) and chat reactions (INSERT on `conversation_id=eq.<open>`, both platforms). Shared helper: `src/lib/realtimeFilters.ts`.
-  - **Still unfiltered — TODO:** `friendships` subscriptions on both platforms (iOS `ConversationListViewModel` + `FriendsViewModel`; web `useFriends` + `useInAppNotifications`). Split each into two bindings, `requester_id=eq.me` and `recipient_id=eq.me` (Realtime allows one filter per binding); DELETEs can't be filtered. `message_reads` is also unfiltered, but read receipts are being redesigned — fix it as part of that.
+  - **Still unfiltered — TODO:** `friendships` subscriptions on both platforms (iOS `ConversationListViewModel` + `FriendsViewModel`; web `useFriends` + `useInAppNotifications`). Split each into two bindings, `requester_id=eq.me` and `recipient_id=eq.me` (Realtime allows one filter per binding); DELETEs can't be filtered.
 - **Parity:** the web `.gitignore` excludes `yaply-ios/`. Any wire-format or schema change must be reflected in both CLAUDE.md files and implemented on both platforms.

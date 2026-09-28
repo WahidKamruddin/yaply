@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { fetchConversations } from '../api/conversations'
+import { fetchConversations, markDelivered } from '../api/conversations'
 import { inFilter } from '@/lib/realtimeFilters'
 import type { ConversationListItem } from '../types'
 
@@ -18,6 +18,25 @@ export function useConversations(userId: string | undefined) {
     enabled: !!userId,
     staleTime: 30_000,
   })
+
+  // Delivery watermark: this client now holds everything up to the newest
+  // message it just fetched. Every realtime insert refetches the list, so this
+  // also covers live arrivals. Debounced, and skipped when nothing is newer.
+  const deliveredUpToRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!userId || !query.data) return
+    const newest = query.data.reduce<string | null>((max, c) => {
+      const at = c.lastMessage?.createdAt
+      return at && (!max || at > max) ? at : max
+    }, null)
+    if (!newest || (deliveredUpToRef.current && newest <= deliveredUpToRef.current)) return
+    const timer = setTimeout(() => {
+      markDelivered(newest)
+        .then(() => { deliveredUpToRef.current = newest })
+        .catch((err: unknown) => { console.error('[yaply] failed to mark delivered', err) })
+    }, 500)
+    return () => { clearTimeout(timer) }
+  }, [userId, query.data])
 
   // The channel only hears this user's own conversations and their members.
   // Both subscriptions used to be unfiltered: every message insert and every

@@ -3,6 +3,7 @@ import type { DbMessage, SendMessageParams } from '../types'
 import type { DbEnvelope } from '../hooks/useEncryption'
 import { encodeSystemItem } from '../lib/systemItem'
 import type { SystemItem } from '../lib/systemItem'
+import type { MessageEnvelope } from '@yaply/crypto'
 
 const PAGE_SIZE = 50
 
@@ -110,6 +111,68 @@ export async function sendMessage(params: SendMessageParams): Promise<DbMessage>
       mentioned_user_ids: params.mentionedUserIds ?? [],
       mentions_everyone: params.mentionsEveryone ?? false,
     })
+    .select(`
+      id,
+      conversation_id,
+      sender_id,
+      content,
+      iv,
+      enc_v,
+      type,
+      media_url,
+      media_mime,
+      reply_to_id,
+      thread_id,
+      edited_at,
+      deleted_at,
+      created_at
+    `)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export interface EditMessageParams {
+  messageId: string
+  content: string
+  iv: string | null
+  // Present ⇒ v2 re-seal via the edit_message_with_envelopes RPC (replaces
+  // ALL envelopes atomically, never appends). Absent ⇒ the message was
+  // phase-1 (no envelopes ever existed) and this is a plain column update,
+  // permitted by the "sender can update" RLS policy on `messages`.
+  envelopes?: MessageEnvelope[]
+}
+
+/**
+ * Re-seals an already-sent `type='text'` message — today's only caller is
+ * attaching a link preview that resolved after the message was sent (see
+ * CLAUDE.md's "Link previews"), never a general "edit your message" feature.
+ * Mirrors `sendMessage`'s v2/phase-1 branch.
+ */
+export async function editMessageWithEnvelopes(params: EditMessageParams): Promise<DbMessage> {
+  if (params.envelopes && params.envelopes.length > 0) {
+    if (!params.iv) throw new Error('[yaply] envelope edit requires an iv (enc_v = 2 invariant)')
+    const { data, error } = await supabase.rpc('edit_message_with_envelopes', {
+      p_message_id: params.messageId,
+      p_content: params.content,
+      p_iv: params.iv,
+      p_envelopes: params.envelopes.map((e) => ({
+        recipient_user_id: e.recipientUserId,
+        recipient_fp: e.recipientFp,
+        eph_pub: e.ephPub,
+        key_iv: e.keyIv,
+        wrapped_key: e.wrappedKey,
+      })),
+    })
+    if (error) throw error
+    return data
+  }
+
+  const { data, error } = await supabase
+    .from('messages')
+    .update({ content: params.content, edited_at: new Date().toISOString() })
+    .eq('id', params.messageId)
     .select(`
       id,
       conversation_id,

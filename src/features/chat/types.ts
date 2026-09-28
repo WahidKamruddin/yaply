@@ -1,3 +1,6 @@
+import type { MessageEnvelope } from '@yaply/crypto'
+import type { LinkPreview } from '@yaply/shared/linkPreview'
+
 export interface Profile {
   id: string
   username: string
@@ -76,6 +79,10 @@ export interface DecryptedMessage {
   deletedAt: string | null
   createdAt: string
   senderProfile?: Profile
+  // Present when the sender attached a resolved link preview (type='text'
+  // only). Decoded out of `content` by decodeTextMessage at every decrypt
+  // site — see CLAUDE.md's "Link previews" section.
+  linkPreview?: LinkPreview
 }
 
 export interface SendMessageParams {
@@ -86,7 +93,7 @@ export interface SendMessageParams {
   // Present only for envelope-encrypted (enc_v = 2) sends — routes through the
   // send_message_with_envelopes RPC so message + envelopes commit atomically.
   // Absent ⇒ plain insert with enc_v = NULL (phase-1 / system / media).
-  envelopes?: import('@yaply/crypto').MessageEnvelope[]
+  envelopes?: MessageEnvelope[]
   type?: string
   replyToId?: string | null
   threadId?: string | null

@@ -1,16 +1,23 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import type { KeyboardEvent } from 'react'
-import { Plus, FileText, Camera, Mic, Image as ImageIcon, Smile, Send, X, Terminal, AtSign } from 'lucide-react'
+import { Plus, FileText, Camera, Mic, Image as ImageIcon, Smile, Send, X, Terminal, AtSign, Link2 } from 'lucide-react'
 import { useAtom } from 'jotai'
 import { replyToMessageIdAtom, commandFeedbackAtom } from '@/features/chat/store/chat.atoms'
 import type { DecryptedMessage, MemberSummary } from '@/features/chat/types'
 import { COMMANDS } from '@yaply/shared/constants/commands'
 import { activeMentionQuery, MENTION_EVERYONE } from '@yaply/shared/mentions'
+import { extractFirstUrl } from '@yaply/shared/linkPreview'
+import type { LinkPreview } from '@yaply/shared/linkPreview'
+import { supabase } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import IconButton from '@/components/IconButton'
 
 interface Props {
-  onSend: (text: string) => void
+  // `linkPreview` is whatever's already resolved at send time. `latePreview`
+  // is handed along when a fetch is still in flight — the message must never
+  // wait on it (send now, attach later if/when it resolves). See
+  // CLAUDE.md's "Link previews" section.
+  onSend: (text: string, linkPreview?: LinkPreview, latePreview?: Promise<LinkPreview | null>) => void
   onTyping?: () => void
   onStopTyping?: () => void
   replyMessage?: DecryptedMessage | null
@@ -68,6 +75,14 @@ export default function MessageInput({
   currentUserId,
 }: Props) {
   const [text, setText] = useState('')
+  const [linkPreview, setLinkPreview] = useState<LinkPreview | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewDismissed, setPreviewDismissed] = useState(false)
+  const lastResolvedUrlRef = useRef<string | null>(null)
+  const previewRequestIdRef = useRef(0)
+  // The in-flight fetch, if any — captured at send time so it can be handed
+  // to the parent as `latePreview` instead of being cancelled.
+  const previewPromiseRef = useRef<Promise<LinkPreview | null> | null>(null)
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const [menuExpanded, setMenuExpanded] = useState(false)
   const [caret, setCaret] = useState(0)
@@ -85,6 +100,56 @@ export default function MessageInput({
     const t = setTimeout(() => setFeedback(null), 6_000)
     return () => clearTimeout(t)
   }, [feedback, setFeedback])
+
+  // Debounced link-preview resolution. Fires once ~600ms after the first URL
+  // in the composed text stops changing — not on every keystroke elsewhere in
+  // the message. A dismissed preview stays dismissed until the URL itself
+  // changes; a request superseded by a newer one (previewRequestIdRef) is
+  // dropped rather than clobbering a more recent result in the *visible*
+  // chip. The promise itself always resolves regardless — sending never waits
+  // on it (see `submit`'s `latePreview` hand-off).
+  useEffect(() => {
+    const url = extractFirstUrl(text)
+    if (!url) {
+      lastResolvedUrlRef.current = null
+      setLinkPreview(null)
+      setPreviewLoading(false)
+      setPreviewDismissed(false)
+      previewPromiseRef.current = null
+      return
+    }
+    if (url === lastResolvedUrlRef.current) return
+
+    lastResolvedUrlRef.current = url
+    setPreviewDismissed(false)
+    setPreviewLoading(true)
+    const requestId = ++previewRequestIdRef.current
+
+    let timer: ReturnType<typeof setTimeout>
+    const promise = new Promise<LinkPreview | null>((resolve) => {
+      timer = setTimeout(() => {
+        void (async () => {
+          let result: LinkPreview | null = null
+          try {
+            const { data, error } = await supabase.functions.invoke('link-preview', { body: { url } })
+            result = error || !data ? null : (data as LinkPreview)
+          } catch {
+            result = null
+          }
+          if (previewRequestIdRef.current === requestId) {
+            setLinkPreview(result)
+            setPreviewLoading(false)
+          }
+          resolve(result)
+        })()
+      }, 600)
+    })
+    previewPromiseRef.current = promise
+
+    return () => clearTimeout(timer)
+  }, [text])
+
+  const activePreview = previewDismissed ? null : linkPreview
 
   // Filtered command list — stays open while typing args for a matched command
   const filteredCommands = useMemo(() => {
@@ -229,9 +294,21 @@ export default function MessageInput({
       return
     }
 
-    onSend(trimmed)
+    // Never block sending on the fetch: if a preview is already resolved it's
+    // sealed in now (`activePreview`); otherwise, if one is still in flight,
+    // its promise is handed along so the caller can attach it later instead
+    // of the fetch being cancelled here.
+    const resolvedPreview = activePreview ?? undefined
+    const latePreview = resolvedPreview || !previewLoading ? undefined : (previewPromiseRef.current ?? undefined)
+    onSend(trimmed, resolvedPreview, latePreview)
     onStopTyping?.()
     setText('')
+    setLinkPreview(null)
+    setPreviewDismissed(false)
+    setPreviewLoading(false)
+    lastResolvedUrlRef.current = null
+    previewRequestIdRef.current++
+    previewPromiseRef.current = null
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
   }
 
@@ -319,6 +396,39 @@ export default function MessageInput({
           </div>
           <IconButton onClick={() => setReplyId(null)} aria-label="Cancel reply" className="ml-2">
             <X size={14} />
+          </IconButton>
+        </div>
+      )}
+
+      {/* Link preview chip — shown only to the sender before send; dismissible,
+          and re-appears if the URL in the text changes. */}
+      {(previewLoading || activePreview) && (
+        <div className="flex items-center justify-between gap-2 mb-2 px-2 py-1.5 bg-tint rounded-lg border border-border">
+          <div className="flex items-center gap-2 min-w-0">
+            {activePreview?.imageUrl ? (
+              <img
+                src={activePreview.imageUrl}
+                alt=""
+                className="w-8 h-8 rounded object-cover flex-shrink-0"
+              />
+            ) : (
+              <Link2 size={14} className="text-text-subtle flex-shrink-0" />
+            )}
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-primary-text truncate">
+                {previewLoading && !activePreview ? 'Fetching preview…' : activePreview?.title || activePreview?.url}
+              </p>
+              {activePreview?.siteName && (
+                <p className="text-xs text-text-muted truncate">{activePreview.siteName}</p>
+              )}
+            </div>
+          </div>
+          <IconButton
+            onClick={() => setPreviewDismissed(true)}
+            aria-label="Remove link preview"
+            className="ml-2 flex-shrink-0"
+          >
+            <X size={13} />
           </IconButton>
         </div>
       )}

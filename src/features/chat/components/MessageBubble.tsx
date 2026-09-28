@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { CheckCheck, Reply, Trash2, AlertCircle, Smile, Plus, MessageSquarePlus, MessageSquare, BookImage, Lock, Pin, PinOff, Map as MapIcon, Calendar, CheckSquare, FileText, Image as ImageIcon, DollarSign, Bell, ChevronRight } from 'lucide-react'
+import { Reply, Trash2, AlertCircle, Smile, Plus, MessageSquarePlus, MessageSquare, BookImage, Lock, Pin, PinOff, Map as MapIcon, Calendar, CheckSquare, FileText, Image as ImageIcon, DollarSign, Bell, ChevronRight } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { DecryptedMessage, MemberSummary } from '@/features/chat/types'
 import type { ReactionGroup } from '@/features/chat/api/reactions'
@@ -12,25 +12,57 @@ import { getReactionRail, promoteReaction } from '@/features/chat/lib/reactionRa
 import { ITEM_META, parseSystemItem } from '@/features/chat/lib/systemItem'
 import type { ItemKind, PanelTab, SystemItem } from '@/features/chat/lib/systemItem'
 import { tokenizeMentions } from '@yaply/shared/mentions'
+import { findUrls } from '@yaply/shared/linkPreview'
+import LinkPreviewCard from './LinkPreviewCard'
 
-// Renders decrypted text with @mention/@everyone runs styled distinctly.
-// Falls back to a single plain text node when there's nothing to highlight,
-// so the common (non-group) case pays no extra cost.
+// Turns bare http(s) URLs and "example.com"-style bare domains inside a run of
+// plain text into clickable links. Presentation-only (unlike mentions'
+// grammar, this isn't a byte-for-byte cross-platform wire-format contract),
+// but reuses the shared URL matcher so compose-time detection and rendering
+// agree on what counts as a link.
+function linkifyPlain(text: string, keyPrefix: string): Array<string | React.ReactElement> {
+  const matches = findUrls(text)
+  if (matches.length === 0) return [text]
+  const parts: Array<string | React.ReactElement> = []
+  let lastIndex = 0
+  matches.forEach((match, i) => {
+    if (match.start > lastIndex) parts.push(text.slice(lastIndex, match.start))
+    parts.push(
+      <a
+        key={`${keyPrefix}-url-${i}`}
+        href={match.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline break-all"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {match.raw}
+      </a>,
+    )
+    lastIndex = match.end
+  })
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex))
+  return parts
+}
+
+// Renders decrypted text with @mention/@everyone runs styled distinctly, and
+// bare URLs made clickable. Falls back to plain linkified text when there's
+// nothing to highlight, so the common (non-group) case pays no extra cost.
 function renderMentions(
   content: string,
   members: MemberSummary[] | undefined,
   currentUserId: string | undefined,
   isOwn: boolean,
 ) {
-  if (!members || members.length === 0 || !content.includes('@')) return content
+  if (!members || members.length === 0 || !content.includes('@')) return linkifyPlain(content, 'plain')
   const tokens = tokenizeMentions(
     content,
     members.map((m) => ({ userId: m.userId, username: m.profile.username })),
   )
-  if (tokens.length === 1 && tokens[0].kind === 'text') return content
+  if (tokens.length === 1 && tokens[0].kind === 'text') return linkifyPlain(content, 'plain')
 
   return tokens.map((t, i) => {
-    if (t.kind === 'text') return <span key={i}>{t.value}</span>
+    if (t.kind === 'text') return <span key={i}>{linkifyPlain(t.value, `t${i}`)}</span>
     const isSelfMention = t.everyone || t.userId === currentUserId
     const className = isSelfMention
       ? 'font-semibold rounded px-0.5 bg-primary-tint text-primary-text'
@@ -70,6 +102,9 @@ function replyPreviewText(replyMessage: DecryptedMessage): string {
   if (replyMessage.type === 'voice') return '🎤 Voice message'
   if (replyMessage.type === 'file') return '📎 File'
   if (replyMessage.decryptFailed) return '🔒 Encrypted message'
+  if (!replyMessage.content && replyMessage.linkPreview) {
+    return `🔗 ${replyMessage.linkPreview.title ?? replyMessage.linkPreview.siteName ?? replyMessage.linkPreview.url}`
+  }
   return replyMessage.content.slice(0, 80)
 }
 
@@ -108,7 +143,8 @@ function replyLabel(
 interface Props {
   message: DecryptedMessage
   isOwn: boolean
-  isRead?: boolean
+  /** Own messages: "Sent" / "Delivered" / "Seen…", shown only when the bubble is clicked. */
+  statusLabel?: string
   replyMessage?: DecryptedMessage | null
   threadCount?: number
   conversationId?: string
@@ -177,7 +213,7 @@ const TAB_LABELS: Record<PanelTab, string> = {
   reminders: 'Reminders',
 }
 
-export default function MessageBubble({ message, isOwn, isRead, replyMessage, threadCount = 0, conversationId, currentUserId, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact, onOpenPanel, onOpenItem, isPinned = false, onTogglePin, groupPosition = 'single', showSenderName = true, mentionMembers }: Props) {
+export default function MessageBubble({ message, isOwn, statusLabel, replyMessage, threadCount = 0, conversationId, currentUserId, onReply, onDelete, onQuotationClick, onOpenThread, onReplyInThread, reactions = [], onReact, onOpenPanel, onOpenItem, isPinned = false, onTogglePin, groupPosition = 'single', showSenderName = true, mentionMembers }: Props) {
   const [hovered, setHovered] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showFullEmojiPicker, setShowFullEmojiPicker] = useState(false)
@@ -511,21 +547,25 @@ export default function MessageBubble({ message, isOwn, isRead, replyMessage, th
                     Couldn't decrypt this message
                   </span>
                 ) : (
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                    {renderMentions(message.content, mentionMembers, currentUserId, isOwn)}
-                  </p>
+                  <>
+                    {message.content && (
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                        {renderMentions(message.content, mentionMembers, currentUserId, isOwn)}
+                      </p>
+                    )}
+                    {message.linkPreview && (
+                      <LinkPreviewCard preview={message.linkPreview} isOwn={isOwn} hasText={!!message.content} />
+                    )}
+                  </>
                 )}
               </div>
             </div>
-            {(showTime || (isOwn && isRead !== undefined)) && (
+            {showTime && (
               <div className={`flex items-center gap-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                {showTime && <span className="text-[10px] text-text-subtle">{time}</span>}
-                {isOwn && isRead !== undefined && (
-                  <CheckCheck
-                    size={12}
-                    className={isRead ? 'text-primary' : 'text-text-subtle'}
-                  />
-                )}
+                <span className="text-[10px] text-text-subtle">
+                  {time}
+                  {statusLabel && ` · ${statusLabel}`}
+                </span>
               </div>
             )}
           </div>

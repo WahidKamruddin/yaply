@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Send } from 'lucide-react'
+import { X, Send, Link2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { useEncryption, getCandidateFingerprints, decodePhase1 } from '@/features/chat/hooks/useEncryption'
-import { fetchThreadMessages, fetchEnvelopesForMessages, sendMessage } from '@/features/chat/api/messages'
+import { fetchThreadMessages, fetchEnvelopesForMessages, sendMessage, editMessageWithEnvelopes } from '@/features/chat/api/messages'
 import { supabase } from '@/lib/supabase'
 import type { DbEnvelope } from '@/features/chat/hooks/useEncryption'
 import type { DecryptedMessage, MemberSummary } from '@/features/chat/types'
 import MessageBubble from './MessageBubble'
 import { getGroupPositions } from '@/features/chat/lib/messageGrouping'
 import { extractMentions } from '@yaply/shared/mentions'
+import { extractFirstUrl, encodeTextMessage, decodeTextMessage } from '@yaply/shared/linkPreview'
+import type { LinkPreview } from '@yaply/shared/linkPreview'
 
 interface Props {
   rootMessage: DecryptedMessage
@@ -31,6 +33,60 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
   const [sendError, setSendError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const { encrypt, decryptV2 } = useEncryption(currentUserId)
+
+  // Link preview — same debounced-resolve-then-seal flow as the main composer
+  // (MessageInput.tsx). See CLAUDE.md's "Link previews" section.
+  const [linkPreview, setLinkPreview] = useState<LinkPreview | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewDismissed, setPreviewDismissed] = useState(false)
+  const lastResolvedUrlRef = useRef<string | null>(null)
+  const previewRequestIdRef = useRef(0)
+  // The in-flight fetch, if any — captured at send time and handed along
+  // instead of cancelled, so a still-resolving preview can be attached after
+  // the reply already sent. See CLAUDE.md's "Link previews" section.
+  const previewPromiseRef = useRef<Promise<LinkPreview | null> | null>(null)
+  const activePreview = previewDismissed ? null : linkPreview
+
+  useEffect(() => {
+    const url = extractFirstUrl(text)
+    if (!url) {
+      lastResolvedUrlRef.current = null
+      setLinkPreview(null)
+      setPreviewLoading(false)
+      setPreviewDismissed(false)
+      previewPromiseRef.current = null
+      return
+    }
+    if (url === lastResolvedUrlRef.current) return
+
+    lastResolvedUrlRef.current = url
+    setPreviewDismissed(false)
+    setPreviewLoading(true)
+    const requestId = ++previewRequestIdRef.current
+
+    let timer: ReturnType<typeof setTimeout>
+    const promise = new Promise<LinkPreview | null>((resolve) => {
+      timer = setTimeout(() => {
+        void (async () => {
+          let result: LinkPreview | null = null
+          try {
+            const { data, error } = await supabase.functions.invoke('link-preview', { body: { url } })
+            result = error || !data ? null : (data as LinkPreview)
+          } catch {
+            result = null
+          }
+          if (previewRequestIdRef.current === requestId) {
+            setLinkPreview(result)
+            setPreviewLoading(false)
+          }
+          resolve(result)
+        })()
+      }, 600)
+    })
+    previewPromiseRef.current = promise
+
+    return () => clearTimeout(timer)
+  }, [text])
 
   const loadReplies = useCallback(async () => {
     const raw = await fetchThreadMessages(rootMessage.id)
@@ -66,6 +122,12 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
         decryptFailed = true
         content = ''
       }
+      let msgLinkPreview: LinkPreview | undefined
+      if (!decryptFailed && msg.type === 'text') {
+        const decoded = decodeTextMessage(content)
+        content = decoded.text
+        msgLinkPreview = decoded.linkPreview
+      }
       decrypted.push({
         id: msg.id,
         conversationId: msg.conversation_id,
@@ -80,6 +142,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
         deletedAt: msg.deleted_at,
         createdAt: msg.created_at,
         senderProfile: msg.sender_profile,
+        linkPreview: msgLinkPreview,
       })
     }
     setReplies(decrypted)
@@ -96,21 +159,63 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
         table: 'messages',
         filter: `thread_id=eq.${rootMessage.id}`,
       }, () => { void loadReplies() })
+      // Picks up a late-attached preview (or any future real edit) for
+      // another open viewer of this thread — previously only INSERT
+      // triggered a reload, so an edited reply never live-updated.
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'messages',
+        filter: `thread_id=eq.${rootMessage.id}`,
+      }, () => { void loadReplies() })
       .subscribe()
     return () => { void supabase.removeChannel(channel) }
   }, [rootMessage.id, loadReplies])
 
+  // Re-seals an already-sent reply once a preview still in flight at send
+  // time resolves. Mirrors ChatView.attachLinkPreview. Silent no-op on
+  // failure — matches today's behavior when a preview fails outright.
+  const attachLinkPreview = useCallback(async (
+    messageId: string,
+    replyText: string,
+    preview: LinkPreview,
+  ) => {
+    try {
+      const result = await encrypt(memberUserIds, encodeTextMessage(replyText, preview))
+      await editMessageWithEnvelopes(
+        result.mode === 'v2'
+          ? { messageId, content: result.content, iv: result.iv, envelopes: result.envelopes }
+          : { messageId, content: result.content, iv: null },
+      )
+      await loadReplies()
+    } catch (err) {
+      console.error('[yaply] failed to attach a late-resolved link preview', err)
+    }
+  }, [encrypt, memberUserIds, loadReplies])
+
   const handleSend = useCallback(async () => {
     const trimmed = text.trim()
     if (!trimmed || sending) return
+    // Never block sending on the fetch: seal in whatever's already resolved;
+    // if one's still in flight, hand its promise along instead of cancelling.
+    const resolvedPreview = activePreview ?? undefined
+    const latePreview = resolvedPreview || !previewLoading ? undefined : (previewPromiseRef.current ?? undefined)
     setSending(true)
     setText('')
+    setLinkPreview(null)
+    setPreviewDismissed(false)
+    setPreviewLoading(false)
+    lastResolvedUrlRef.current = null
+    previewRequestIdRef.current++
+    previewPromiseRef.current = null
 
     setSendError(null)
     try {
       // Envelope-encrypt for all member devices; encrypt() falls back to
       // phase-1 (enc_v = NULL, iv = NULL) when a member has no device yet.
-      const result = await encrypt(memberUserIds, trimmed)
+      // The link preview is sealed alongside the text, same as the main
+      // composer (ChatView.handleSend) — see CLAUDE.md's "Link previews".
+      const result = await encrypt(memberUserIds, encodeTextMessage(trimmed, resolvedPreview))
       // Same plaintext-before-encryption extraction as the main composer
       // (ChatView.handleSend) — see CLAUDE.md's mentions section.
       const { mentionedUserIds, mentionsEveryone } = isGroup
@@ -120,7 +225,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
             currentUserId,
           )
         : { mentionedUserIds: [], mentionsEveryone: false }
-      await sendMessage({
+      const sent = await sendMessage({
         conversationId,
         senderId: currentUserId,
         content: result.content,
@@ -132,6 +237,11 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
         mentionedUserIds,
         mentionsEveryone,
       })
+      if (!resolvedPreview && latePreview) {
+        void latePreview.then((resolved) => {
+          if (resolved) void attachLinkPreview(sent.id, trimmed, resolved)
+        })
+      }
       await loadReplies()
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
     } catch (err) {
@@ -139,7 +249,7 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
     }
 
     setSending(false)
-  }, [text, sending, rootMessage, conversationId, currentUserId, memberUserIds, members, isGroup, encrypt, loadReplies])
+  }, [text, sending, rootMessage, conversationId, currentUserId, memberUserIds, members, isGroup, encrypt, loadReplies, activePreview, previewLoading, attachLinkPreview])
 
   const rootName = rootMessage.senderProfile?.display_name ?? rootMessage.senderProfile?.username ?? 'Deleted user'
   const rootTime = formatDistanceToNow(new Date(rootMessage.createdAt), { addSuffix: true })
@@ -222,6 +332,27 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
         <div className="border-t border-border px-4 py-3 flex-shrink-0">
           {sendError && (
             <p className="text-xs text-red-400 mb-2 px-1">{sendError}</p>
+          )}
+          {(previewLoading || activePreview) && (
+            <div className="flex items-center justify-between gap-2 mb-2 px-2 py-1.5 bg-tint rounded-lg border border-border">
+              <div className="flex items-center gap-2 min-w-0">
+                {activePreview?.imageUrl ? (
+                  <img src={activePreview.imageUrl} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                ) : (
+                  <Link2 size={14} className="text-text-subtle flex-shrink-0" />
+                )}
+                <p className="text-xs font-medium text-primary-text truncate">
+                  {previewLoading && !activePreview ? 'Fetching preview…' : activePreview?.title || activePreview?.url}
+                </p>
+              </div>
+              <button
+                onClick={() => setPreviewDismissed(true)}
+                aria-label="Remove link preview"
+                className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-full text-text-subtle hover:text-text hover:bg-card transition-colors"
+              >
+                <X size={12} />
+              </button>
+            </div>
           )}
           <div className="flex items-end gap-2">
             <textarea

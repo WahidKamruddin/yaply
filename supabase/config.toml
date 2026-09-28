@@ -6,6 +6,9 @@ verify_jwt = true
 [functions.report-problem]
 verify_jwt = true
 
+[functions.link-preview]
+verify_jwt = true
+
 # Invoked by a database trigger via pg_net, which has no user JWT to present.
 # The gateway check is therefore off and the function authenticates the caller
 # itself with a shared secret (x-push-secret). Note that verify_jwt = true would
