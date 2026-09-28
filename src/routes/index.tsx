@@ -1253,6 +1253,7 @@ const LP_CSS = `
 .lp-nav-inner {
   display: flex; align-items: center; gap: 20px;
   width: 100%; max-width: 760px;
+  height: 56px; /* fixed so the corner theme toggle can center on it */
   padding: 9px 10px 9px 16px;
   border-radius: 999px;
   border: 1px solid transparent;
@@ -1292,7 +1293,8 @@ const LP_CSS = `
    not the dock's edge, so it stays put regardless of dock width/content. */
 .lp-theme-corner {
   position: fixed;
-  top: max(16px, var(--safe-top, 0px));
+  /* vertically centered on the dock: 14px nav offset + (56px dock - 38px) / 2 */
+  top: max(23px, var(--safe-top, 0px));
   right: max(16px, var(--safe-right, 0px));
   z-index: 55;
   width: 38px; height: 38px; border-radius: 50%;
@@ -1306,7 +1308,7 @@ const LP_CSS = `
 }
 .lp-theme-corner:hover { color: var(--ink); background: var(--tint); transform: rotate(18deg); }
 @media (max-width: 480px) {
-  .lp-theme-corner { width: 34px; height: 34px; top: max(12px, var(--safe-top, 0px)); right: max(12px, var(--safe-right, 0px)); }
+  .lp-theme-corner { width: 34px; height: 34px; top: max(25px, var(--safe-top, 0px)); right: max(12px, var(--safe-right, 0px)); }
 }
 
 .lp-btn-ghost {
