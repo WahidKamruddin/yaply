@@ -96,9 +96,10 @@ export function renderHtml(imageSrc: (name: string) => string = cidSrc): string 
       </table>
 
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${C.card}" style="max-width:560px;background:${C.card};border:1px solid ${C.cardLine};border-radius:20px;">
-        <tr><td style="height:4px;line-height:4px;font-size:0;background:${C.blue};border-radius:20px 20px 0 0;">&nbsp;</td></tr>
-
-        <tr><td style="padding:36px 40px 0;">
+        <tr><td style="padding:40px 40px 0;">
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr>
+            <td width="40" height="4" bgcolor="${C.blue}" style="width:40px;height:4px;line-height:4px;font-size:0;background:${C.blue};border-radius:2px;">&nbsp;</td>
+          </tr></table>
           <h1 style="margin:0 0 20px;font-size:34px;line-height:1.15;font-weight:700;letter-spacing:-1px;color:${C.ink};">${escapeHtml(HEADLINE)}</h1>
           ${intro}
         </td></tr>
