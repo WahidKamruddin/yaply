@@ -45,11 +45,19 @@ export async function fetchReactions(messageIds: string[]): Promise<MessageReact
   }))
 }
 
-export async function addReaction(messageId: string, userId: string, emoji: string): Promise<void> {
+export async function addReaction(
+  messageId: string,
+  userId: string,
+  emoji: string,
+  conversationId: string,
+): Promise<void> {
+  // conversation_id is required by the column type, but a BEFORE INSERT
+  // trigger (set_reaction_conversation_id) always overwrites it from the
+  // message row — this value is never actually trusted or stored as sent.
   const { error } = await supabase
     .from('message_reactions')
     .upsert(
-      { message_id: messageId, user_id: userId, emoji },
+      { message_id: messageId, user_id: userId, emoji, conversation_id: conversationId },
       { onConflict: 'message_id,user_id,emoji', ignoreDuplicates: true },
     )
   if (error) throw error

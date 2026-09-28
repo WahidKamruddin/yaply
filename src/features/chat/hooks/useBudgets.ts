@@ -264,7 +264,10 @@ export function useSaveExpense(budgetId: string) {
           : undefined
       const { error } = await supabase.rpc('save_expense', {
         p_budget_id: budgetId,
-        p_expense_id: input.expenseId,
+        // database.types.ts marks this uuid param non-nullable, but the RPC
+        // (20260923000001_budget_splits.sql) explicitly accepts null for
+        // "create a new expense" — generated types lag the migration.
+        p_expense_id: input.expenseId as string,
         p_description: input.description.trim(),
         p_amount: input.amountCents / 100,
         p_category: input.category,

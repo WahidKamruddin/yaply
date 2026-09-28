@@ -147,7 +147,7 @@ test('web allows a user to hold several reactions on one message', async ({
   for (const emoji of ['👍', '🎉']) {
     const { error } = await db()
       .from('message_reactions')
-      .insert({ message_id: messageId, user_id: aliceId, emoji })
+      .insert({ message_id: messageId, user_id: aliceId, emoji, conversation_id: conversationId! })
     expect(error, `reacting with ${emoji} should be allowed`).toBeNull()
   }
 

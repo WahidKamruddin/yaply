@@ -645,6 +645,7 @@ export default function ChatView({ currentUserId }: Props) {
   }, [activeId, setOpenItemRequest])
 
   const handleReact = useCallback(async (messageId: string, emoji: string) => {
+    if (!activeId) return
     const existing = reactionsMap[messageId]?.find((r) => r.emoji === emoji && r.reactedByMe)
     setReactionsMap((prev) => {
       const current = prev[messageId] ?? []
@@ -663,9 +664,9 @@ export default function ChatView({ currentUserId }: Props) {
     if (existing) {
       await removeReaction(messageId, currentUserId, emoji)
     } else {
-      await addReaction(messageId, currentUserId, emoji)
+      await addReaction(messageId, currentUserId, emoji, activeId)
     }
-  }, [reactionsMap, currentUserId])
+  }, [reactionsMap, currentUserId, activeId])
 
   // Optimistically render a media message (image / gif / sticker) the same way
   // handleSend does for text: it shows immediately, then the real row replaces
