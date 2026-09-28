@@ -964,10 +964,6 @@ function LandingPage() {
             <div className="lp-cta-row" data-reveal style={{ ['--d' as string]: '220ms' }}>
               <Link to="/auth" className="lp-btn-primary">
                 {WAITLIST_MODE ? 'Join the Waitlist' : 'Get Started'}
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                  <polyline points="12 5 19 12 12 19" />
-                </svg>
               </Link>
               {!WAITLIST_MODE && <Link to="/auth" className="lp-btn-glass">Sign in</Link>}
             </div>
