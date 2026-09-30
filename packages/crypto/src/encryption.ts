@@ -34,17 +34,27 @@ export async function deriveSharedKey(
   theirPubJwk: JsonWebKey,
 ): Promise<CryptoKey> {
   const myPrivNorm = asJwk(myPrivJwk)
+  const myPrivKey = await crypto.subtle.importKey(
+    'jwk',
+    myPrivNorm,
+    { name: 'ECDH', namedCurve: 'P-256' },
+    false,
+    ['deriveKey'],
+  )
+  return deriveSharedKeyFromPrivate(myPrivKey, theirPubJwk)
+}
+
+// Same KEK derivation as deriveSharedKey, for a private key that is already an
+// imported CryptoKey: raw 32-byte ECDH shared secret used directly as the
+// AES-256-GCM key (no HKDF). Byte-identical output either way.
+async function deriveSharedKeyFromPrivate(
+  myPrivKey: CryptoKey,
+  theirPubJwk: JsonWebKey,
+): Promise<CryptoKey> {
   const theirPubNorm = asJwk(theirPubJwk)
   const theirFp = theirPubNorm.x && theirPubNorm.y ? `${theirPubNorm.x}.${theirPubNorm.y}` : '(invalid)'
   console.debug('[yaply:crypto] deriveSharedKey start', { theirFp: theirFp.slice(0, 16) })
   try {
-    const myPrivKey = await crypto.subtle.importKey(
-      'jwk',
-      myPrivNorm,
-      { name: 'ECDH', namedCurve: 'P-256' },
-      false,
-      ['deriveKey'],
-    )
     const theirPubKey = await crypto.subtle.importKey(
       'jwk',
       theirPubNorm,
@@ -65,6 +75,52 @@ export async function deriveSharedKey(
     console.error('[yaply:crypto] deriveSharedKey FAILED', { theirFp: theirFp.slice(0, 16), err })
     throw err
   }
+}
+
+// ─── Imported private-key cache ──────────────────────────────────────────────
+// Decrypting a page of messages used to re-import the same recipient private
+// JWK once per envelope. Imported keys are cached here instead, keyed by
+// userId and then by the key's own fingerprint (JWK x.y, read from the private
+// JWK itself so the cache key can never disagree with the key it maps to).
+//
+// - Memory only, never persisted.
+// - Imported NON-extractable with only 'deriveKey' — a cached CryptoKey can
+//   never be exported back to key material.
+// - Per userId (a Map, not a single slot plus an owner check), for the same
+//   straggling-async-call reason as the app's identityPairMemCache.
+// - Stores the in-flight import promise so concurrent decrypts share one
+//   import; a rejected import is evicted so it can be retried.
+// Callers must clearImportedPrivateKeys() whenever local key material is wiped
+// or the user signs out.
+const importedPrivateKeyCache = new Map<string, Map<string, Promise<CryptoKey>>>()
+
+export function getImportedPrivateKey(userId: string, privJwk: JsonWebKey): Promise<CryptoKey> {
+  const norm = asJwk(privJwk)
+  if (!norm.d) throw new Error('[yaply-crypto] getImportedPrivateKey requires a private EC JWK')
+  const fp = publicKeyFingerprint(norm)
+  let perUser = importedPrivateKeyCache.get(userId)
+  if (!perUser) {
+    perUser = new Map()
+    importedPrivateKeyCache.set(userId, perUser)
+  }
+  const cached = perUser.get(fp)
+  if (cached) return cached
+  const owner = perUser
+  const pending = crypto.subtle
+    .importKey('jwk', norm, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey'])
+    .catch((err: unknown) => {
+      if (owner.get(fp) === pending) owner.delete(fp)
+      throw err
+    })
+  perUser.set(fp, pending)
+  return pending
+}
+
+// Drops cached imported private keys for one user, or for everyone when no
+// userId is given.
+export function clearImportedPrivateKeys(userId?: string): void {
+  if (userId === undefined) importedPrivateKeyCache.clear()
+  else importedPrivateKeyCache.delete(userId)
 }
 
 // Returns { content: base64(ciphertext+tag), iv: base64(nonce[12]) }
@@ -159,15 +215,23 @@ export async function encryptWithEnvelopes(
 // Unwraps the message key from an envelope sealed to `myPrivJwk`'s device and
 // decrypts the message content. Throws on any mismatch — callers surface an
 // explicit decryptFailed state, never garbage.
+//
+// `cacheUserId`, when given, reuses the imported private CryptoKey from the
+// per-user cache (see getImportedPrivateKey) instead of re-importing the JWK
+// for every envelope. The derived KEK and result are identical either way.
 export async function unwrapAndDecrypt(
   myPrivJwk: JsonWebKey,
   envelope: Pick<MessageEnvelope, 'ephPub' | 'keyIv' | 'wrappedKey'>,
   content: string,
   iv: string,
+  cacheUserId?: string,
 ): Promise<string> {
   console.debug('[yaply:crypto] unwrapAndDecrypt start')
   try {
-    const kek = await deriveSharedKey(myPrivJwk, JSON.parse(envelope.ephPub) as JsonWebKey)
+    const ephPubJwk = JSON.parse(envelope.ephPub) as JsonWebKey
+    const kek = cacheUserId === undefined
+      ? await deriveSharedKey(myPrivJwk, ephPubJwk)
+      : await deriveSharedKeyFromPrivate(await getImportedPrivateKey(cacheUserId, myPrivJwk), ephPubJwk)
     const mkRaw = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: fromB64(envelope.keyIv) as BufferSource },
       kek,

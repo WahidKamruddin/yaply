@@ -30,3 +30,12 @@
     # The main protection here is the tight connect-src, which blocks exfiltrating
     # the E2E private key / auth token to attacker-controlled origins.
     Content-Security-Policy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.supabase.co https://*.giphy.com https://*.googleusercontent.com; media-src 'self' blob: https://*.supabase.co https://*.giphy.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.giphy.com; worker-src 'self' blob:; manifest-src 'self'"
+
+# Vite content-hashes every file under /assets/, so a changed file always gets
+# a new URL: safe to cache forever. index.html and sw.js stay on Netlify's
+# default (revalidate every load) so a deploy — including a crypto fix — is
+# picked up on the next page load.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

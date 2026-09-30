@@ -15,6 +15,15 @@ import {
   clearAllKeys,
 } from '@yaply/crypto'
 import type { EnvelopeRecipient, MessageEnvelope, EscrowedKey } from '@yaply/crypto'
+import { fetchEnvelopesForMessages } from '@/features/chat/api/messages'
+import {
+  clearDecryptCache,
+  decryptCacheKey,
+  dropFailedDecryptEntries,
+  getCachedPlaintext,
+  getDecryptCacheEpoch,
+  setCachedPlaintext,
+} from '@/features/chat/lib/decryptCache'
 
 // Thrown when an encrypted (enc_v = 2) message can't be decrypted: no envelope
 // sealed to this device's key, missing identity, or AES-GCM auth failure.
@@ -102,6 +111,17 @@ async function getEscrowedKeys(userId: string): Promise<EscrowedKey[]> {
   return keys
 }
 
+// Drops every in-memory copy of key material for all users: identity pairs,
+// escrowed keys, cached plaintext and imported CryptoKeys. Call alongside
+// clearAllKeys() (which wipes every account's keys on this install) — otherwise
+// a same-tab re-sign-in after revocation would still read history via the
+// stale escrowMemCache without re-pairing.
+export function clearInMemoryKeyState(): void {
+  identityPairMemCache.clear()
+  escrowMemCache.clear()
+  clearDecryptCache()
+}
+
 // Fingerprint of this install's device key for `userId` — used to pick this
 // device's envelope out of message_envelopes. Null before keys initialize.
 export async function getMyFingerprint(userId: string): Promise<string | null> {
@@ -146,6 +166,9 @@ async function getPrivateKeyForFp(userId: string, fp: string): Promise<JsonWebKe
 export async function importEscrowedKeys(userId: string, keys: EscrowedKey[]): Promise<number> {
   const merged = await mergeEscrowedKeys(userId, keys)
   escrowMemCache.set(userId, merged)
+  // History that failed for lack of a key may be readable now: forget cached
+  // failures (not plaintexts) so every decrypt site retries them.
+  dropFailedDecryptEntries(userId)
   trace('importEscrowedKeys', { userId, received: keys.length, total: merged.length })
   return merged.length
 }
@@ -323,13 +346,71 @@ export async function decryptV2ForUser(
       ephPub: envelope.eph_pub,
       keyIv: envelope.key_iv,
       wrappedKey: envelope.wrapped_key,
-    }, content, iv)
+    }, content, iv, userId)
     trace('decryptV2ForUser ok', { userId, messageId: envelope.message_id })
     return plain
   } catch (err) {
     console.error('[yaply:crypto] decryptV2ForUser FAILED', { userId, messageId: envelope.message_id, err })
     throw new DecryptionFailedError('envelope unwrap or content decrypt failed')
   }
+}
+
+// Decrypts a batch of enc_v = 2 messages for `userId` through the shared
+// plaintext cache (lib/decryptCache). Returns messageId → plaintext, or null
+// when it can't be decrypted. Callers keep the branch order themselves (enc_v
+// first, then iv = NULL, else decryptFailed) and pass ONLY enc_v = 2 rows here.
+//
+// Only cache misses go into the one batched envelope query. A failure is
+// cached only when it's a real answer (envelope query succeeded and there was
+// no envelope, or the envelope didn't open) — a network error or keys that
+// aren't loaded yet render as failed for this pass but are retried next time.
+export async function decryptV2Cached(
+  userId: string,
+  messages: Array<{ id: string; content: string; iv: string | null }>,
+): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>()
+  const startEpoch = getDecryptCacheEpoch()
+  const misses: typeof messages = []
+  for (const m of messages) {
+    const cached = getCachedPlaintext(userId, decryptCacheKey(m.id, m.iv))
+    if (cached === undefined) misses.push(m)
+    else out.set(m.id, cached)
+  }
+  if (misses.length === 0) return out
+
+  let envelopes = new Map<string, DbEnvelope>()
+  let authoritative = false
+  try {
+    const fps = await getCandidateFingerprints(userId)
+    if (fps.length > 0) {
+      envelopes = await fetchEnvelopesForMessages(misses.map((m) => m.id), fps)
+      authoritative = true
+    }
+    trace('decryptV2Cached envelope batch', { requested: misses.length, found: envelopes.size })
+  } catch (err) {
+    console.error('[yaply:crypto] decryptV2Cached envelope batch FAILED', { err })
+  }
+
+  await Promise.all(
+    misses.map(async (m) => {
+      const key = decryptCacheKey(m.id, m.iv)
+      const envelope = envelopes.get(m.id)
+      try {
+        const plain = await decryptV2ForUser(userId, envelope, m.content, m.iv)
+        setCachedPlaintext(userId, key, plain, startEpoch)
+        out.set(m.id, plain)
+      } catch (err) {
+        console.error('[yaply:crypto] decryptV2Cached decrypt FAILED', { msgId: m.id, hadEnvelope: !!envelope, err })
+        // Only a definite answer is cached; an unexpected error (e.g. IndexedDB
+        // read failure) is retried on the next pass.
+        if (authoritative && err instanceof DecryptionFailedError) {
+          setCachedPlaintext(userId, key, null, startEpoch)
+        }
+        out.set(m.id, null)
+      }
+    }),
+  )
+  return out
 }
 
 // Registers this install as a device for `uid`: one keypair + one random
@@ -385,8 +466,9 @@ async function doRegisterDevice(uid: string): Promise<void> {
     if (!lookupError && !existingRow) {
       trace('registerDevice: local device was revoked, clearing keys', { uid, deviceId })
       await clearAllKeys()
-      identityPairMemCache.delete(uid)
-      escrowMemCache.delete(uid)
+      // clearAllKeys wipes every account's keys on this install, so drop all
+      // in-memory key state with it, not just this user's.
+      clearInMemoryKeyState()
       deviceId = null
     }
   }

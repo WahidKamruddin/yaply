@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   generateKeyPair,
   deriveSharedKey,
@@ -7,6 +7,8 @@ import {
   publicKeyFingerprint,
   encryptWithEnvelopes,
   unwrapAndDecrypt,
+  getImportedPrivateKey,
+  clearImportedPrivateKeys,
 } from './encryption'
 import type { EnvelopeRecipient } from './encryption'
 
@@ -139,5 +141,87 @@ describe('publicKeyFingerprint', () => {
 
   it('rejects a private or malformed JWK', async () => {
     expect(() => publicKeyFingerprint({})).toThrow()
+  })
+})
+
+describe('imported private-key cache', () => {
+  afterEach(() => {
+    clearImportedPrivateKeys()
+    vi.restoreAllMocks()
+  })
+
+  // importKey calls for a private JWK (has `d`) — ephemeral public-key imports
+  // happen on every unwrap by design and are not counted.
+  function countPrivateImports() {
+    const spy = vi.spyOn(crypto.subtle, 'importKey')
+    return () =>
+      (spy.mock.calls as unknown as Array<[string, unknown]>)
+        .filter(([format, data]) => format === 'jwk' && !!(data as JsonWebKey).d).length
+  }
+
+  it('imports each private key once per user and decrypts identically to the uncached path', async () => {
+    const pair = await generateKeyPair()
+    const fp = publicKeyFingerprint(pair.publicKeyJwk)
+    const device = { userId: 'bob', fp, pubJwk: pair.publicKeyJwk }
+    const a = await encryptWithEnvelopes('first 你好', [device])
+    const b = await encryptWithEnvelopes('second 🎉', [device])
+
+    const privateImports = countPrivateImports()
+    expect(await unwrapAndDecrypt(pair.privateKeyJwk, a.envelopes[0], a.content, a.iv, 'bob')).toBe('first 你好')
+    expect(await unwrapAndDecrypt(pair.privateKeyJwk, b.envelopes[0], b.content, b.iv, 'bob')).toBe('second 🎉')
+    // Concurrent callers share the in-flight import.
+    await Promise.all([
+      unwrapAndDecrypt(pair.privateKeyJwk, a.envelopes[0], a.content, a.iv, 'bob'),
+      unwrapAndDecrypt(pair.privateKeyJwk, b.envelopes[0], b.content, b.iv, 'bob'),
+    ])
+    expect(privateImports()).toBe(1)
+
+    // Uncached path still works and yields the same plaintext.
+    expect(await unwrapAndDecrypt(pair.privateKeyJwk, a.envelopes[0], a.content, a.iv)).toBe('first 你好')
+  })
+
+  it('caches per user and per fingerprint (own + escrowed keys)', async () => {
+    const own = await generateKeyPair()
+    const escrowed = await generateKeyPair()
+    const privateImports = countPrivateImports()
+
+    const k1 = await getImportedPrivateKey('bob', own.privateKeyJwk)
+    const k2 = await getImportedPrivateKey('bob', escrowed.privateKeyJwk)
+    expect(k1).not.toBe(k2)
+    expect(await getImportedPrivateKey('bob', own.privateKeyJwk)).toBe(k1)
+    expect(await getImportedPrivateKey('bob', escrowed.privateKeyJwk)).toBe(k2)
+    // Another account in the same tab never shares bob's slot.
+    expect(await getImportedPrivateKey('carol', own.privateKeyJwk)).not.toBe(k1)
+    expect(privateImports()).toBe(3)
+  })
+
+  it('cached keys are non-extractable and limited to deriveKey', async () => {
+    const pair = await generateKeyPair()
+    const key = await getImportedPrivateKey('bob', pair.privateKeyJwk)
+    expect(key.extractable).toBe(false)
+    expect(key.usages).toEqual(['deriveKey'])
+    await expect(crypto.subtle.exportKey('jwk', key)).rejects.toThrow()
+  })
+
+  it('clear drops one user or everyone and forces a fresh import', async () => {
+    const pair = await generateKeyPair()
+    const bob1 = await getImportedPrivateKey('bob', pair.privateKeyJwk)
+    const carol1 = await getImportedPrivateKey('carol', pair.privateKeyJwk)
+
+    clearImportedPrivateKeys('bob')
+    expect(await getImportedPrivateKey('bob', pair.privateKeyJwk)).not.toBe(bob1)
+    expect(await getImportedPrivateKey('carol', pair.privateKeyJwk)).toBe(carol1)
+
+    clearImportedPrivateKeys()
+    expect(await getImportedPrivateKey('carol', pair.privateKeyJwk)).not.toBe(carol1)
+  })
+
+  it('rejects a public-only JWK and does not cache failed imports', async () => {
+    const pair = await generateKeyPair()
+    expect(() => getImportedPrivateKey('bob', pair.publicKeyJwk)).toThrow()
+    const bad = { ...pair.privateKeyJwk, d: 'AAAA' }
+    await expect(getImportedPrivateKey('bob', bad)).rejects.toThrow()
+    // The good key with the same fingerprint still imports afterwards.
+    await expect(getImportedPrivateKey('bob', pair.privateKeyJwk)).resolves.toBeDefined()
   })
 })

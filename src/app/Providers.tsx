@@ -4,6 +4,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
+      // Queries that must always be fresh opt out with an explicit staleTime: 0.
+      staleTime: 30_000,
       refetchOnWindowFocus: false,
     },
   },

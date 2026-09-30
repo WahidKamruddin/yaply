@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { clearAllKeys, loadLocalDeviceId } from '@yaply/crypto'
+import { clearInMemoryKeyState } from '@/features/chat/hooks/useEncryption'
 
 export interface DeviceRow {
   id: string
@@ -48,6 +49,9 @@ export async function revokeDevice(deviceId: number): Promise<{ wasCurrentDevice
 
   if (wasCurrentDevice) {
     await clearAllKeys()
+    // clearAllKeys wipes every account's keys on this install; drop the
+    // in-memory identity, escrow, plaintext and CryptoKey caches with them.
+    clearInMemoryKeyState()
     await supabase.auth.signOut()
   }
   return { wasCurrentDevice }

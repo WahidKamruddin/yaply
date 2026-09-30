@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { clearAllKeys, loadLocalDeviceId } from '@yaply/crypto'
+import { clearInMemoryKeyState } from '@/features/chat/hooks/useEncryption'
 
 // Watches for this install being revoked from another device and signs it out.
 //
@@ -26,6 +27,9 @@ export function useDeviceRevocation(userId: string | undefined) {
       if (isCancelled()) return
       console.warn('[yaply:devices] this device was revoked — clearing keys and signing out')
       await clearAllKeys()
+      // clearAllKeys wipes every account's keys on this install; drop the
+      // in-memory identity, escrow, plaintext and CryptoKey caches with them.
+      clearInMemoryKeyState()
       await supabase.auth.signOut()
     }
 

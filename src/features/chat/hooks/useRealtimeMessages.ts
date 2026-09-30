@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { scheduleConversationsInvalidate } from '../lib/conversationListRealtime'
 
 export function useRealtimeMessages(conversationId: string | null) {
   const queryClient = useQueryClient()
@@ -10,7 +11,9 @@ export function useRealtimeMessages(conversationId: string | null) {
 
     const invalidate = () => {
       void queryClient.invalidateQueries({ queryKey: ['messages', conversationId] })
-      void queryClient.invalidateQueries({ queryKey: ['conversations'] })
+      // Coalesced with the conversation-list channel, which hears the same
+      // inserts: one sidebar refetch per burst, not one per event per channel.
+      scheduleConversationsInvalidate(queryClient)
       void queryClient.invalidateQueries({ queryKey: ['thread-counts', conversationId] })
     }
 

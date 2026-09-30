@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { decryptV2ForUser, getCandidateFingerprints, decodePhase1 } from '@/features/chat/hooks/useEncryption'
-import { fetchEnvelopesForMessages } from './messages'
+import { decryptV2Cached, decodePhase1 } from '@/features/chat/hooks/useEncryption'
 import type { ConversationListItem, DecryptedMessage, MemberSummary, Profile } from '../types'
 import type { MemberWatermark } from '../lib/readReceipts'
 import { decodeTextMessage } from '@yaply/shared/linkPreview'
@@ -135,36 +134,23 @@ export async function fetchConversations(userId: string): Promise<ConversationLi
   }
 
   if (v2Previews.length > 0) {
-    try {
-      const fps = await getCandidateFingerprints(userId)
-      const envelopes = fps.length > 0
-        ? await fetchEnvelopesForMessages(v2Previews.map((p) => p.messageId), fps)
-        : new Map<string, never>()
-      console.debug('[yaply:crypto] sidebar preview envelope batch', { requested: v2Previews.length, found: envelopes.size })
-      await Promise.all(
-        v2Previews.map(async (p) => {
-          try {
-            const plain = await decryptV2ForUser(userId, envelopes.get(p.messageId), p.content, p.iv)
-            if (lastMessages[p.convId].type === 'text') {
-              const decoded = decodeTextMessage(plain)
-              lastMessages[p.convId].content = previewTextFor(decoded.text, decoded.linkPreview)
-              lastMessages[p.convId].linkPreview = decoded.linkPreview
-            } else {
-              lastMessages[p.convId].content = plain
-            }
-            console.debug('[yaply:crypto] sidebar preview v2 decrypt ok', { convId: p.convId })
-          } catch (err: unknown) {
-            console.error('[yaply:crypto] sidebar preview v2 decrypt FAILED', { convId: p.convId, err })
-            lastMessages[p.convId].content = ''
-            lastMessages[p.convId].decryptFailed = true
-          }
-        }),
-      )
-    } catch (err: unknown) {
-      console.error('[yaply:crypto] sidebar preview envelope batch FAILED', { err })
-      for (const p of v2Previews) {
+    // Shared plaintext cache: a refetch only decrypts previews it hasn't seen
+    // (new message, or a re-seal edit with a fresh iv).
+    const plainById = await decryptV2Cached(
+      userId,
+      v2Previews.map((p) => ({ id: p.messageId, content: p.content, iv: p.iv })),
+    )
+    for (const p of v2Previews) {
+      const plain = plainById.get(p.messageId)
+      if (plain == null) {
         lastMessages[p.convId].content = ''
         lastMessages[p.convId].decryptFailed = true
+      } else if (lastMessages[p.convId].type === 'text') {
+        const decoded = decodeTextMessage(plain)
+        lastMessages[p.convId].content = previewTextFor(decoded.text, decoded.linkPreview)
+        lastMessages[p.convId].linkPreview = decoded.linkPreview
+      } else {
+        lastMessages[p.convId].content = plain
       }
     }
   }

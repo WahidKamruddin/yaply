@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import {
   generateEphemeralKeyPair,
@@ -43,6 +44,7 @@ export function useDevicePairing(userId: string | undefined) {
   const [sas, setSas] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [importedCount, setImportedCount] = useState(0)
+  const queryClient = useQueryClient()
 
   const channelRef = useRef<RealtimeChannel | null>(null)
   const myEphRef = useRef<{ publicKeyJwk: JsonWebKey; privateKeyJwk: JsonWebKey } | null>(null)
@@ -179,7 +181,12 @@ export function useDevicePairing(userId: string | undefined) {
           void (async () => {
             try {
               const keys = await decryptTransferPayload(secret, transfer as TransferPayload)
+              // importEscrowedKeys also drops cached decrypt failures, so
+              // refetching makes every decrypt site retry newly readable
+              // history (open views also re-run via useDecryptCacheVersion).
               const total = await importEscrowedKeys(userId, keys)
+              void queryClient.invalidateQueries({ queryKey: ['messages'] })
+              void queryClient.invalidateQueries({ queryKey: ['conversations'] })
               setImportedCount(total)
               send('done', {})
               setPhaseBoth('done')
@@ -214,7 +221,7 @@ export function useDevicePairing(userId: string | undefined) {
         }
       }, PAIRING_TTL_MS)
     },
-    [userId, teardown, fail, setPhaseBoth],
+    [userId, teardown, fail, setPhaseBoth, queryClient],
   )
 
   // Sender-only, and only after the human has confirmed the SAS matches on

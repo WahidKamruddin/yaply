@@ -10,11 +10,11 @@ import { useSendMessage } from '@/features/chat/hooks/useSendMessage'
 import { useRealtimeMessages } from '@/features/chat/hooks/useRealtimeMessages'
 import { usePins, useTogglePin } from '@/features/chat/hooks/usePins'
 import { useTypingIndicator } from '@/features/chat/hooks/useTypingIndicator'
-import { useEncryption, getCandidateFingerprints, decodePhase1 } from '@/features/chat/hooks/useEncryption'
-import type { DbEnvelope } from '@/features/chat/hooks/useEncryption'
+import { useEncryption, decryptV2Cached, decodePhase1 } from '@/features/chat/hooks/useEncryption'
+import { useDecryptCacheVersion } from '@/features/chat/lib/decryptCache'
 import { useProfile } from '@/features/chat/hooks/useProfile'
 import { markConversationRead } from '@/features/chat/api/conversations'
-import { deleteMessage, fetchThreadCounts, fetchEnvelopesForMessages, editMessageWithEnvelopes } from '@/features/chat/api/messages'
+import { deleteMessage, fetchThreadCounts, editMessageWithEnvelopes } from '@/features/chat/api/messages'
 import { useReadWatermarks } from '@/features/chat/hooks/useReadWatermarks'
 import { formatStatus, messageStatus, seenHeads, withImpliedReads } from '@/features/chat/lib/readReceipts'
 import SeenHeads from '@/features/chat/components/SeenHeads'
@@ -138,9 +138,9 @@ export default function ChatView({ currentUserId }: Props) {
   const decryptedIdsRef = useRef<string[]>([])
   // Maps tempId → realId so pending messages are removed only once the real message lands in decrypted
   const pendingConfirmedRef = useRef<Map<string, string>>(new Map())
-  // Per-conversation plaintext cache so new messages don't re-decrypt the whole
-  // history. null = decryption failed for that message.
-  const decryptCacheRef = useRef<Map<string, string | null>>(new Map())
+  // Bumps when failed decrypts become retryable (pairing import) so the
+  // decrypt effect re-runs; plaintexts live in the shared lib/decryptCache.
+  const decryptCacheVersion = useDecryptCacheVersion()
 
   const { data: conversations = [] } = useConversations(currentUserId)
   const conversation = conversations.find((c) => c.id === activeId) ?? null
@@ -155,7 +155,7 @@ export default function ChatView({ currentUserId }: Props) {
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useMessages(activeId)
   const { mutate: send } = useSendMessage(activeId ?? '')
-  const { encrypt, decryptV2 } = useEncryption(currentUserId)
+  const { encrypt } = useEncryption(currentUserId)
 
   useRealtimeMessages(activeId)
 
@@ -196,7 +196,6 @@ export default function ChatView({ currentUserId }: Props) {
   useEffect(() => {
     setPendingMessages([])
     pendingConfirmedRef.current.clear()
-    decryptCacheRef.current.clear()
     initialScrollRef.current = true
     isNearBottomRef.current = true
     setNewMsgCount(0)
@@ -260,61 +259,34 @@ export default function ChatView({ currentUserId }: Props) {
     async function run() {
       const results: DecryptedMessage[] = []
 
-      // Batch-fetch this device's envelopes for every not-yet-decrypted
-      // enc_v = 2 message on the page (one query, keyed by fingerprint).
-      const cacheKeyFor = (m: typeof allDbMessages[number]) => `${m.id}:${m.edited_at ?? ''}`
-      const v2Ids = allDbMessages
-        .filter((m) => m.enc_v === 2 && decryptCacheRef.current.get(cacheKeyFor(m)) === undefined)
-        .map((m) => m.id)
-      let envelopes: Map<string, DbEnvelope> = new Map()
-      if (v2Ids.length > 0) {
-        try {
-          const fps = await getCandidateFingerprints(currentUserId)
-          if (fps.length > 0) envelopes = await fetchEnvelopesForMessages(v2Ids, fps)
-          console.debug('[yaply:crypto] ChatView envelope batch', { requested: v2Ids.length, found: envelopes.size })
-        } catch (err) {
-          console.error('[yaply:crypto] ChatView envelope batch FAILED', { err })
-        }
-      }
+      // Decrypt every enc_v = 2 message through the shared plaintext cache;
+      // only cache misses go into the one batched envelope query.
+      const v2Plain = await decryptV2Cached(currentUserId, allDbMessages.filter((m) => m.enc_v === 2))
       if (isAborted()) return
 
       for (const msg of allDbMessages) {
         let content = msg.content
         let decryptFailed = false
-        const cacheKey = cacheKeyFor(msg)
-        const cachedPlain = decryptCacheRef.current.get(cacheKey)
 
-        if (cachedPlain !== undefined) {
-          if (cachedPlain === null) {
+        if (msg.enc_v === 2) {
+          // Envelope-encrypted (v2) — identical for groups and DMs. A missing
+          // envelope means the message was sealed before this device existed.
+          const plain = v2Plain.get(msg.id)
+          if (plain == null) {
             decryptFailed = true
             content = ''
           } else {
-            content = cachedPlain
-          }
-        } else if (msg.enc_v === 2) {
-          // Envelope-encrypted (v2) — identical for groups and DMs. A missing
-          // envelope means the message was sealed before this device existed.
-          try {
-            content = await decryptV2(envelopes.get(msg.id), msg.content, msg.iv)
-            decryptCacheRef.current.set(cacheKey, content)
-            console.debug('[yaply:crypto] ChatView v2 decrypt ok', { msgId: msg.id })
-          } catch (err) {
-            console.error('[yaply:crypto] ChatView v2 decrypt FAILED', { msgId: msg.id, hadEnvelope: envelopes.has(msg.id), err })
-            decryptFailed = true
-            content = ''
-            decryptCacheRef.current.set(cacheKey, null)
+            content = plain
           }
         } else if (!msg.iv) {
           // Phase-1 / system messages: content is plain base64.
           content = decodePhase1(msg.content)
-          decryptCacheRef.current.set(cacheKey, content)
         } else {
           // iv set but not v2: legacy pairwise ciphertext from before the
           // envelope migration — unreadable by design (history was wiped).
           console.debug('[yaply:crypto] ChatView: legacy pairwise ciphertext, rendering decryptFailed', { msgId: msg.id })
           decryptFailed = true
           content = ''
-          decryptCacheRef.current.set(cacheKey, null)
         }
         // Only type='text' ever carries a link-preview envelope; decode is a
         // no-op (returns the string unchanged) for anything else that isn't
@@ -369,7 +341,7 @@ export default function ChatView({ currentUserId }: Props) {
 
     void run()
     return () => { abort.current = true }
-  }, [allDbMessages, activeId, currentUserId, decryptV2])
+  }, [allDbMessages, activeId, currentUserId, decryptCacheVersion])
 
   // Realtime reactions. Inserts are filtered to this conversation server-side
   // (message_reactions.conversation_id, migration 20260927000002); deletes

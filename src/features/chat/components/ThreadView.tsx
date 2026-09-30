@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Send, Link2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { useEncryption, getCandidateFingerprints, decodePhase1 } from '@/features/chat/hooks/useEncryption'
-import { fetchThreadMessages, fetchEnvelopesForMessages, sendMessage, editMessageWithEnvelopes } from '@/features/chat/api/messages'
+import { useEncryption, decryptV2Cached, decodePhase1 } from '@/features/chat/hooks/useEncryption'
+import { fetchThreadMessages, sendMessage, editMessageWithEnvelopes } from '@/features/chat/api/messages'
 import { supabase } from '@/lib/supabase'
-import type { DbEnvelope } from '@/features/chat/hooks/useEncryption'
+import { useDecryptCacheVersion } from '@/features/chat/lib/decryptCache'
 import type { DecryptedMessage, MemberSummary } from '@/features/chat/types'
 import MessageBubble from './MessageBubble'
 import { getGroupPositions } from '@/features/chat/lib/messageGrouping'
@@ -32,7 +32,8 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const { encrypt, decryptV2 } = useEncryption(currentUserId)
+  const { encrypt } = useEncryption(currentUserId)
+  const decryptCacheVersion = useDecryptCacheVersion()
 
   // Link preview — same debounced-resolve-then-seal flow as the main composer
   // (MessageInput.tsx). See CLAUDE.md's "Link previews" section.
@@ -91,28 +92,20 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
   const loadReplies = useCallback(async () => {
     const raw = await fetchThreadMessages(rootMessage.id)
 
-    // One batched envelope lookup for this device across all v2 replies.
-    let envelopes: Map<string, DbEnvelope> = new Map()
-    const v2Ids = raw.filter((m) => m.enc_v === 2).map((m) => m.id)
-    if (v2Ids.length > 0) {
-      try {
-        const fps = await getCandidateFingerprints(currentUserId)
-        if (fps.length > 0) envelopes = await fetchEnvelopesForMessages(v2Ids, fps)
-      } catch (err) {
-        console.error('[yaply:crypto] ThreadView envelope batch FAILED', { err })
-      }
-    }
+    // Shared plaintext cache; one batched envelope lookup for the misses.
+    const v2Plain = await decryptV2Cached(currentUserId, raw.filter((m) => m.enc_v === 2))
 
     const decrypted: DecryptedMessage[] = []
     for (const msg of raw) {
       let content = msg.content
       let decryptFailed = false
       if (msg.enc_v === 2) {
-        try {
-          content = await decryptV2(envelopes.get(msg.id), msg.content, msg.iv)
-        } catch {
+        const plain = v2Plain.get(msg.id)
+        if (plain == null) {
           decryptFailed = true
           content = ''
+        } else {
+          content = plain
         }
       } else if (!msg.iv) {
         // Phase-1 fallback / system messages: plain base64.
@@ -146,9 +139,10 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
       })
     }
     setReplies(decrypted)
-  }, [rootMessage.id, conversationId, currentUserId, decryptV2])
+  }, [rootMessage.id, conversationId, currentUserId])
 
-  useEffect(() => { void loadReplies() }, [loadReplies])
+  // decryptCacheVersion: re-run after a pairing import makes failures retryable.
+  useEffect(() => { void loadReplies() }, [loadReplies, decryptCacheVersion])
 
   useEffect(() => {
     const channel = supabase
