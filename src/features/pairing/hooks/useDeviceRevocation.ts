@@ -37,9 +37,7 @@ export function useDeviceRevocation(userId: string | undefined) {
       const deviceId = await loadLocalDeviceId(userId!)
       if (deviceId == null || isCancelled()) return
 
-      // Resolve our own row id so the subscription can be filtered to it. A
-      // delete event only carries the primary key, and filtering server-side
-      // means no other user's device ids are ever observable here.
+      // Resolve our own row id so delete events can be matched against it.
       const lookup = await supabase
         .from('devices')
         .select('id')
@@ -58,12 +56,20 @@ export function useDeviceRevocation(userId: string | undefined) {
         return
       }
 
+      // Realtime cannot filter DELETE events ("Delete events are not
+      // filterable" — a filtered subscription is silently never matched, which
+      // is why this watcher used to never fire). Subscribe unfiltered and match
+      // our own row id on the payload. The event carries only the primary key
+      // and isn't RLS-filtered either way, so nothing beyond other devices'
+      // opaque row UUIDs is exposed.
       const channel = supabase
         .channel(`device-revocation:${row.id}`)
         .on(
           'postgres_changes',
-          { event: 'DELETE', schema: 'public', table: 'devices', filter: `id=eq.${row.id}` },
-          () => void revokeLocally(),
+          { event: 'DELETE', schema: 'public', table: 'devices' },
+          (payload) => {
+            if ((payload.old as { id?: string } | null)?.id === row.id) void revokeLocally()
+          },
         )
         .subscribe()
 

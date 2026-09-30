@@ -636,14 +636,22 @@ export default function ChatView({ currentUserId }: Props) {
     }
 
     // Envelope-encrypt for every member device (groups and DMs alike).
-    // encrypt() falls back to mode 'phase1' (enc_v = NULL, iv = NULL) when a
-    // member has no registered device yet — never a mislabeled v2.
+    // encrypt() falls back to mode 'phase1' (enc_v = NULL, iv = NULL) only when
+    // a member has no registered device yet — never a mislabeled v2. Any other
+    // failure throws, and the send is aborted rather than downgraded.
     // A link preview is sealed alongside the text (encodeTextMessage is a
     // no-op passthrough when there's no preview) rather than sent as a
     // plaintext side-channel like mentions, so every recipient sees the exact
     // same card with zero re-fetching. See CLAUDE.md's "Link previews".
     const memberIds = conversation?.members.map((m) => m.userId) ?? []
-    const result = await encrypt(memberIds, encodeTextMessage(text, linkPreview))
+    let result: Awaited<ReturnType<typeof encrypt>>
+    try {
+      result = await encrypt(memberIds, encodeTextMessage(text, linkPreview))
+    } catch {
+      setPendingMessages((prev) => prev.filter((m) => m.id !== tempId))
+      setSendError('Message not sent. Please try again.')
+      return
+    }
 
     // Extracted from plaintext before encryption — mention targeting is the
     // one piece of this send that travels unencrypted, since the server needs

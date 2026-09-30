@@ -306,8 +306,12 @@ export async function encryptForMembers(
     trace('encryptForMembers ok', { members: ids.length, envelopes: envelopes.length })
     return { mode: 'v2', content, iv, envelopes }
   } catch (err) {
-    console.error('[yaply:crypto] encryptForMembers FAILED, falling back to phase-1', { err })
-    return { mode: 'phase1', content: encodePhase1(plaintext) }
+    // Deliberately NOT a phase-1 fallback. The only legitimate downgrade is
+    // the explicit "a member has no devices" branch above; a transient failure
+    // (network blip, IndexedDB glitch, rate limit) must fail the send so the
+    // user can retry, never permanently store the message as plain base64.
+    console.error('[yaply:crypto] encryptForMembers FAILED — refusing to downgrade to phase-1', { err })
+    throw err
   }
 }
 
@@ -525,7 +529,7 @@ export function useEncryption(userId: string | undefined) {
 
   const encrypt = useCallback(
     async (memberUserIds: string[], plaintext: string): Promise<EncryptResult> => {
-      if (!userId) return { mode: 'phase1', content: encodePhase1(plaintext) }
+      if (!userId) throw new Error('cannot encrypt without a signed-in user')
       return encryptForMembers(userId, memberUserIds, plaintext)
     },
     [userId],

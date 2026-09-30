@@ -206,7 +206,8 @@ export default function ThreadView({ rootMessage, currentUserId, conversationId,
     setSendError(null)
     try {
       // Envelope-encrypt for all member devices; encrypt() falls back to
-      // phase-1 (enc_v = NULL, iv = NULL) when a member has no device yet.
+      // phase-1 (enc_v = NULL, iv = NULL) only when a member has no device yet
+      // — any other failure throws into the catch below and aborts the send.
       // The link preview is sealed alongside the text, same as the main
       // composer (ChatView.handleSend) — see CLAUDE.md's "Link previews".
       const result = await encrypt(memberUserIds, encodeTextMessage(trimmed, resolvedPreview))
