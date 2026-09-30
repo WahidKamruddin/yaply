@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import type { KeyboardEvent } from 'react'
-import { Plus, FileText, Camera, Mic, Image as ImageIcon, Smile, Send, X, Terminal, AtSign, Link2 } from 'lucide-react'
+import { Plus, FileText, Camera, Mic, Image as ImageIcon, Smile, Send, ArrowUp, X, Terminal, AtSign, Link2 } from 'lucide-react'
 import { useAtom } from 'jotai'
 import { replyToMessageIdAtom, commandFeedbackAtom } from '@/features/chat/store/chat.atoms'
 import type { DecryptedMessage, MemberSummary } from '@/features/chat/types'
@@ -11,6 +11,8 @@ import type { LinkPreview } from '@yaply/shared/linkPreview'
 import { supabase } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import IconButton from '@/components/IconButton'
+import ReplyBanner from '@/features/chat/components/ReplyBanner'
+import { useChatStyle } from '@/lib/chatStyle'
 
 interface Props {
   // `linkPreview` is whatever's already resolved at send time. `latePreview`
@@ -21,6 +23,7 @@ interface Props {
   onTyping?: () => void
   onStopTyping?: () => void
   replyMessage?: DecryptedMessage | null
+  onJumpToReply?: (messageId: string) => void
   disabled?: boolean
   placeholder?: string
   // Expanding attachment menu actions (Messenger / Instagram style). Default to
@@ -38,6 +41,9 @@ interface Props {
   members?: MemberSummary[]
   isGroup?: boolean
   currentUserId?: string
+  // Lets the host measure the textarea at send time (ChatView's send flight
+  // reads where the text was before it's cleared).
+  inputRef?: { current: HTMLTextAreaElement | null }
 }
 
 interface MentionOption {
@@ -62,6 +68,7 @@ export default function MessageInput({
   onTyping,
   onStopTyping,
   replyMessage,
+  onJumpToReply,
   disabled,
   placeholder,
   onPickFile = noop,
@@ -73,7 +80,9 @@ export default function MessageInput({
   members = [],
   isGroup = false,
   currentUserId,
+  inputRef,
 }: Props) {
+  const chatStyle = useChatStyle()
   const [text, setText] = useState('')
   const [linkPreview, setLinkPreview] = useState<LinkPreview | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -90,10 +99,20 @@ export default function MessageInput({
   const [mentionDismissed, setMentionDismissed] = useState(false)
   const dismissedTokenStart = useRef<number | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const setTextareaRef = useCallback((el: HTMLTextAreaElement | null) => {
+    textareaRef.current = el
+    if (inputRef) inputRef.current = el
+  }, [inputRef])
 
   const collapseMenu = useCallback(() => setMenuExpanded(false), [])
   const [, setReplyId] = useAtom(replyToMessageIdAtom)
   const [feedback, setFeedback] = useAtom(commandFeedbackAtom)
+
+  // Starting a reply puts the caret in the composer so you can just type.
+  const replyTargetId = replyMessage?.id
+  useEffect(() => {
+    if (replyTargetId) textareaRef.current?.focus()
+  }, [replyTargetId])
 
   useEffect(() => {
     if (!feedback) return
@@ -374,30 +393,33 @@ export default function MessageInput({
         }
       }
 
+      if (e.key === 'Escape' && replyMessage) {
+        e.preventDefault()
+        setReplyId(null)
+        return
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         submit()
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [text, showPalette, selectedIndex, filteredCommands, showMentionPalette, mentionIndex, mentionCandidates, mentionQuery],
+    [text, showPalette, selectedIndex, filteredCommands, showMentionPalette, mentionIndex, mentionCandidates, mentionQuery, replyMessage],
   )
 
   return (
-    <div className="border-t border-border bg-surface px-4 pt-3" style={{ paddingBottom: `max(0.75rem, var(--safe-bottom))` }}>
-      {/* Reply strip — plain text, no highlight/accent bar */}
+    <div
+      // iMessage's composer bar is a translucent blur with a fainter divider.
+      className={`border-t px-4 pt-3 ${chatStyle === 'imessage' ? 'border-border/50 bg-surface/75 backdrop-blur-xl' : 'border-border bg-surface'}`}
+      style={{ paddingBottom: `max(0.75rem, var(--safe-bottom))` }}>
       {replyMessage && (
-        <div className="flex items-center justify-between mb-2 px-1">
-          <div className="min-w-0">
-            <p className="text-xs text-primary-text font-medium">
-              Replying to {replyMessage.senderProfile?.display_name ?? replyMessage.senderProfile?.username ?? 'message'}
-            </p>
-            <p className="text-xs text-text-muted truncate">{replyMessage.content}</p>
-          </div>
-          <IconButton onClick={() => setReplyId(null)} aria-label="Cancel reply" className="ml-2">
-            <X size={14} />
-          </IconButton>
-        </div>
+        <ReplyBanner
+          message={replyMessage}
+          currentUserId={currentUserId}
+          onCancel={() => setReplyId(null)}
+          onJump={onJumpToReply}
+        />
       )}
 
       {/* Link preview chip — shown only to the sender before send; dismissible,
@@ -568,7 +590,7 @@ export default function MessageInput({
 
         <div className="flex-1 relative">
           <textarea
-            ref={textareaRef}
+            ref={setTextareaRef}
             value={text}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
@@ -577,7 +599,7 @@ export default function MessageInput({
             placeholder={placeholder ?? 'Message...'}
             disabled={disabled}
             rows={1}
-            className={`w-full resize-none bg-tint border border-border rounded-2xl py-2.5 pl-4 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/50 transition max-h-40 leading-relaxed disabled:opacity-50 ${showAttachments ? 'pr-11' : 'pr-4'}`}
+            className={`w-full resize-none bg-tint border border-border rounded-[var(--composer-r)] py-2.5 pl-4 text-sm text-text placeholder:text-text-subtle outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/50 transition max-h-40 leading-relaxed disabled:opacity-50 ${showAttachments ? 'pr-11' : 'pr-4'}`}
           />
           {showAttachments && (
             <button
@@ -598,7 +620,7 @@ export default function MessageInput({
           disabled={!text.trim() || disabled}
           className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark hover:brightness-110 active:scale-95 text-white shadow-glow disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed transition-all"
         >
-          <Send size={16} />
+          {chatStyle === 'imessage' ? <ArrowUp size={18} strokeWidth={2.5} /> : <Send size={16} />}
         </button>
       </div>
     </div>

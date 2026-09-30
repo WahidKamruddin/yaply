@@ -143,6 +143,56 @@ h1, h2, h3, h4, h5, h6 {
   --mint: #0b9e74;
 }
 
+/* ── Chat style (Settings → Account → Chat style) ─────────────────────
+   `useApplyChatStyle` sets `data-chat-style` on <html>. Only bubble/accent
+   colors, page background, bubble + composer radii, list density and the
+   display font change; `--surface` and every other token stay yaply's.
+   Values mirror iOS Color+Yaply.swift / BubbleGeometry.swift. The `html`
+   prefix outranks `.light`, so light overrides need `html.light[...]`.
+   The landing and auth pages scope their own tokens under `.lp`. */
+:root {
+  --bubble-r: 1rem;       /* open corners */
+  --bubble-mid: 0.375rem; /* tucked corner, middle of a run */
+  --bubble-edge: 0.25rem; /* tucked corner, first/last/single */
+  --composer-r: 1rem;
+  --row-py: 0.75rem;
+}
+
+html[data-chat-style="messenger"] {
+  --primary: #0084ff;
+  --primary-dark: #0068cc;
+  --bg: #000000;
+  --card: #1c1c1e;
+  --bubble-r: 1.25rem;
+  --bubble-mid: 0.375rem;
+  --bubble-edge: 0.375rem;
+  --composer-r: 0.875rem;
+  --row-py: 0.875rem;
+}
+html.light[data-chat-style="messenger"] {
+  --primary-dark: #0078e8;
+  --bg: #ffffff;
+  --card: #f0f0f0;
+}
+
+html[data-chat-style="imessage"] {
+  --primary: #0b93f6;
+  --primary-dark: #0a7cff;
+  --bg: #000000;
+  --card: #26262a;
+  --bubble-r: 1.25rem;
+  --bubble-mid: 0.25rem;
+  --bubble-edge: 0.125rem;
+  --composer-r: 1.25rem;
+  --row-py: 0.625rem;
+  /* Real iMessage uses San Francisco everywhere, no display face. */
+  --font-display: var(--font-sans);
+}
+html.light[data-chat-style="imessage"] {
+  --bg: #ffffff;
+  --card: #e5e5ea;
+}
+
 *,
 *::before,
 *::after {
@@ -187,6 +237,11 @@ body,
   to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
+@keyframes typingOut {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.94); }
+}
+
 .typing-dot {
   animation: typingDot 1.4s ease-in-out infinite;
 }
@@ -217,10 +272,26 @@ body,
   to   { transform: translateX(0);    opacity: 1; }
 }
 
+/* A received message arriving live (ChatView incomingIds). */
+@keyframes msgIn {
+  0%   { opacity: 0; transform: translateY(6px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
 @keyframes msgSlideIn {
   0%   { transform: translateY(10px); opacity: 0; }
   60%  { transform: translateY(-2px); opacity: 1; }
   100% { transform: translateY(0);    opacity: 1; }
+}
+
+/* Composer reply banner entering above the input row. */
+@keyframes replyBannerIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.reply-banner-in {
+  animation: replyBannerIn 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @keyframes yaply-pulse {

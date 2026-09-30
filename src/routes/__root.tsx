@@ -6,6 +6,7 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import NotFoundScreen from '@/components/NotFoundScreen'
 import StagingGate from '@/components/StagingGate'
 import { useTheme } from '@/lib/useTheme'
+import { useApplyChatStyle } from '@/lib/chatStyle'
 import appCss from '../styles.css?url'
 
 export const Route = createRootRoute({
@@ -34,6 +35,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   // mounted) — otherwise LoadingScreen/ErrorScreen/NotFoundScreen and the
   // brief pre-ChatView-mount window always fell back to :root's dark defaults.
   useTheme()
+  useApplyChatStyle()
 
   return (
     <html lang="en">

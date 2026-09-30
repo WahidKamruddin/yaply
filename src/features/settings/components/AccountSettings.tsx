@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Check, Lock, Trash2, AlertTriangle, X, Loader2 } from 'lucide-react'
+import { Camera, Check, Lock, Trash2, AlertTriangle, X, Loader2, MessageCircle } from 'lucide-react'
+import { useAtom } from 'jotai'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
@@ -8,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { useProfile } from '@/features/chat/hooks/useProfile'
 import { normalizeUsername, useUsernameAvailability } from '@/features/chat/hooks/useUsernameAvailability'
 import Avatar from '@/components/Avatar'
+import { CHAT_STYLES, chatStyleAtom } from '@/lib/chatStyle'
 
 interface Props {
   userId: string
@@ -44,6 +46,7 @@ export default function AccountSettings({ userId, userEmail }: Props) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   const usernameAvailability = useUsernameAvailability(username, userId)
+  const [chatStyle, setChatStyle] = useAtom(chatStyleAtom)
 
   useEffect(() => {
     if (!profile) return
@@ -280,6 +283,33 @@ export default function AccountSettings({ userId, userEmail }: Props) {
           )}
         </button>
         {saved && <span className="text-sm text-accent-mint">Saved</span>}
+      </div>
+
+      {/* Chat style — device-local, applies immediately (no Save). */}
+      <div className="pt-6 border-t border-border">
+        <div className="flex items-center gap-2.5 mb-4">
+          <span className="w-8 h-8 flex items-center justify-center rounded-full bg-tint flex-shrink-0">
+            <MessageCircle size={14} className="text-text-subtle" />
+          </span>
+          <p id="chat-style-label" className="text-sm font-semibold text-text">Chat style</p>
+        </div>
+        <div role="radiogroup" aria-labelledby="chat-style-label" className="inline-flex gap-1 p-1 rounded-full bg-tint border border-border">
+          {CHAT_STYLES.map(({ value, label }) => (
+            <button
+              key={value}
+              role="radio"
+              aria-checked={chatStyle === value}
+              onClick={() => setChatStyle(value)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                chatStyle === value
+                  ? 'bg-gradient-to-br from-primary to-primary-dark text-white'
+                  : 'text-text-muted hover:text-text'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Password change — email-auth accounts only */}

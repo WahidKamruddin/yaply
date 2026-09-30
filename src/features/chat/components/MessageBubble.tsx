@@ -5,6 +5,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import type { DecryptedMessage, MemberSummary } from '@/features/chat/types'
 import type { ReactionGroup } from '@/features/chat/api/reactions'
 import Avatar from '@/components/Avatar'
+import { replyPreviewText } from '@/features/chat/lib/replyPreview'
 import type { GroupPosition } from '@/features/chat/lib/messageGrouping'
 import AddToAlbumModal from './AddToAlbumModal'
 import EmojiPickerPopover from './EmojiPickerPopover'
@@ -14,6 +15,7 @@ import type { ItemKind, PanelTab, SystemItem } from '@/features/chat/lib/systemI
 import { tokenizeMentions } from '@yaply/shared/mentions'
 import { findUrls } from '@yaply/shared/linkPreview'
 import LinkPreviewCard from './LinkPreviewCard'
+import { useChatStyle } from '@/lib/chatStyle'
 
 // Turns bare http(s) URLs and "example.com"-style bare domains inside a run of
 // plain text into clickable links. Presentation-only (unlike mentions'
@@ -86,26 +88,14 @@ function formatMessageTime(dateStr: string): string {
 // consecutive messages (Messenger style). 'single' and 'first' are the
 // original standalone-bubble tail; the tail side is right for own
 // messages, left for received. Middle bubbles use a slightly softer
-// radius (md) since both inner corners are tucked.
+// radius since both inner corners are tucked. Radii come from the
+// chat-style tokens in styles.css (--bubble-mid / --bubble-edge).
 function tailClasses(isOwn: boolean, position: GroupPosition): string {
   switch (position) {
-    case 'middle': return isOwn ? 'rounded-tr-md rounded-br-md' : 'rounded-tl-md rounded-bl-md'
-    case 'last': return isOwn ? 'rounded-tr-sm' : 'rounded-tl-sm'
-    default: return isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'
+    case 'middle': return isOwn ? 'rounded-tr-[var(--bubble-mid)] rounded-br-[var(--bubble-mid)]' : 'rounded-tl-[var(--bubble-mid)] rounded-bl-[var(--bubble-mid)]'
+    case 'last': return isOwn ? 'rounded-tr-[var(--bubble-edge)]' : 'rounded-tl-[var(--bubble-edge)]'
+    default: return isOwn ? 'rounded-br-[var(--bubble-edge)]' : 'rounded-bl-[var(--bubble-edge)]'
   }
-}
-
-function replyPreviewText(replyMessage: DecryptedMessage): string {
-  if (replyMessage.deletedAt) return 'Message deleted'
-  if (replyMessage.type === 'image' || replyMessage.type === 'sticker') return '📷 Photo'
-  if (replyMessage.type === 'gif') return 'GIF'
-  if (replyMessage.type === 'voice') return '🎤 Voice message'
-  if (replyMessage.type === 'file') return '📎 File'
-  if (replyMessage.decryptFailed) return '🔒 Encrypted message'
-  if (!replyMessage.content && replyMessage.linkPreview) {
-    return `🔗 ${replyMessage.linkPreview.title ?? replyMessage.linkPreview.siteName ?? replyMessage.linkPreview.url}`
-  }
-  return replyMessage.content.slice(0, 80)
 }
 
 // Quote-bubble color — the original pill's colors (same regardless of
@@ -222,6 +212,10 @@ export default function MessageBubble({ message, isOwn, statusLabel, replyMessag
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showAddToAlbum, setShowAddToAlbum] = useState(false)
   const navigate = useNavigate()
+  const chatStyle = useChatStyle()
+  // iMessage shows reactions as tapback badges on the bubble's corner
+  // instead of a pill row underneath.
+  const tapbacks = chatStyle === 'imessage' && reactions.length > 0
 
   // A pick from the full picker promotes that emoji into the rail's last
   // slot (device-local), then reacts with it — quick-taps on an existing
@@ -487,7 +481,7 @@ export default function MessageBubble({ message, isOwn, statusLabel, replyMessag
                 Messenger uses. Absolute positioning (rather than a negative
                 margin on a flex sibling) keeps this predictable regardless
                 of the parent's flex gap. */}
-            <div className="relative">
+            <div className={`relative ${tapbacks ? 'mt-2' : ''}`}>
               {replyMessage && replyCanUnderlap && (
                 <button
                   onClick={() => onQuotationClick?.(replyMessage.id)}
@@ -502,9 +496,13 @@ export default function MessageBubble({ message, isOwn, statusLabel, replyMessag
               )}
 
               {/* Main message bubble */}
+              {/* data-bubble: ChatView's send flight measures and clones this.
+                  The radius transition morphs a bubble's tucked corners when
+                  a new message joins its run (single → first, last → middle). */}
               <div
+                data-bubble
                 onClick={() => setShowTime((v) => !v)}
-                className={`relative rounded-2xl cursor-pointer ${
+                className={`relative rounded-[var(--bubble-r)] cursor-pointer transition-[border-radius] duration-200 ease-out ${
                   replyMessage && replyCanUnderlap ? 'z-10 mt-8' : ''
                 } ${
                   isFrameless && message.mediaUrl
@@ -558,6 +556,28 @@ export default function MessageBubble({ message, isOwn, statusLabel, replyMessag
                     )}
                   </>
                 )}
+                {/* Tapback badges (iMessage style) — overlap the bubble's
+                    outer-top corner. yaply allows several reactions per
+                    message, so extras stack diagonally rather than being
+                    hidden. */}
+                {tapbacks && (
+                  <div className={`absolute -top-3 ${isOwn ? '-left-3' : '-right-3'} z-20`}>
+                    {reactions.map((r, i) => (
+                      <button
+                        key={r.emoji}
+                        onClick={(e) => { e.stopPropagation(); onReact?.(message.id, r.emoji) }}
+                        title={`${r.emoji} ${r.count}`}
+                        aria-label={`${r.emoji} reaction, ${r.count}`}
+                        style={{ transform: `translate(${(isOwn ? 1 : -1) * i * 6}px, ${i * 6}px)`, zIndex: reactions.length - i }}
+                        className={`${i === 0 ? 'relative' : 'absolute top-0 left-0'} w-6 h-6 flex items-center justify-center rounded-full bg-surface text-[13px] leading-none shadow-sm shadow-black/20 border ${
+                          r.reactedByMe ? 'border-primary/60' : 'border-border'
+                        }`}
+                      >
+                        {r.emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             {showTime && (
@@ -572,16 +592,17 @@ export default function MessageBubble({ message, isOwn, statusLabel, replyMessag
         </div>
 
         {/* Reaction pills */}
-        {reactions.length > 0 && (
+        {reactions.length > 0 && !tapbacks && (
           <div className="flex flex-wrap gap-1 mt-1 px-1">
             {reactions.map((r) => (
               <button
                 key={r.emoji}
                 onClick={() => onReact?.(message.id, r.emoji)}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-colors ${
-                  r.reactedByMe
-                    ? 'bg-primary/15 border-primary/40 text-primary-text'
-                    : 'bg-tint border-border text-text hover:border-primary/40'
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors ${
+                  // Messenger's pills are borderless with a soft shadow.
+                  chatStyle === 'messenger'
+                    ? `border border-transparent shadow-sm shadow-black/10 ${r.reactedByMe ? 'bg-primary/15 text-primary-text' : 'bg-card text-text'}`
+                    : `border ${r.reactedByMe ? 'bg-primary/15 border-primary/40 text-primary-text' : 'bg-tint border-border text-text hover:border-primary/40'}`
                 }`}
               >
                 <span>{r.emoji}</span>

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
+import { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo } from 'react'
 import { flushSync } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Phone, Video, ChevronDown, ArrowLeft, Search, X, PanelRight, ChevronRight } from 'lucide-react'
 import { useAtom, useSetAtom } from 'jotai'
 import { activeConversationIdAtom, replyToMessageIdAtom, conversationPanelOpenAtom, conversationPanelTargetAtom, openItemRequestAtom, sidebarCollapsedAtom } from '@/features/chat/store/chat.atoms'
+import { useChatStyle } from '@/lib/chatStyle'
 import { useConversations } from '@/features/chat/hooks/useConversations'
 import { useMessages } from '@/features/chat/hooks/useMessages'
 import { useSendMessage } from '@/features/chat/hooks/useSendMessage'
@@ -40,6 +41,7 @@ import { encodeTextMessage, decodeTextMessage } from '@yaply/shared/linkPreview'
 import type { LinkPreview } from '@yaply/shared/linkPreview'
 import MessageBubble from './MessageBubble'
 import { getGroupPositions } from '@/features/chat/lib/messageGrouping'
+import { startSendFlight, prefersReducedMotion } from '@/features/chat/lib/sendFlight'
 import MessageInput from './MessageInput'
 import VoiceRecorderBar from './VoiceRecorderBar'
 import PinnedBanner from './PinnedBanner'
@@ -71,6 +73,7 @@ export default function ChatView({ currentUserId }: Props) {
   const [replyId, setReplyId] = useAtom(replyToMessageIdAtom)
   const [panelOpen, setPanelOpen] = useAtom(conversationPanelOpenAtom)
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
+  const chatStyle = useChatStyle()
   const setPanelTarget = useSetAtom(conversationPanelTargetAtom)
   const [openItemRequest, setOpenItemRequest] = useAtom(openItemRequestAtom)
   // Plans/events open as the EventModal over the chat, not inside the panel.
@@ -120,6 +123,10 @@ export default function ChatView({ currentUserId }: Props) {
   const [pendingMessages, setPendingMessages] = useState<DecryptedMessage[]>([])
   const [preAnimIds, setPreAnimIds] = useState<Set<string>>(new Set())
   const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set())
+  // Text sends whose bubble is being flown in from the composer (sendFlight.ts)
+  const [flyingIds, setFlyingIds] = useState<Set<string>>(new Set())
+  // Messages from others that just arrived live and get a short pop-in
+  const [incomingIds, setIncomingIds] = useState<Set<string>>(new Set())
   const [threadViewRoot, setThreadViewRoot] = useState<DecryptedMessage | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -138,6 +145,11 @@ export default function ChatView({ currentUserId }: Props) {
   const decryptedIdsRef = useRef<string[]>([])
   // Maps tempId → realId so pending messages are removed only once the real message lands in decrypted
   const pendingConfirmedRef = useRef<Map<string, string>>(new Map())
+  // realId → tempId. Rows render with key = tempId for their whole life, so
+  // the pending → confirmed swap keeps the same DOM node instead of
+  // remounting (which would cut a send flight short and pop the bubble).
+  const renderKeyRef = useRef<Map<string, string>>(new Map())
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null)
   // Bumps when failed decrypts become retryable (pairing import) so the
   // decrypt effect re-runs; plaintexts live in the shared lib/decryptCache.
   const decryptCacheVersion = useDecryptCacheVersion()
@@ -196,10 +208,44 @@ export default function ChatView({ currentUserId }: Props) {
   useEffect(() => {
     setPendingMessages([])
     pendingConfirmedRef.current.clear()
+    renderKeyRef.current.clear()
+    setPreAnimIds(new Set())
+    setAnimatingIds(new Set())
+    setFlyingIds(new Set())
+    setIncomingIds(new Set())
     initialScrollRef.current = true
     isNearBottomRef.current = true
     setNewMsgCount(0)
   }, [activeId])
+
+  // Messages from others that arrive live get a short pop-in. Diffed against
+  // the previous decrypt pass so the initial load, conversation switches and
+  // older-page loads (prepended, and all older than the previous tail) never
+  // animate. Layout effect so the first paint already has the start frame.
+  const prevDecryptedRef = useRef<{ conversationId: string | null; ids: Set<string>; lastAt: string }>({
+    conversationId: null,
+    ids: new Set(),
+    lastAt: '',
+  })
+  useLayoutEffect(() => {
+    const prev = prevDecryptedRef.current
+    const conversationId = decrypted[0]?.conversationId ?? null
+    prevDecryptedRef.current = {
+      conversationId,
+      ids: new Set(decrypted.map((m) => m.id)),
+      lastAt: decrypted[decrypted.length - 1]?.createdAt ?? '',
+    }
+    if (!conversationId || conversationId !== prev.conversationId || prev.ids.size === 0) return
+    if (!isNearBottomRef.current || prefersReducedMotion()) return
+    const fresh = decrypted
+      .filter((m) => !prev.ids.has(m.id) && m.senderId !== currentUserId && m.createdAt > prev.lastAt)
+      .map((m) => m.id)
+    if (fresh.length === 0 || fresh.length > 5) return
+    setIncomingIds((p) => new Set([...p, ...fresh]))
+    setTimeout(() => {
+      setIncomingIds((p) => { const n = new Set(p); fresh.forEach((id) => n.delete(id)); return n })
+    }, 450)
+  }, [decrypted, currentUserId])
 
   const allMessages = useMemo(() => [...decrypted, ...pendingMessages], [decrypted, pendingMessages])
 
@@ -417,6 +463,26 @@ export default function ChatView({ currentUserId }: Props) {
     }
   }, [activeId, currentUserId, queryClient, allDbMessages.length])
 
+  // The typing indicator fades out instead of vanishing: when it hides, keep
+  // it mounted for the exit animation with the last typer's avatar (the live
+  // typingProfile is already null by then). Layout effect so the unmount and
+  // the exit remount land in the same frame.
+  const showTyping = typingUsers.length > 0 && !showScrollBtn
+  const [typingExitProfile, setTypingExitProfile] = useState<typeof typingProfile | undefined>(undefined)
+  const prevTypingRef = useRef<{ show: boolean; profile: typeof typingProfile }>({ show: false, profile: null })
+  useLayoutEffect(() => {
+    const prev = prevTypingRef.current
+    prevTypingRef.current = { show: showTyping, profile: typingProfile }
+    if (showTyping) {
+      setTypingExitProfile(undefined)
+      return
+    }
+    if (!prev.show) return
+    setTypingExitProfile(prev.profile)
+    const t = setTimeout(() => setTypingExitProfile(undefined), 200)
+    return () => clearTimeout(t)
+  }, [showTyping, typingProfile])
+
   // Scroll to show typing indicator when it appears and user is near bottom
   useEffect(() => {
     if (typingUsers.length > 0 && isNearBottomRef.current) {
@@ -485,6 +551,29 @@ export default function ChatView({ currentUserId }: Props) {
     }
   }, [encrypt, queryClient, activeId])
 
+  // Next frame — move to animating so the slide-in plays against the settled
+  // position. Used for media sends and whenever a send flight can't run.
+  const playSlideIn = useCallback((tempId: string) => {
+    requestAnimationFrame(() => {
+      setPreAnimIds((prev) => { const n = new Set(prev); n.delete(tempId); return n })
+      setAnimatingIds((prev) => new Set([...prev, tempId]))
+      setTimeout(() => {
+        setAnimatingIds((prev) => { const n = new Set(prev); n.delete(tempId); return n })
+      }, 500)
+    })
+  }, [])
+
+  const confirmPending = useCallback((tempId: string, realId: string) => {
+    renderKeyRef.current.set(realId, tempId)
+    if (decryptedIdsRef.current.includes(realId)) {
+      // A realtime refetch beat onSuccess, so the real row is already
+      // rendered. Drop the temp now; the stable key hands its DOM node over.
+      setPendingMessages((prev) => prev.filter((m) => m.id !== tempId))
+    } else {
+      pendingConfirmedRef.current.set(tempId, realId)
+    }
+  }, [])
+
   const handleSend = useCallback(async (
     text: string,
     linkPreview?: LinkPreview,
@@ -526,14 +615,25 @@ export default function ChatView({ currentUserId }: Props) {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-    // Step 3: next frame — move to animating so the slide-in plays against the settled position
-    requestAnimationFrame(() => {
-      setPreAnimIds((prev) => { const n = new Set(prev); n.delete(tempId); return n })
-      setAnimatingIds((prev) => new Set([...prev, tempId]))
-      setTimeout(() => {
-        setAnimatingIds((prev) => { const n = new Set(prev); n.delete(tempId); return n })
-      }, 500)
+    // Step 3: fly the text from the composer into its bubble. The composer
+    // hasn't cleared yet (MessageInput clears after onSend returns), so its
+    // text position is still measurable. A preview card would grow the bubble
+    // mid-flight, so those — and reduced motion — get the plain slide-in.
+    const composer = composerInputRef.current
+    const flying = !linkPreview && !!composer && startSendFlight({
+      source: composer,
+      getTarget: () => document.getElementById(`msg-${tempId}`)?.querySelector<HTMLElement>('[data-bubble]') ?? null,
+      beforeMeasure: () => {
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      },
+      onDone: () => setFlyingIds((prev) => { const n = new Set(prev); n.delete(tempId); return n }),
     })
+    if (flying) {
+      setPreAnimIds((prev) => { const n = new Set(prev); n.delete(tempId); return n })
+      setFlyingIds((prev) => new Set([...prev, tempId]))
+    } else {
+      playSlideIn(tempId)
+    }
 
     // Envelope-encrypt for every member device (groups and DMs alike).
     // encrypt() falls back to mode 'phase1' (enc_v = NULL, iv = NULL) when a
@@ -562,7 +662,7 @@ export default function ChatView({ currentUserId }: Props) {
         : { conversationId: activeId, senderId: currentUserId, content: result.content, iv: null, type: 'text', replyToId: capturedReplyId, threadId: capturedThreadId, mentionedUserIds, mentionsEveryone },
       {
         onSuccess: (data) => {
-          pendingConfirmedRef.current.set(tempId, data.id)
+          confirmPending(tempId, data.id)
           setSendError(null)
           // The message already sent as plain text (never blocked on the
           // fetch) — if a preview was still resolving, attach it once it's
@@ -587,7 +687,7 @@ export default function ChatView({ currentUserId }: Props) {
         },
       },
     )
-  }, [activeId, currentUserId, currentUserProfile, encrypt, conversation, replyId, replyMessage?.threadId, send, setReplyId, attachLinkPreview])
+  }, [activeId, currentUserId, currentUserProfile, encrypt, conversation, replyId, replyMessage?.threadId, send, setReplyId, attachLinkPreview, playSlideIn, confirmPending])
 
   const handleDelete = useCallback(async (messageId: string) => {
     await deleteMessage(messageId)
@@ -669,13 +769,7 @@ export default function ChatView({ currentUserId }: Props) {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-    requestAnimationFrame(() => {
-      setPreAnimIds((prev) => { const n = new Set(prev); n.delete(tempId); return n })
-      setAnimatingIds((prev) => new Set([...prev, tempId]))
-      setTimeout(() => {
-        setAnimatingIds((prev) => { const n = new Set(prev); n.delete(tempId); return n })
-      }, 500)
-    })
+    playSlideIn(tempId)
     send(
       {
         conversationId: activeId,
@@ -688,7 +782,7 @@ export default function ChatView({ currentUserId }: Props) {
       },
       {
         onSuccess: (data) => {
-          pendingConfirmedRef.current.set(tempId, data.id)
+          confirmPending(tempId, data.id)
           setSendError(null)
         },
         onError: (err) => {
@@ -702,7 +796,7 @@ export default function ChatView({ currentUserId }: Props) {
         },
       },
     )
-  }, [activeId, currentUserId, currentUserProfile, send])
+  }, [activeId, currentUserId, currentUserProfile, send, playSlideIn, confirmPending])
 
   const handleImageSelect = useCallback(async (file: File) => {
     if (!activeId) return
@@ -784,7 +878,9 @@ export default function ChatView({ currentUserId }: Props) {
       className="flex-1 flex flex-col h-full bg-background overflow-hidden relative"
     >
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-surface" style={{ paddingTop: `max(0.75rem, var(--safe-top))` }}>
+      <div
+        className={`flex items-center gap-3 px-4 py-3 border-b ${chatStyle === 'imessage' ? 'border-border/50 bg-surface/75 backdrop-blur-xl' : 'border-border bg-surface'}`}
+        style={{ paddingTop: `max(0.75rem, var(--safe-top))` }}>
         <button onClick={() => setActiveId(null)} className="md:hidden -ml-1 w-10 h-10 flex items-center justify-center rounded-full text-text-subtle active:bg-tint transition-colors">
           <ArrowLeft size={22} />
         </button>
@@ -797,26 +893,44 @@ export default function ChatView({ currentUserId }: Props) {
             <ChevronRight size={18} />
           </button>
         )}
-        <button
-          onClick={() => setShowChatSettings(true)}
-          className="flex items-center gap-3 flex-1 min-w-0 text-left"
-        >
-          <Avatar
-            src={avatarSrc}
-            alt={displayName}
-            size={36}
-            online={!conversation.isGroup ? isOnline : undefined}
-          />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold font-display text-text truncate">{displayName}</p>
-            <p className="text-xs text-text-subtle">{isOnline ? 'Online' : conversation.isGroup ? `${conversation.members.length} members` : 'Offline'}</p>
-          </div>
-        </button>
+        {/* iMessage: compact centered avatar-above-name, no status caption.
+            yaply/Messenger: avatar beside name with a caption. */}
+        {chatStyle === 'imessage' ? (
+          <button
+            onClick={() => setShowChatSettings(true)}
+            className="flex flex-col items-center gap-0.5 flex-1 min-w-0"
+          >
+            <Avatar
+              src={avatarSrc}
+              alt={displayName}
+              size={32}
+              online={!conversation.isGroup ? isOnline : undefined}
+            />
+            <p className="max-w-full text-xs font-semibold text-text truncate">{displayName}</p>
+          </button>
+        ) : (
+          <button
+            onClick={() => setShowChatSettings(true)}
+            className="flex items-center gap-3 flex-1 min-w-0 text-left"
+          >
+            <Avatar
+              src={avatarSrc}
+              alt={displayName}
+              size={36}
+              online={!conversation.isGroup ? isOnline : undefined}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold font-display text-text truncate">{displayName}</p>
+              <p className="text-xs text-text-subtle">{isOnline ? 'Online' : conversation.isGroup ? `${conversation.members.length} members` : 'Offline'}</p>
+            </div>
+          </button>
+        )}
         <div className="flex items-center gap-1">
-          <button className="w-8 h-8 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors">
+          {/* Messenger renders call buttons as solid-filled circles. */}
+          <button className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${chatStyle === 'messenger' ? 'bg-primary text-white hover:bg-primary-dark' : 'text-text-subtle hover:text-primary-text hover:bg-primary-tint'}`}>
             <Phone size={16} />
           </button>
-          <button className="w-8 h-8 flex items-center justify-center rounded-full text-text-subtle hover:text-primary-text hover:bg-primary-tint transition-colors">
+          <button className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${chatStyle === 'messenger' ? 'bg-primary text-white hover:bg-primary-dark' : 'text-text-subtle hover:text-primary-text hover:bg-primary-tint'}`}>
             <Video size={16} />
           </button>
           <button
@@ -887,12 +1001,13 @@ export default function ChatView({ currentUserId }: Props) {
           lastDate = msgDate
           return (
             <div
-              key={msg.id}
+              key={renderKeyRef.current.get(msg.id) ?? msg.id}
               id={`msg-${msg.id}`}
-              className={`transition-opacity duration-300 rounded-lg ${highlightedMessageId === msg.id ? 'bg-primary/15' : ''} ${pendingIdSet.has(msg.id) && !preAnimIds.has(msg.id) && !animatingIds.has(msg.id) ? 'opacity-60' : ''}`}
+              className={`transition-opacity duration-300 rounded-lg ${highlightedMessageId === msg.id ? 'bg-primary/15' : ''} ${pendingIdSet.has(msg.id) && !preAnimIds.has(msg.id) && !animatingIds.has(msg.id) && !flyingIds.has(msg.id) ? 'opacity-60' : ''}`}
               style={
                 preAnimIds.has(msg.id) ? { opacity: 0 }
                 : animatingIds.has(msg.id) ? { animation: 'msgSlideIn 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both' }
+                : incomingIds.has(msg.id) ? { animation: 'msgIn 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) both', transformOrigin: 'left bottom' }
                 : undefined
               }
             >
@@ -943,9 +1058,12 @@ export default function ChatView({ currentUserId }: Props) {
       )}
 
       {/* Typing indicator — mirrors MessageBubble's received-bubble styling exactly */}
-      {typingUsers.length > 0 && !showScrollBtn && (
-        <div className="px-4 py-1.5 flex items-end gap-2 animate-[typingIn_0.25s_ease-out]">
-          <Avatar src={typingProfile?.avatar_url} alt="" size={28} />
+      {(showTyping || typingExitProfile !== undefined) && (
+        <div
+          className={`px-4 py-1.5 flex items-end gap-2 ${showTyping ? 'animate-[typingIn_0.25s_ease-out]' : ''}`}
+          style={showTyping ? undefined : { animation: 'typingOut 0.2s ease-in both' }}
+        >
+          <Avatar src={(showTyping ? typingProfile : typingExitProfile)?.avatar_url} alt="" size={28} />
           <div className="bg-card rounded-2xl rounded-bl-sm border border-border-soft px-3.5 py-3 flex items-center gap-1">
             {[0, 1, 2].map((i) => (
               <span
@@ -997,6 +1115,7 @@ export default function ChatView({ currentUserId }: Props) {
         />
       ) : (
         <MessageInput
+          inputRef={composerInputRef}
           onSend={(text, linkPreview, latePreview) => { void handleSend(text, linkPreview, latePreview); notifyStopTyping() }}
           onTyping={notifyTyping}
           onStopTyping={notifyStopTyping}
@@ -1006,6 +1125,7 @@ export default function ChatView({ currentUserId }: Props) {
           onStartVoice={() => setRecordingVoice(true)}
           onExpression={() => setShowExpression(true)}
           replyMessage={replyMessage}
+          onJumpToReply={handleQuotationClick}
           disabled={!activeId || mediaUploading || isOrphanedDM}
           placeholder={isOrphanedDM ? 'This person deleted their account' : undefined}
           members={conversation.members}

@@ -158,7 +158,7 @@ export default function ConversationItem({ conversation, currentUserId, isActive
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
-          className={`relative w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left select-none transition-colors ${
+          className={`relative w-full flex items-center gap-3 px-3 py-[var(--row-py)] rounded-xl text-left select-none transition-colors ${
             isActive
               ? 'bg-primary-tint-strong'
               : 'bg-transparent hover:bg-tint active:bg-tint-strong'
