@@ -9,6 +9,7 @@
  *   VITE_SUPABASE_ANON_KEY
  */
 import { createClient } from '@supabase/supabase-js'
+import { configureLinkPreviewImages } from '@yaply/shared/linkPreview'
 import type { Database } from './database.types.js'
 
 const supabaseUrl = import.meta.env['VITE_SUPABASE_URL'] as string | undefined
@@ -17,6 +18,9 @@ const supabaseAnonKey = import.meta.env['VITE_SUPABASE_ANON_KEY'] as string | un
 // production build, regardless of the VITE_DEV_BYPASS_AUTH value.
 const devBypass =
   import.meta.env.DEV && import.meta.env['VITE_DEV_BYPASS_AUTH'] === 'true'
+
+// Link-preview images may only load from this project's own Storage bucket.
+configureLinkPreviewImages(supabaseUrl)
 
 if (!devBypass && (!supabaseUrl || !supabaseAnonKey)) {
   throw new Error(

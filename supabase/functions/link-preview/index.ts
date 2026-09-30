@@ -36,27 +36,73 @@ const BUCKET = 'link-preview-images'
 
 // IPv4/IPv6 ranges that must never be reachable from this function: loopback,
 // RFC1918 private space, link-local (169.254.0.0/16 — the cloud metadata
-// endpoint lives at 169.254.169.254), and IPv6 equivalents.
+// endpoint lives at 169.254.169.254), carrier-grade NAT, benchmarking and
+// documentation space, multicast/reserved, and the IPv6 equivalents —
+// including every IPv6 form that *embeds* an IPv4 address (mapped, NAT64,
+// 6to4), which are classified by the address they wrap.
 function isPrivateIPv4(ip: string): boolean {
   const parts = ip.split('.').map(Number)
-  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return true
-  const [a, b] = parts
-  if (a === 127) return true // loopback
+  if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return true
+  const [a, b, c] = parts
+  if (a === 0) return true // "this" network
   if (a === 10) return true // private
-  if (a === 172 && b >= 16 && b <= 31) return true // private
-  if (a === 192 && b === 168) return true // private
+  if (a === 100 && b >= 64 && b <= 127) return true // carrier-grade NAT 100.64.0.0/10
+  if (a === 127) return true // loopback
   if (a === 169 && b === 254) return true // link-local incl. cloud metadata
-  if (a === 0) return true
-  if (a >= 224) return true // multicast/reserved
+  if (a === 172 && b >= 16 && b <= 31) return true // private
+  if (a === 192 && b === 0 && c === 0) return true // IETF protocol assignments
+  if (a === 192 && b === 0 && c === 2) return true // TEST-NET-1
+  if (a === 192 && b === 88 && c === 99) return true // 6to4 relay anycast
+  if (a === 192 && b === 168) return true // private
+  if (a === 198 && (b === 18 || b === 19)) return true // benchmarking 198.18.0.0/15
+  if (a === 198 && b === 51 && c === 100) return true // TEST-NET-2
+  if (a === 203 && b === 0 && c === 113) return true // TEST-NET-3
+  if (a >= 224) return true // multicast/reserved/broadcast
   return false
 }
 
+// Expands any textual IPv6 address (including `::` compression and a trailing
+// dotted quad) to its eight 16-bit groups, or null if it isn't valid.
+function parseIPv6(ip: string): number[] | null {
+  let s = ip.toLowerCase().split('%')[0]
+  const dotted = /(\d+\.\d+\.\d+\.\d+)$/.exec(s)
+  if (dotted) {
+    const v4 = dotted[1].split('.').map(Number)
+    if (v4.length !== 4 || v4.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null
+    s = s.slice(0, -dotted[1].length) + ((v4[0] << 8) | v4[1]).toString(16) + ':' + ((v4[2] << 8) | v4[3]).toString(16)
+  }
+  const halves = s.split('::')
+  if (halves.length > 2) return null
+  const toGroups = (h: string) => (h === '' ? [] : h.split(':'))
+  const head = toGroups(halves[0])
+  const tail = halves.length === 2 ? toGroups(halves[1]) : []
+  const missing = 8 - head.length - tail.length
+  if (halves.length === 2 ? missing < 1 : missing !== 0) return null
+  const groups = [...head, ...Array(halves.length === 2 ? missing : 0).fill('0'), ...tail]
+  if (groups.length !== 8) return null
+  const out = groups.map((g) => (/^[0-9a-f]{1,4}$/.test(g) ? parseInt(g, 16) : NaN))
+  return out.some((n) => Number.isNaN(n)) ? null : out
+}
+
 function isPrivateIPv6(ip: string): boolean {
-  const lower = ip.toLowerCase()
-  if (lower === '::1') return true // loopback
-  if (lower.startsWith('fe80:') || lower.startsWith('fe8') || lower.startsWith('fe9')) return true // link-local
-  if (lower.startsWith('fc') || lower.startsWith('fd')) return true // unique local
-  if (lower.startsWith('::ffff:')) return isPrivateIPv4(lower.slice('::ffff:'.length))
+  const g = parseIPv6(ip)
+  if (!g) return true // unparseable: fail closed
+  const v4 = (hi: number, lo: number) => `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`
+  if (g.every((n) => n === 0)) return true // :: unspecified
+  if (g.slice(0, 7).every((n) => n === 0) && g[7] === 1) return true // ::1 loopback
+  if (g.slice(0, 5).every((n) => n === 0) && g[5] === 0xffff) return isPrivateIPv4(v4(g[6], g[7])) // ::ffff:a.b.c.d mapped
+  if (g.slice(0, 6).every((n) => n === 0)) return true // ::/96 deprecated IPv4-compatible
+  if (g[0] === 0x64 && g[1] === 0xff9b && g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
+    return isPrivateIPv4(v4(g[6], g[7])) // 64:ff9b::/96 NAT64 — wraps an IPv4
+  }
+  if (g[0] === 0x64 && g[1] === 0xff9b && g[2] === 1) return true // 64:ff9b:1::/48 local-use NAT64
+  if (g[0] === 0x2002) return isPrivateIPv4(v4(g[1], g[2])) // 6to4 — wraps an IPv4
+  if (g[0] === 0x2001 && g[1] === 0) return true // Teredo
+  if (g[0] === 0x2001 && g[1] === 0xdb8) return true // documentation
+  if ((g[0] & 0xffc0) === 0xfe80) return true // fe80::/10 link-local
+  if ((g[0] & 0xffc0) === 0xfec0) return true // fec0::/10 deprecated site-local
+  if ((g[0] & 0xfe00) === 0xfc00) return true // fc00::/7 unique local
+  if ((g[0] & 0xff00) === 0xff00) return true // ff00::/8 multicast
   return false
 }
 
@@ -118,13 +164,14 @@ async function safeFetch(
         ? new URL(`http://${safeIp.includes(':') ? `[${safeIp}]` : safeIp}:${current.port || '80'}${current.pathname}${current.search}`)
         : current
 
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    // Not cleared on success: the same signal must keep bounding the body read
+    // (readBodyCapped), or a server that sends headers then trickles bytes
+    // holds this instance until the platform's wall-clock limit.
     let res: Response
     try {
       res = await fetch(connectUrl, {
         redirect: 'manual',
-        signal: controller.signal,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         headers: {
           'User-Agent': 'yaplyLinkPreview/1.0 (+https://yaply.app)',
           ...(connectUrl !== current ? { Host: current.host } : {}),
@@ -132,11 +179,11 @@ async function safeFetch(
       })
     } catch {
       return null
-    } finally {
-      clearTimeout(timeout)
     }
 
     if (res.status >= 300 && res.status < 400) {
+      // Release the hop's connection; its body is never read.
+      await res.body?.cancel().catch(() => {})
       const location = res.headers.get('Location')
       if (!location) return null
       try {
@@ -147,10 +194,16 @@ async function safeFetch(
       continue
     }
 
-    if (!res.ok) return null
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {})
+      return null
+    }
 
     const contentLength = res.headers.get('Content-Length')
-    if (contentLength && Number(contentLength) > maxBytes) return null
+    if (contentLength && Number(contentLength) > maxBytes) {
+      await res.body?.cancel().catch(() => {})
+      return null
+    }
 
     return { res, finalUrl: current }
   }
@@ -162,15 +215,20 @@ async function readBodyCapped(res: Response, maxBytes: number): Promise<Uint8Arr
   if (!reader) return null
   const chunks: Uint8Array[] = []
   let total = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    total += value.byteLength
-    if (total > maxBytes) {
-      await reader.cancel()
-      return null
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > maxBytes) {
+        await reader.cancel()
+        return null
+      }
+      chunks.push(value)
     }
-    chunks.push(value)
+  } catch {
+    // The hop's timeout signal fired mid-body (or the connection dropped).
+    return null
   }
   const out = new Uint8Array(total)
   let offset = 0
@@ -183,11 +241,11 @@ async function readBodyCapped(res: Response, maxBytes: number): Promise<Uint8Arr
 
 function decodeHtml(entities: string): string {
   return entities
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#0?39;/g, "'")
+    .replace(/&amp;/g, '&') // last, so "&amp;lt;" decodes to "&lt;", not "<"
     .trim()
 }
 
@@ -197,13 +255,16 @@ function extractMeta(html: string, keys: { property?: string; name?: string }[])
     const value = property ?? name
     // Attribute order in a <meta> tag varies across sites, so match either
     // `content` before or after the property/name attribute.
+    // Each value is closed by the quote that opened it (\N backreference), so an
+    // apostrophe inside a double-quoted value ("Here's how…") doesn't end it.
     const patterns = [
-      new RegExp(`<meta[^>]+${attr}=["']${value}["'][^>]*content=["']([^"']*)["']`, 'i'),
-      new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]*${attr}=["']${value}["']`, 'i'),
+      new RegExp(`<meta[^>]+${attr}=(["'])${value}\\1[^>]*content=(["'])((?:(?!\\2)[\\s\\S])*)\\2`, 'i'),
+      new RegExp(`<meta[^>]+content=(["'])((?:(?!\\1)[\\s\\S])*)\\1[^>]*${attr}=(["'])${value}\\3`, 'i'),
     ]
-    for (const re of patterns) {
+    const groups = [3, 2] // capture group holding the content value, per pattern
+    for (const [i, re] of patterns.entries()) {
       const match = re.exec(html)
-      if (match) return decodeHtml(match[1])
+      if (match) return decodeHtml(match[groups[i]])
     }
   }
   return null
@@ -214,8 +275,7 @@ function extractTitleTag(html: string): string | null {
   return match ? decodeHtml(match[1]) : null
 }
 
-async function hashUrl(url: string): Promise<string> {
-  const bytes = new TextEncoder().encode(url)
+async function hashBytes(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes)
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -231,7 +291,6 @@ const IMAGE_EXT_BY_TYPE: Record<string, string> = {
 
 async function proxyImage(
   admin: ReturnType<typeof createClient>,
-  pageUrl: string,
   imageUrl: string,
 ): Promise<string | null> {
   let parsed: URL
@@ -251,7 +310,10 @@ async function proxyImage(
   const bytes = await readBodyCapped(fetched.res, MAX_IMAGE_BYTES)
   if (!bytes) return null
 
-  const key = `${await hashUrl(pageUrl)}.${ext}`
+  // Keyed by the image's own content, not the page URL: varying a query string
+  // on a page whose og:image is one big file used to mint a new public object
+  // per variant. Identical bytes now collapse to a single object.
+  const key = `${await hashBytes(bytes)}.${ext}`
   const { error } = await admin.storage
     .from(BUCKET)
     .upload(key, bytes, { contentType, upsert: false })
@@ -264,6 +326,29 @@ async function proxyImage(
 
   const { data } = admin.storage.from(BUCKET).getPublicUrl(key)
   return data.publicUrl
+}
+
+// Best-effort per-user limiter. Memory is per isolate, so this bounds a single
+// instance rather than the fleet — it raises the cost of abuse (this function
+// fetches arbitrary URLs and writes to a public bucket) without a DB round
+// trip per call. A hard global quota would need a counter table.
+const RATE_WINDOW_MS = 60_000
+const RATE_MAX_CALLS = 20
+const callLog = new Map<string, number[]>()
+
+function rateLimited(userId: string): boolean {
+  const now = Date.now()
+  const recent = (callLog.get(userId) ?? []).filter((t) => now - t < RATE_WINDOW_MS)
+  if (recent.length >= RATE_MAX_CALLS) {
+    callLog.set(userId, recent)
+    return true
+  }
+  recent.push(now)
+  callLog.set(userId, recent)
+  if (callLog.size > 5000) {
+    for (const [id, times] of callLog) if (times.every((t) => now - t >= RATE_WINDOW_MS)) callLog.delete(id)
+  }
+  return false
 }
 
 Deno.serve(async (req) => {
@@ -280,6 +365,7 @@ Deno.serve(async (req) => {
   })
   const { data: userData, error: userError } = await callerClient.auth.getUser()
   if (userError || !userData.user) return json({ error: 'Not authenticated' }, 401)
+  if (rateLimited(userData.user.id)) return json({ error: 'Too many requests' }, 429)
 
   let body: { url?: unknown }
   try {
@@ -327,7 +413,7 @@ Deno.serve(async (req) => {
     })()
     if (absoluteImageUrl) {
       const admin = createClient(supabaseUrl, serviceRoleKey)
-      imageUrl = await proxyImage(admin, pageUrl.toString(), absoluteImageUrl)
+      imageUrl = await proxyImage(admin, absoluteImageUrl)
     }
   }
 

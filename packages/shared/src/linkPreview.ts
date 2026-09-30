@@ -118,12 +118,26 @@ export function decodeTextMessage(raw: string): { text: string; linkPreview?: Li
       typeof (parsed as { text?: unknown }).text === 'string'
     ) {
       const { text, linkPreview } = parsed as EncodedTextMessage
-      if (
-        linkPreview &&
-        isHttpUrl(linkPreview.url) &&
-        (linkPreview.imageUrl === null || isHttpUrl(linkPreview.imageUrl))
-      ) {
-        return { text, linkPreview }
+      if (linkPreview && typeof linkPreview.url === 'string' && isHttpUrl(linkPreview.url)) {
+        // Normalize: other platforms omit nil fields entirely (Swift's
+        // synthesized Codable drops nil optionals), so an absent key means
+        // "none", exactly like an explicit null.
+        const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)
+        const image = str(linkPreview.imageUrl)
+        return {
+          text,
+          linkPreview: {
+            url: linkPreview.url,
+            title: str(linkPreview.title),
+            description: str(linkPreview.description),
+            // A sender controls this JSON. Anything but our own Storage bucket
+            // would make every recipient's client fetch an attacker's URL (IP +
+            // read-time leak), so an untrusted image is dropped — the preview
+            // itself still renders, just without a picture.
+            imageUrl: image !== null && isTrustedPreviewImage(image) ? image : null,
+            siteName: str(linkPreview.siteName),
+          },
+        }
       }
       return { text }
     }
@@ -131,6 +145,32 @@ export function decodeTextMessage(raw: string): { text: string; linkPreview?: Li
     // Not our envelope — fall through to raw text.
   }
   return { text: raw }
+}
+
+const PREVIEW_IMAGE_PATH = '/storage/v1/object/public/link-preview-images/'
+let trustedImageOrigin: string | null = null
+
+/**
+ * Sets the one origin preview images may load from: the project's Supabase
+ * URL. Call once at startup. Until it is called every preview image is
+ * dropped (fail closed), never loaded from an unverified host.
+ */
+export function configureLinkPreviewImages(supabaseUrl: string | undefined): void {
+  try {
+    trustedImageOrigin = supabaseUrl ? new URL(supabaseUrl).origin : null
+  } catch {
+    trustedImageOrigin = null
+  }
+}
+
+function isTrustedPreviewImage(url: string): boolean {
+  if (!trustedImageOrigin) return false
+  try {
+    const u = new URL(url)
+    return u.origin === trustedImageOrigin && u.pathname.startsWith(PREVIEW_IMAGE_PATH)
+  } catch {
+    return false
+  }
 }
 
 // Only http(s) may reach the UI as a clickable/renderable URL. The decrypted
