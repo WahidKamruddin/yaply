@@ -26,7 +26,15 @@ function asJwk(v: JsonWebKey | string | unknown): JsonWebKey {
   const obj = typeof v === 'string' ? JSON.parse(v) : v
   // JSON round-trip guarantees a clean plain object — handles Proxy/wrapper
   // objects that Chrome's importKey dictionary check rejects.
-  return JSON.parse(JSON.stringify(obj)) as JsonWebKey
+  const clean = JSON.parse(JSON.stringify(obj)) as JsonWebKey
+  // Keep only the EC key material. Other platforms publish JWKs with
+  // mistyped metadata (iOS wrote `ext: "true"` and `key_ops: "deriveKey"` —
+  // a string and a bare string, where Web Crypto requires a boolean and an
+  // array), and importKey throws on those. The metadata carries no key
+  // material and we pass our own extractable/usages to importKey anyway.
+  const jwk: JsonWebKey = { kty: clean.kty, crv: clean.crv, x: clean.x, y: clean.y }
+  if (clean.d !== undefined) jwk.d = clean.d
+  return jwk
 }
 
 export async function deriveSharedKey(

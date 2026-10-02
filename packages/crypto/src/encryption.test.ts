@@ -13,6 +13,20 @@ import {
 import type { EnvelopeRecipient } from './encryption'
 
 describe('ECDH + AES-GCM contract', () => {
+  it('derives against a public JWK carrying iOS-style mistyped ext/key_ops', async () => {
+    const alice = await generateKeyPair()
+    const bob = await generateKeyPair()
+    // iOS published these as strings; Web Crypto rejects them as-is.
+    const iosPub = { ...bob.publicKeyJwk, ext: 'true', key_ops: 'deriveKey' } as unknown as JsonWebKey
+
+    const aliceKey = await deriveSharedKey(alice.privateKeyJwk, iosPub)
+    const bobKey = await deriveSharedKey(bob.privateKeyJwk, alice.publicKeyJwk)
+
+    const { content, iv } = await encryptMessage(aliceKey, 'from web to ios')
+    expect(await decryptMessage(bobKey, content, iv)).toBe('from web to ios')
+    expect(publicKeyFingerprint(iosPub)).toBe(publicKeyFingerprint(bob.publicKeyJwk))
+  })
+
   it('both parties derive the same key and can round-trip a message', async () => {
     const alice = await generateKeyPair()
     const bob = await generateKeyPair()
